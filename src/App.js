@@ -8,14 +8,22 @@ export default component({
 }, class {
 
     todos = new State([
-        { title: 'test', completed: false }
+        { title: 'alice', completed: false },
+        { title: 'bob', completed: false },
+        { title: 'matt', completed: false },
+        { title: 'nikko', completed: false },
+        { title: 'ralph', completed: false },
+        { title: 'ian', completed: false }
     ]);
 
-    constructor(props) {
+    constructor() {
 
-        onMount(() => {
-            console.clear();
-        })
+        setTimeout(() => {
+            const x = this.todos.value[1];
+            this.todos.value[1] = this.todos.value[4];
+            this.todos.value[4] = x;
+            console.log("SWAP");
+        }, 5000);
     }
 
     addTodo = (event) => {

@@ -9,6 +9,8 @@
         <input type="text" value="{{ todo.title }}" oninput="{{ (e) => todo.title = e.target.value }}">
         <input type="checkbox" onclick="{{ () => todo.completed = !todo.completed }}">
         <button onclick="{{ () => removeTodo(i) }}">Remove todo</button>
+    {{empty}}
+        <h1>No Items Shown</h1>
     {{/each}}
 </div>
 

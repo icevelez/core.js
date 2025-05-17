@@ -24,26 +24,24 @@ There's two components that make up `Core.js`. It's reactivity system and templa
 
 The reactivity system is based on "Signals" while its templating engine is based on a mixture of "Handlebar.js" and "Svelte" syntax
 
-1. The template engine parses your html file by replacing all expression with marked `<div>` element then converts it all to a DOM element
-2. Which is then processed by replacing the marked div elements with **anchor elements** represented as a comment element `(or text node to make it invisible in the elements tab)` then render the dynamic content in between the anchor elements.
+1. The template engine parses your html file by collecting all expression and replacing it with a marker id `<div id="marker">`  then converts it to a DOM element
+2. Which is then processed by replacing the marked div elements with **anchor elements** (represented as a comment element or text node to make it invisible in the elements tab) and render the dynamic content using the saved expression in between the anchor elements.
 
-The anchor elements are used to keep track of the placement of each dynamic content
+    The anchor elements are used to keep track of the placement of each dynamic content
 
 3. All processed DOM elements are ran inside a reactive primitive `effect()` to keep track of updates and re-render
 4. Then put all rendered DOM element inside a `DocumentFragment`
 5. Which is then appended to a target element using the `mount()` function
 
-One neat feature about the Core.js architecture is that you can build your own template engine that parses whatever syntax you want, as long as you use `effect()` to integrate the reactivity system
+> One neat feature about the Core.js architecture is that you can build your own template engine that parses whatever syntax you want, as long as you use `effect()` to integrate the reactivity system
 
 ## Installation
 
-Download the template project [here](https://www.google.com) or manually create your porject by following these steps
-
 1. Create a folder for your project
 
-2. Download `core.js.v0.1.0.zip`
+2. Download `core.js.v0.1.0.zip` or this repository
 
-3. Extract its content and place a folder named `core` in your project folder
+3. Extract its content and copy a folder named `core` to your project folder
 
 4. Create a folder named `src` in your project folder. This is where all your app code will go
 
@@ -68,7 +66,7 @@ export default component({
 });
 ```
 
-6. In the root of your project folder create a file named `index.html` and `index.js` with the following content. We are importing `App.js` from the `src` folder to render it inside `<div id="app">`
+6. In the root of your project folder create a file named `index.html` and `index.js` with the following content.
 
 ```html
 <html>
@@ -87,37 +85,55 @@ import App from './src/App.js';
 
 mount(App, { target: document.getElementById('app') })
 ```
+We are importing `App.js` from the `src` folder to render it to our target element which is `<div id="app">`
+
 7. Congratulations! You're now ready to build your application using Core.js
 
 ---
 
-## Tutorial
+## Quick Tutorial
 
 In this section I'll run you through how its syntax work
 
 ### Expressions
 
+```html
+<h1>Hello {{ "world" + "!" }}</h1>
+```
+
+### Special Syntax
+
+`bind:[attribute]`
+
+`use:[method]="{{ prop }}"`
+
 ### Conditionals
 
 `{{#if}} ... {{else if}} ... {{/if}}`
 
-`{{#each}} ... {{/each}}`
+`{{#each}} ... {{empty}} ... {{/each}}`
 
 `{{#await}} ... {{then}} ... {{catch}} ... {{/await}}`
 
 ### Components
 
+`<MyCustomComponent/>`
+
 ---
 
-## Known Bugs
+## F.A.Q
 
-I am aware and have yet to fix these issues
+### Q: Why use an Angular class-like approach for component logic?
+
+A: It's easier to instantiated a class and use its properties than to call a function and return an object with values the template needs
+
+## Known Bugs
 
 - Infinite recursion via components i.e ComponetA uses ComponentB and ComponentB uses ComponentA
 
 ## Limitation
 
-"Nothing is free, everything is a trade-off" - Hussein Nasser
+*"Nothing is free, everything is a trade-off"* - Hussein Nasser
 
 - Lack of code minification leading to bigger bundle sizes
 - Lack of code optimization i.e: removing unused code and comment when compiling; compiling for an older ES version;
@@ -130,7 +146,7 @@ That's for you to decide. I made this for myself of course I'm gonna use it
 
 ## Can I expect support?
 
-Yeah! Its not feature complete there are things I still need to implement `checkout todo.txt` but feel free to email me for any concerns, suggestions, or ideas for this project
+Yeah! Its not feature complete there are things I still need to implement (checkout `todo.txt`) but feel free to email me for any concerns, suggestions, or ideas for this project
 
 ```
 Email Address: icevelezdev@gmail.com

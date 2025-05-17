@@ -9,13 +9,55 @@ import { onMountQueue, onUnMountQueue } from "../internal-core.js"
 */
 export function component(options, Context) {
     return function (props = {}) {
+        if (Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
         const ctx = new Context(props);
-        if (ctx instanceof Promise) throw new Error(`component context cannot be a promise`);
         const unmount = onUnMountQueue.pop();
         const template = processTemplate(options.template, ctx, options.components);
         if (unmount) onUnMountQueue.push(unmount);
         return template;
     };
+}
+
+/**
+* @param {string} template
+* @param {any} ctx
+* @param {{ [key:string] : Function }} components
+*/
+function processTemplate(template, ctx, components = {}) {
+
+    // holds callback function to convert marked element to its dynamic content
+    const processedMaps = {
+        if: new Map(),
+        each: new Map(),
+        await: new Map(),
+        component: new Map()
+    };
+
+    template = processIf(processedMaps.if, template, ctx, components);
+    template = processEach(processedMaps.each, template, ctx, components);
+    template = processAwait(processedMaps.await, template, ctx, components);
+    template = processComponents(processedMaps.component, template, ctx, components);
+
+    const div = document.createElement('div');
+    div.innerHTML = template;
+
+    Object.entries(processedMaps).forEach(([key, map]) => {
+        map.forEach((func, marker_key) => {
+            const markerElement = div.querySelector(`#${marker_key}`);
+            const [textNodeStart, textNodeEnd] = startEndTextNode(key);
+
+            markerElement.replaceWith(textNodeEnd);
+            textNodeEnd.parentElement.insertBefore(textNodeStart, textNodeEnd);
+
+            func(textNodeStart, textNodeEnd)();
+        })
+    })
+
+    const fragment = document.createDocumentFragment();
+
+    Array.from(div.childNodes).forEach(node => processNode(node, ctx, fragment));
+
+    return fragment;
 }
 
 /**
@@ -25,7 +67,6 @@ export function component(options, Context) {
 * @param {DocumentFragment} parentFragment
 */
 function processNode(node, ctx, parentFragment) {
-    console.log("NODE", node);
 
     if (node.nodeType === Node.TEXT_NODE) {
         const regex = /{{\s*([^#\/][^}]*)\s*}}/g;
@@ -76,21 +117,15 @@ function processNode(node, ctx, parentFragment) {
 }
 
 /**
+* @param {Map<string, (startNode:Text, endNode:Text) => (() => void>} ifMap
 * @param {string} template
 * @param {any} ctx
-* @param {{ [key:string] : Function }} components
+* @param {Record<string, Function>} components
 */
-function processTemplate(template, ctx, components = {}) {
-
-    /**
-    * @type {Map<string, (startNode:Text, endNode:Text) => (() => void)>}
-    */
-    const ifMap = new Map();
-
-    // Process IF and IF-ELSE and ELSE
+function processIf(ifMap, template, ctx, components) {
     const ifRegex = /{{#if\s+(.+?)}}([\s\S]*?){{\/if}}/g;
     const ifElseregex = /{{else\s+if\s+(.+?)}}|{{else}}/g;
-    template = template.replace(ifRegex, (fullMatch, firstCondition, firstBlock) => {
+    return template.replace(ifRegex, (_, firstCondition, firstBlock) => {
         const markerId = `if-${makeId(24)}`;
 
         /**
@@ -136,8 +171,6 @@ function processTemplate(template, ctx, components = {}) {
             let unmount;
             return () => {
                 effect(() => {
-                    console.log("IF", segments);
-
                     if (unmount) unmount();
                     removeNodesBetween(startNode, endNode);
                     const fragment = document.createDocumentFragment();
@@ -157,34 +190,35 @@ function processTemplate(template, ctx, components = {}) {
 
         return `<div id="${markerId}"></div>`;
     });
+}
 
-    /**
-    * @type {Map<string, (startNode:Text, endNode:Text) => (() => void)>}
-    */
-    const eachMap = new Map();
-
+/**
+* @param {Map<string, (startNode:Text, endNode:Text) => (() => void>} eachMap
+* @param {string} template
+* @param {any} ctx
+* @param {Record<string, Function>} components
+*/
+function processEach(eachMap, template, ctx, components) {
     const eachRegex = /{{#each\s+(.+?)\s+as\s+(\w+)(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
-    template = template.replace(eachRegex, (_, listExpr, itemName, indexName, block) => {
+    return template.replace(eachRegex, (_, listExpr, itemName, indexName, block) => {
         const markerId = `each-${makeId(24)}`;
 
-        eachMap.set(markerId, (startMarker, _) => {
-            return () => {
-                const parent = startMarker.parentNode;
+        eachMap.set(markerId, (startMarker, _) => (() => {
+            const [mainBlock, elseBlock] = block.split(/{{empty}}/);
+            const parent = startMarker.parentNode;
 
-                let renderedItems = [];
+            let renderedItems = [];
 
-                effect(() => {
-                    let newRenderedItems = [];
-                    const list = evaluate(listExpr, ctx) || [];
-                    let currentMarker = startMarker;
+            effect(() => {
+                let newRenderedItems = [];
+                const list = evaluate(listExpr, ctx) || [];
+                let currentMarker = startMarker;
 
-                    console.log("EACH");
+                if (list.length > 0) {
                     list.forEach((item, index) => {
                         let existing = renderedItems.find(r => r.item === item);
 
                         if (!existing) {
-                            console.log(index, 'not existing', renderedItems, item);
-
                             const [blockStart, blockEnd] = startEndTextNode();
 
                             // Insert block markers
@@ -204,20 +238,11 @@ function processTemplate(template, ctx, components = {}) {
                                 node = next;
                             }
 
-                            // The code below is IMPORTANT! DO NOT DELETE! It is to prevent {{#each}} effect from cleaning up
-                            // its child effect because the way {{#each}} work, is it re-uses existing children instead of
-                            // re-creating them and without the code below, {{#each}} effect will clean up the existing child effect
-                            // making the existing child elements non-reactive
-
-                            // to fix this, I added this `untrack_from_parent()` effect to detatch it and cleaning it up manually
-                            // by attaching the effect cleanup to item's unmount function when {{#each}} clears out
-                            // child elements that isn't part of its "renderedItems"
-
+                            // Search "SECTION #1" for full comment
                             untrack_from_parent_effect(() => {
                                 const cleanup = effect(() => {
-                                    const blockContent = processTemplate(block, childCtx, components);
-                                    blockEnd.before(...blockContent.childNodes);
-                                    console.log(blockEnd, item);
+                                    const mainBlockContent = processTemplate(mainBlock, childCtx, components);
+                                    blockEnd.before(...mainBlockContent.childNodes);
                                 })
 
                                 const unmount = onUnMountQueue.pop();
@@ -251,45 +276,70 @@ function processTemplate(template, ctx, components = {}) {
                         newRenderedItems.push(existing);
                         currentMarker = existing.blockEnd;
                     });
+                } else if (elseBlock) {
+                    const [blockStart, blockEnd] = startEndTextNode();
 
-                    // Remove items no longer present
-                    renderedItems.forEach(r => {
-                        if (newRenderedItems.includes(r)) return;
+                    parent.insertBefore(blockStart, currentMarker.nextSibling);
+                    parent.insertBefore(blockEnd, blockStart.nextSibling);
 
-                        console.log("REMOVING...", r);
+                    const existing = { item: 0, blockStart, blockEnd, index: 0 };
 
-                        let node = r.blockStart;
-                        let end = r.blockEnd;
+                    // Search "SECTION #1" for full comment
+                    untrack_from_parent_effect(() => {
+                        const cleanup = effect(() => {
+                            const elseContent = processTemplate(elseBlock, ctx, components);
+                            blockEnd.before(...elseContent.childNodes);
+                        })
 
-                        while (node && node !== r.blockEnd) {
-                            const next = node.nextSibling;
-                            node.remove();
-                            node = next;
-                        }
+                        const unmount = onUnMountQueue.pop();
+                        existing.unmount = () => {
+                            cleanup();
+                            if (unmount) unmount();
+                        };
+                    })
 
-                        end.remove();
+                    newRenderedItems.push(existing);
+                    currentMarker = existing.blockEnd;
+                }
 
-                        if (r.unmount) r.unmount();
-                    });
+                // Remove items no longer present
+                renderedItems.forEach(r => {
+                    if (newRenderedItems.includes(r)) return;
 
-                    renderedItems = newRenderedItems;
+                    let node = r.blockStart;
+                    let end = r.blockEnd;
+
+                    while (node && node !== r.blockEnd) {
+                        const next = node.nextSibling;
+                        node.remove();
+                        node = next;
+                    }
+
+                    end.remove();
+
+                    if (r.unmount) r.unmount();
                 });
-            }
-        });
+
+                renderedItems = newRenderedItems;
+            });
+        }));
 
         return `<div id="${markerId}"></div>`;
     });
+}
 
-    /**
-    * @type {Map<string, (startNode:Text, endNode:Text) => (() => void)>}
-    */
-    const awaitMap = new Map();
-
+/**
+* @param {Map<string, (startNode:Text, endNode:Text) => (() => void>} awaitMap
+* @param {string} template
+* @param {any} ctx
+* @param {Record<string, Function>} components
+*/
+function processAwait(awaitMap, template, ctx, components) {
     const awaitRegex = /{{#await\s+(.+?)}}([\s\S]*?){{\/await}}/g;
     const thenRegex = /{{then\s+(\w+)}}([\s\S]*?)(?={{:|$)/;
     const catchRegex = /{{catch\s+(\w+)}}([\s\S]*?)(?={{:|$)/;
     const blockRegex = /{{then[\s\S]*?}}|{{catch[\s\S]*?}}/;
-    template = template.replace(awaitRegex, (_, promiseExpr, block) => {
+    return template.replace(awaitRegex, (_, promiseExpr, block) => {
 
         const thenMatch = block.match(thenRegex);
         const catchMatch = block.match(catchRegex);
@@ -357,14 +407,17 @@ function processTemplate(template, ctx, components = {}) {
 
         return `<div id="${markerId}"></div>`;
     });
+}
 
-    /**
-    * @type {Map<string, (startNode:Text, endNode:Text) => (() => void)>}
-    */
-    const componentMap = new Map();
-
+/**
+* @param {Map<string, (startNode:Text, endNode:Text) => (() => void>} componentMap
+* @param {string} template
+* @param {any} ctx
+* @param {Record<string, Function>} components
+*/
+function processComponents(componentMap, template, ctx, components) {
     const componentRegex = /(<([A-Z][a-zA-Z0-9]*)(\s[^<>]*?)?\/>)/g;
-    template = template.replace(componentRegex, (expr, _, componentName, componentAttr) => {
+    return template.replace(componentRegex, (expr, _, componentName, componentAttr) => {
         if (!components[componentName]) return expr;
 
         const propsRegex = /props\s*=\s*["'](.*?)["']/;
@@ -395,32 +448,19 @@ function processTemplate(template, ctx, components = {}) {
 
         return `<div id="${markerId}"></div>`;
     });
-
-    // ======================================================
-
-    const div = document.createElement('div');
-    div.innerHTML = template;
-
-    const fragment = document.createDocumentFragment();
-
-    const markernames = ['if', 'each', 'await', 'component'];
-
-    [ifMap, eachMap, awaitMap, componentMap].forEach((x, i) => {
-        x.forEach((func, key) => {
-            const markerElement = div.querySelector(`#${key}`);
-            const [textNodeStart, textNodeEnd] = startEndTextNode(markernames[i]);
-
-            markerElement.replaceWith(textNodeEnd);
-            textNodeEnd.parentElement.insertBefore(textNodeStart, textNodeEnd);
-
-            const render = func(textNodeStart, textNodeEnd);
-            render()
-        })
-    })
-
-    Array.from(div.childNodes).forEach(node => {
-        processNode(node, ctx, fragment);
-    });
-
-    return fragment;
 }
+
+// ============================================
+
+/*
+    SECTION #1
+    That code is IMPORTANT! DO NOT DELETE! It is to prevent {{#each}} effect from cleaning up
+    its child effect because the way {{#each}} work, is it re-uses existing children instead of
+    re-creating them and without the code below, {{#each}} effect will clean up the existing child effect
+    making the existing child elements non-reactive
+
+    to fix this, I added this `untrack_from_parent()` effect to detatch it and cleaning it up manually
+    by attaching the effect cleanup to item's unmount function when {{#each}} clears out
+    child elements that isn't part of its "renderedItems"
+
+*/
