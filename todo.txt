@@ -1,0 +1,16 @@
+Done
+- Signals + Cleanup + Deep Proxy (Default)
+- {{#if}}, {{#each}}, {{#await}}
+- Components (close-tag)
+- Expressive {{ in-line }}
+- onMount, unMount
+
+Yet to implement
+- Components (open-tag)
+- Slots for Components
+<Comp>
+    ...slots...
+<Comp>
+- Per Text node effect()
+- Two-way data binding (bind:[attribute])
+- Custom directives (use:[function])
