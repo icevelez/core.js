@@ -1,12 +1,12 @@
 <div>
-    <labe>Todo:</labe>
+    <label>Todo:</label>
     <input type="text" onkeypress="{{ addTodo }}">
 </div>
 
 <div style="padding-top: 1rem;">
     {{#each todos.value as todo, i}}
         <p>{{ i+1 }}. {{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
-        <input type="text" oninput="{{ (e) => todo.title = e.target.value }}">
+        <input type="text" value="{{ todo.title }}" oninput="{{ (e) => todo.title = e.target.value }}">
         <input type="checkbox" onclick="{{ () => todo.completed = !todo.completed }}">
         <button onclick="{{ () => removeTodo(i) }}">Remove todo</button>
     {{/each}}

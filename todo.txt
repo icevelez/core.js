@@ -6,11 +6,11 @@ Done
 - onMount, unMount
 
 Yet to implement
+- Two-way data binding (bind:[attribute])
+- Custom directives (use:[function])
+- Per Text node effect()
 - Components (open-tag)
 - Slots for Components
 <Comp>
     ...slots...
 <Comp>
-- Per Text node effect()
-- Two-way data binding (bind:[attribute])
-- Custom directives (use:[function])

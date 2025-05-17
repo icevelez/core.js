@@ -21,6 +21,7 @@ export default component({
     addTodo = (event) => {
         if (event.key !== "Enter") return;
         this.todos.value.push({ title: event.target.value, completed: false });
+        event.target.value = "";
     }
 
     removeTodo = (i) => {
