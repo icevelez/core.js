@@ -1,18 +1,22 @@
-import { isObject } from "./helper-functions.js";
+import { isObject, makeId } from "./helper-functions.js";
+
+// =======================================================================
 
 const is_debugger_on = true;
 
 const __reactivity = {
-    states: [],
-    proxies: new Map(),
-    subscriber_queue: new Set(),
-    effectStack: [],
+    states: new Set(),
+    proxies: new Set(),
 }
+
+if (is_debugger_on) window.__reactivity = __reactivity;
+
+// =======================================================================
 
 /**
 * @type {Set<Function>}
 */
-const subscriber_queue = (is_debugger_on) ? __reactivity.subscriber_queue : new Set();
+const subscriber_queue = new Set();
 
 let is_notifying_subscribers = false;
 
@@ -51,13 +55,17 @@ export class State {
     */
     #subscribers = new Set();
 
+    #deep_proxy_subscribers = new Set();
+
     /**
     * @param {T} initialValue
     */
     constructor(initialValue) {
-        if (is_debugger_on) __reactivity.states.push(this);
+        if (is_debugger_on) __reactivity.states.add(this);
 
-        this.value = isObject(initialValue) ? createProxy(initialValue, new Map(), [`State#${this.#id}`]) : initialValue;
+        state_proxy_listener.push(this.#deep_proxy_subscribers);
+        this.value = isObject(initialValue) ? createProxy(initialValue, new Map()) : initialValue;
+        state_proxy_listener.pop();
     }
 
     get value() {
@@ -80,8 +88,18 @@ export class State {
 
         return true;
     }
-}
 
+    deleteState = () => {
+        if (is_debugger_on) __reactivity.states.delete(this);
+
+        this.#subscribers.clear();
+        this.#value = null;
+        this.#id = null;
+
+        this.#deep_proxy_subscribers.forEach((subscriber) => subscriber());
+        this.#deep_proxy_subscribers.clear();
+    }
+}
 
 /**
 * @template {any} T
@@ -126,7 +144,7 @@ export class Derived {
     }
 }
 
-const effectStack = (is_debugger_on) ? __reactivity.effectStack : [];
+const effectStack = [];
 
 export function effect(callbackfn) {
     if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
@@ -135,9 +153,13 @@ export function effect(callbackfn) {
     let cleanup;
 
     function cleanupfn() {
+        if (typeof cleanup === "function") cleanup();
+        if (dependencies.size <= 0) return;
+
+        // console.log('cleaniing up', callbackfn);
+
         for (let unsubscribe of dependencies) unsubscribe();
         dependencies.clear();
-        if (typeof cleanup === "function") cleanup();
     }
 
     const wrappedEffect = () => {
@@ -152,7 +174,11 @@ export function effect(callbackfn) {
 
     wrappedEffect();
 
-    if (is_in_untrack_from_parent_effect_scope) return cleanupfn;
+    if (is_in_untrack_from_parent_effect_scope.length > 0) {
+        const untackedEffect = is_in_untrack_from_parent_effect_scope[is_in_untrack_from_parent_effect_scope.length - 1];
+        untackedEffect.add(cleanupfn);
+        return cleanupfn;
+    }
 
     const parentEffect = effectStack[effectStack.length - 1];
     if (parentEffect) parentEffect.dependencies.add(cleanupfn);
@@ -160,42 +186,61 @@ export function effect(callbackfn) {
     return cleanupfn;
 }
 
-let is_in_untrack_from_parent_effect_scope = false;
+let is_in_untrack_from_parent_effect_scope = [];
 
 /**
-* Used internally in "handlerbar.js" {{#each}} processing to prevent the parent effect from unsubscribing the existing DOM element subscription
+* Effect that is detached from any parent effect
+*
+* It is used in `template/engine/handlerbar.js` for processing {{#each}}
+*
 * @param {Function} callbackfn
 */
-export function untrack_from_parent_effect(callbackfn) {
+export function untrackedEffect(callbackfn) {
     if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
-    is_in_untrack_from_parent_effect_scope = true;
-    const result = callbackfn();
-    is_in_untrack_from_parent_effect_scope = false;
-    return result;
+
+    is_in_untrack_from_parent_effect_scope.push(new Set());
+
+    callbackfn();
+
+    const dependencies = is_in_untrack_from_parent_effect_scope.pop();
+
+    return () => {
+        dependencies.forEach((dependency) => dependency());
+        dependencies.clear();
+    };
 }
+
+// =======================================================================
+
+const $proxy = Symbol('PROXY');             // unique identify to prevent creating duplicate Proxies
+const state_proxy_listener = [];            // push a `new Set()` and collect all subscription that happens inside a proxy for later disposal
 
 /**
 * @template {any} T
 * @param {T} object
 * @param {Map<any, Set<Function>>} subscriberMap
-* @param {string[]} key_tree do not delete, this is for debugging purposes, showing the keys access of an object
 * @returns
 */
-function createProxy(object, subscriberMap = new Map(), key_tree) {
+function createProxy(object, subscriberMap = new Map()) {
+
+    Object.defineProperties(object, { [$proxy]: {} });
+
+    const state_listener = state_proxy_listener[state_proxy_listener.length - 1];
+
     /**
     * @type {Map<any, Set<Function>>}
     */
     const objectSubMap = {};
 
-    if (is_debugger_on) __reactivity.proxies.set(key_tree.join("."), { subscriberMap, object });
-
     for (const key in object) {
         if (!isObject(object[key])) continue;
         objectSubMap[key] = new Map();
-        object[key] = createProxy(object[key], objectSubMap[key], [...key_tree, key]);
+        object[key] = createProxy(object[key], objectSubMap[key]);
     }
 
-    return new Proxy(object, {
+    const proxy = new Proxy(object, {
+        subscriberMap,
+        id: makeId(12),
         get(target, key) {
             // console.log("get", target, key);
 
@@ -206,31 +251,49 @@ function createProxy(object, subscriberMap = new Map(), key_tree) {
             const subscribers = subscriberMap.get(key);
 
             subscribers.add(currentEffect.effect);
-            currentEffect.dependencies.add(() => subscribers.delete(currentEffect.effect));
+
+            const unsubscribe = () => {
+                subscribers.delete(currentEffect.effect)
+            };
+
+            currentEffect.dependencies.add(unsubscribe);
+            state_listener.add(unsubscribe);
 
             return target[key];
         },
         set(target, key, new_value) {
-            // console.log("set", target, key, new_value);
+            // console.log("Set", target[key], key, new_value);
+
+            const subscribers = subscriberMap.get(key);
 
             const checIfArrayMutation = (Array.isArray(target) && typeof key === "number");
             const checkIfPrimitiveDatatypes = typeof target[key] !== "object" && target[key] === new_value;
 
             if (checIfArrayMutation && checkIfPrimitiveDatatypes) return true;
 
-            if (isObject(new_value)) {
-                target[key] = createProxy(new_value, objectSubMap[key], [...key_tree, key]);
+            if (isObject(new_value) && (!target[key] || new_value[$proxy] !== target[key][$proxy])) {
+
+                if (state_listener) state_proxy_listener.push(state_listener);
+                target[key] = createProxy(new_value, objectSubMap[key]);
+                if (state_listener) state_proxy_listener.pop();
+
             } else {
                 target[key] = new_value;
             }
 
-            const subscribers = subscriberMap.get(key);
             if (!subscribers || subscribers.size <= 0) return true;
 
             notifySubscribers(subscribers);
             return true;
         }
     })
-}
 
-if (is_debugger_on) window.__reactivity = __reactivity;
+    if (is_debugger_on) {
+        __reactivity.proxies.add(proxy);
+        state_listener.add(() => {
+            __reactivity.proxies.delete(proxy);
+        })
+    }
+
+    return proxy;
+}

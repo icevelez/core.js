@@ -1,11 +1,16 @@
 import { load, onMount } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
 import { State } from "../core/reactivity.js";
+import Example from "./components/Example.js";
 
 export default component({
     template: await load("src/App.html"),
-    components: {},
+    components: {
+        Example,
+    },
 }, class {
+
+    showList = new State(true);
 
     todos = new State([
         { title: 'alice', completed: false },
@@ -17,13 +22,9 @@ export default component({
     ]);
 
     constructor() {
-
-        setTimeout(() => {
-            const x = this.todos.value[1];
-            this.todos.value[1] = this.todos.value[4];
-            this.todos.value[4] = x;
-            console.log("SWAP");
-        }, 5000);
+        onMount(() => {
+            console.log("===============================")
+        })
     }
 
     addTodo = (event) => {
@@ -33,6 +34,8 @@ export default component({
     }
 
     removeTodo = (i) => {
+        console.log(i, 'removing');
+
         this.todos.value.splice(i, 1);
     }
 });

@@ -1,16 +1,17 @@
 Done
 - Signals + Cleanup + Deep Proxy (Default)
+    - [UPDATE] Thanks to "zulu" from the Solid.js Discord for helping out in debugging a comparison error between Proxied object. Two different proxy pointing to the same object. The fix was to use JS Symbols to check if the new value being set is an existing Proxy to prevent any duplicate proxy from being created
 - {{#if}}, {{#each}}, {{#await}}
-- Components (close-tag)
-- Expressive {{ in-line }}
+    - [UPDATE] {{#each}} is such a pain in the ass to implement
+- Expressions
 - onMount, unMount
+    - [UPDATE] first implementation lack, multiple onmount and unmount support
+- Components (open and close tag)
+- Slots for Components
+- Component props as attributes
 
 Yet to implement
 - Two-way data binding (bind:[attribute])
 - Custom directives (use:[function])
 - Per Text node effect()
-- Components (open-tag)
-- Slots for Components
-<Comp>
-    ...slots...
-<Comp>
+    - [UPDATE] failed to do so, fuck that shit

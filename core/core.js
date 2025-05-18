@@ -1,4 +1,4 @@
-import { onMountQueue, onUnMountQueue } from "./internal-core.js"
+import { onMountQueue, onUnmountQueue } from "./internal-core.js"
 
 /**
 * @param {string} component_url
@@ -19,11 +19,15 @@ export function mount(component, options) {
 
     options.target.innerHTML = "";
     options.target.appendChild(component());
-    const unmount = onUnMountQueue.pop();
-    const onMount = onMountQueue.pop();
-    if (onMount) onMount();
+    const unMountSet = onUnmountQueue.pop();
+    const mountSet = onMountQueue.pop();
 
-    return unmount;
+    mountSet.forEach((mount) => mount());
+
+    return () => {
+        unMountSet.forEach((unmount) => unmount());
+        unMountSet.clear();
+    };
 }
 
 /**
@@ -31,7 +35,9 @@ export function mount(component, options) {
 */
 export function onMount(callback) {
     if (typeof callback !== "function") throw new TypeError("callback is not a function");
-    onMountQueue.push(callback);
+    const onMount = onMountQueue[onMountQueue.length - 1];
+    if (!onMount) throw new Error("no unmount set has been created");
+    onMount.add(callback);
 }
 
 /**
@@ -39,5 +45,7 @@ export function onMount(callback) {
 */
 export function onUnmount(callback) {
     if (typeof callback !== "function") throw new TypeError("callback is not a function");
-    onUnMountQueue.push(callback);
+    const onUnmount = onUnmountQueue[onUnmountQueue.length - 1];
+    if (!onUnmount) throw new Error("no unmount set has been created");
+    onUnmount.add(callback);
 }

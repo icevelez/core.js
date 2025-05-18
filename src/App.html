@@ -1,18 +1,27 @@
 <div>
     <label>Todo:</label>
     <input type="text" onkeypress="{{ addTodo }}">
+    <button onclick="{{ () => showList.value = !showList.value }}">Show List</button>
 </div>
 
-<div style="padding-top: 1rem;">
-    {{#each todos.value as todo, i}}
-        <p>{{ i+1 }}. {{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
-        <input type="text" value="{{ todo.title }}" oninput="{{ (e) => todo.title = e.target.value }}">
-        <input type="checkbox" onclick="{{ () => todo.completed = !todo.completed }}">
-        <button onclick="{{ () => removeTodo(i) }}">Remove todo</button>
-    {{empty}}
-        <h1>No Items Shown</h1>
-    {{/each}}
-</div>
+{{#if showList.value }}
+    <div style="padding-top: 1rem;">
+        {{#each todos.value as todo, i}}
+            <p>{{ i.value+1 }}. {{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
+            <input type="text" value="{{ todo.title }}" oninput="{{ (e) => todo.title = e.target.value }}">
+            <input type="checkbox" onclick="{{ () => todo.completed = !todo.completed }}">
+            <button onclick="{{ () => removeTodo(i.value) }}">Remove todo</button>
+            <Example item="{{ i.value }}">
+                <h1>Hello With item</h1>
+            </Example>
+        {{empty}}
+            <h1>No Items Shown</h1>
+            <Example item="-1">
+                <h1>Hello Without item</h1>
+            </Example>
+        {{/each}}
+    </div>
+{{/if}}
 
 <div>
     <p>Completed ({{ (todos.value.filter((todo) => todo.completed)).length }} / {{ todos.value.length }})</p>

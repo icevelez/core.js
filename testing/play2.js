@@ -1,44 +1,67 @@
 
-import { State, effect } from "./framework/reactivity2.js";
+import { State, effect } from "../core/reactivity.js";
 
-function test_nestedEffect() {
-    const outer = new State(0);
-    const inner = new State(100);
+// function test_nestedEffect() {
+//     const outer = new State(0);
+//     const inner = new State(100);
+//     const much_inner = new State(9999);
+//     const super_inner = new State(55555);
 
-    effect(() => {
-        console.log('Outer Effect:', outer.value);
+//     const unsub = effect(() => {
+//         console.log('Outer Effect:', outer.value);
 
-        effect(() => {
-            console.log('  Inner Effect:', inner.value);
-        });
-    });
+//         effect(() => {
+//             console.log('  Inner Effect:', inner.value);
 
-    console.log('--- First update ---');
-    outer.value = 1;
+//             effect(() => {
+//                 console.log('      Much #1 Effect:', much_inner.value);
+//             });
+//             effect(() => {
+//                 console.log('      Much #1.2 Effect:', much_inner.value);
+//             });
+//         });
 
-    setTimeout(() => {
-        console.log('--- Second update ---');
-        inner.value = 200;
+//         effect(() => {
+//             console.log('      Much #0 Effect:', much_inner.value);
+//         });
+//         effect(() => {
+//             console.log('          Super Inner Effect:', super_inner.value);
+//         });
+//     });
 
-        setTimeout(() => {
-            console.log('--- Third update ---');
-            outer.value = 2;
+//     console.log('--- First update ---');
+//     outer.value = 1;
 
-            setTimeout(() => {
-                console.log('--- Forth update ---');
-                inner.value = 300;
-            })
-        })
-    })
+//     setTimeout(() => {
+//         console.log('--- Second update ---');
+//         inner.value = 200;
 
-    setInterval(() => {
-        outer.value = outer.value + 1;
-    }, 1000)
+//         setTimeout(() => {
+//             console.log('--- Third update ---');
+//             outer.value = 2;
 
-    setInterval(() => {
-        inner.value = outer.value + 1;
-    }, 1200)
-}
+//             setTimeout(() => {
+//                 console.log('--- Forth update ---');
+//                 inner.value = 300;
+//             })
+//         })
+//     })
+
+//     setTimeout(() => {
+//         unsub();
+//         console.log("unsubscribe");
+//     }, 1000);
+
+//     setInterval(() => {
+//         outer.value = outer.value + 1;
+//     }, 1000)
+
+//     setInterval(() => {
+//         inner.value = outer.value + 1;
+//     }, 1200)
+// }
+
+// test_nestedEffect();
 
 function test_deepProxy() {
     const object = new State([
@@ -49,6 +72,10 @@ function test_deepProxy() {
 
     effect(() => {
         console.log('object', object.value)
+    })
+
+    effect(() => {
+        console.log('0', object.value[0])
     })
 
     effect(() => {
@@ -64,8 +91,12 @@ function test_deepProxy() {
     })
 
     setTimeout(() => {
-        console.log("update");
+        console.log("push");
         object.value.push({ name: "nora" });
+        setTimeout(() => {
+            console.log("delete");
+            object.deleteState();
+        }, 1000)
     }, 1000)
 }
 
