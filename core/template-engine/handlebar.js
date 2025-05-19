@@ -1,6 +1,6 @@
 import { effect, State, untrackedEffect } from "../reactivity.js";
 import { evaluate, makeId, removeNodesBetween, startEndTextNode } from "../helper-functions.js";
-import { onMountQueue, onUnmountQueue } from "../internal-core.js"
+import { onMountQueue, onUnmountQueue, core_context } from "../internal-core.js"
 
 /**
 * @param {{ template : string, components : { [key:string] : Function } }} options
@@ -129,21 +129,63 @@ function processNode(node, ctx, parentFragment) {
 
         node.parentElement.removeChild(node);
 
-
         return;
     }
 
     if (node.nodeType === Node.ELEMENT_NODE) {
         // Process attributes with {{ }}
         Array.from(node.attributes).forEach(attr => {
-            if (!attr.value.includes('{{')) return;
-
             const attrName = attr.name.toLowerCase();
             const attrValue = attr.value;
 
-            // Check for event binding inside normal attributes
-            if (attrName.startsWith('on')) {
+            if (attrName.startsWith('use:')) {
+                const attr = attrName.slice(4);
+                const func = evaluate(`${attr}`, ctx);
                 const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+
+                const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+                const onMountSet = onMountQueue[onMountQueue.length - 1];
+                onMountSet.add(() => {
+                    const cleanup = func(node, evaluate(rawExpr, ctx));
+                    if (typeof cleanup === "function") unmountSet.add(cleanup);
+                });
+
+                node.removeAttribute(attrName); // Clean up raw attribute
+                return;
+            }
+
+            if (attrName.startsWith('bind:')) {
+                const attr = attrName.slice(5);
+                const eventDic = {
+                    "checked": "click",
+                    "value": "input",
+                };
+
+                const binding = evaluate(`(value) => ${attrValue} = value`, ctx);
+                const eventListener = (event) => binding(event.target[attr]);
+
+                node.addEventListener(eventDic[attr] ? eventDic[attr] : attr, eventListener);
+
+                effect(() => {
+                    node[attr] = evaluate(attrValue, ctx);
+                })
+
+                const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+                unmountSet.add(() => {
+                    node.removeEventListener('click', eventListener)
+                });
+
+                node.removeAttribute(attrName); // Clean up raw attribute
+                return;
+            }
+
+            if (!attr.value.includes('{{')) return;
+
+            if (attrName.startsWith('on')) {
+
+                const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+
+                node.removeAttribute(attr.name); // Clean up raw attribute
 
                 effect(() => {
                     const func = evaluate(rawExpr, ctx);
@@ -151,7 +193,6 @@ function processNode(node, ctx, parentFragment) {
                     node.addEventListener(attrName.slice(2), func);
                 })
 
-                node.removeAttribute(attr.name); // Clean up raw attribute
                 return;
             }
 
@@ -260,7 +301,7 @@ function processIf(ifMap, template, ctx, components) {
                             onMountQueue.pop();
 
                             endNode.parentNode.insertBefore(fragment, endNode);
-                            mount();
+                            (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                             const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
                             if (parentUnmount && !parentUnmount.has(unmount)) parentUnmount.add(unmount);
@@ -413,7 +454,7 @@ function processEach(eachMap, template, ctx, components) {
                                 onMountQueue.pop();
 
                                 blockEnd.before(...mainBlockContent.childNodes);
-                                mount();
+                                (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                             })
 
@@ -458,7 +499,7 @@ function processEach(eachMap, template, ctx, components) {
                 onMountQueue.pop();
 
                 blockEnd.before(...elseContent.childNodes);
-                mount();
+                (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                 currentMarker = existing.blockEnd;
                 existing.unmount = unmount;
@@ -529,7 +570,7 @@ function processAwait(awaitMap, template, ctx, components) {
                     onMountQueue.pop();
 
                     markerEnd.before(...loadingNodes.childNodes);
-                    mount();
+                    (core_context.mounted) ? mount() : core_context.mounts.add(mount);
                 };
 
                 const showThen = (result) => {
@@ -546,7 +587,7 @@ function processAwait(awaitMap, template, ctx, components) {
                     onMountQueue.pop();
 
                     markerEnd.before(...thenNodes.childNodes);
-                    mount();
+                    (core_context.mounted) ? mount() : core_context.mounts.add(mount);
                 };
 
                 const showCatch = (error) => {
@@ -565,7 +606,7 @@ function processAwait(awaitMap, template, ctx, components) {
                     onMountQueue.pop();
 
                     markerEnd.before(...catchNodes.childNodes);
-                    mount();
+                    (core_context.mounted) ? mount() : core_context.mounts.add(mount);
                 };
 
                 effect(() => {
@@ -650,7 +691,7 @@ function processComponents(componentMap, template, ctx, components) {
                     mountSet = onMountQueue.pop();
 
                     endNode.parentElement.insertBefore(component, endNode);
-                    mount();
+                    (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                     const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
                     if (parentUnmount && !parentUnmount.has(unmount)) parentUnmount.add(unmount);
@@ -692,7 +733,7 @@ function processComponents(componentMap, template, ctx, components) {
                 mountSet = onMountQueue.pop();
 
                 endNode.parentElement.insertBefore(component, endNode);
-                mount();
+                (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                 const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
                 if (parentUnmount && !parentUnmount.has(unmount)) parentUnmount.add(unmount);

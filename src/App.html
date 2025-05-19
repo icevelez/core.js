@@ -5,16 +5,12 @@
 </div>
 
 {{#if showList.value }}
-    <div style="padding-top: 1rem;">
+    <div style="padding-top: 1rem;" id="each">
         {{#each todos.value as todo, i}}
-            {{ i.value+1 }}.
-            <p>{{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
-            <input type="text" value="{{ todo.title }}" oninput="{{ (e) => todo.title = e.target.value }}">
-            <input type="checkbox" onclick="{{ () => todo.completed = !todo.completed }}">
+            <p use:see="{{ todo.title }}">{{ i.value+1 }}. {{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
+            <input type="text" bind:value="todo.title">
+            <input type="checkbox" bind:checked="todo.completed">
             <button onclick="{{ () => removeTodo(i.value) }}">Remove todo</button>
-            <Example item="{{ i.value+1 }}">
-                <h1>Hello With item</h1>
-            </Example>
         {{empty}}
             <h1>No Items Shown</h1>
             <Example item="-1">

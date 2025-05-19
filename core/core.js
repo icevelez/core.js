@@ -1,4 +1,4 @@
-import { onMountQueue, onUnmountQueue } from "./internal-core.js"
+import { onMountQueue, onUnmountQueue, core_context } from "./internal-core.js"
 
 /**
 * @param {string} component_url
@@ -23,6 +23,10 @@ export function mount(component, options) {
     const mountSet = onMountQueue.pop();
 
     mountSet.forEach((mount) => mount());
+
+    core_context.mounted = true;
+    core_context.mounts.forEach((mount) => mount());
+    core_context.mounts.clear();
 
     return () => {
         unMountSet.forEach((unmount) => unmount());

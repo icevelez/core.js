@@ -1,5 +1,5 @@
 
-import { State, effect } from "../core/reactivity.js";
+import { Derived, State, effect } from "../core/reactivity.js";
 
 // function test_nestedEffect() {
 //     const outer = new State(0);
@@ -63,41 +63,76 @@ import { State, effect } from "../core/reactivity.js";
 
 // test_nestedEffect();
 
-function test_deepProxy() {
-    const object = new State([
-        { name: "ice" },
-        { name: "bob" },
-        { name: "alex" },
-    ]);
+// function test_deepProxy() {
+//     const object = new State([
+//         { name: "ice" },
+//         { name: "bob" },
+//         { name: "alex" },
+//     ]);
 
-    effect(() => {
-        console.log('object', object.value)
-    })
+//     effect(() => {
+//         console.log('object', object.value)
+//     })
 
-    effect(() => {
-        console.log('0', object.value[0])
-    })
+//     effect(() => {
+//         console.log('0', object.value[0])
+//     })
 
-    effect(() => {
-        console.log('1', object.value[1])
-    })
+//     effect(() => {
+//         console.log('1', object.value[1])
+//     })
 
-    effect(() => {
-        console.log('2 name', object.value[2].name)
-    })
+//     effect(() => {
+//         console.log('2 name', object.value[2].name)
+//     })
 
-    effect(() => {
-        console.log('length', object.value.length)
-    })
+//     effect(() => {
+//         console.log('length', object.value.length)
+//     })
 
+//     setTimeout(() => {
+//         console.log("push");
+//         object.value.push({ name: "nora" });
+//         setTimeout(() => {
+//             console.log("delete");
+//             object.deleteState();
+//         }, 1000)
+//     }, 1000)
+// }
+
+// test_deepProxy();
+
+function demo() {
+
+    console.log("1")
     setTimeout(() => {
-        console.log("push");
-        object.value.push({ name: "nora" });
+        console.log("2")
         setTimeout(() => {
-            console.log("delete");
-            object.deleteState();
-        }, 1000)
-    }, 1000)
+            console.log("3")
+        });
+    });
+    setTimeout(() => {
+        console.log("4")
+    });
+    console.log("5");
+
+    // const items = new State([]);
+
+    // effect(() => {
+
+    //     document.body.innerHTML = "";
+
+    //     for (const item of items.value) {
+
+    //         const h1 = document.createElement("h1");
+    //         h1.textContent = `${item}`;
+
+    //         document.body.append(h1);
+    //     }
+    // });
+
+    // items.value.push("nikko")
+    // items.value.push("yssa")
 }
 
-test_deepProxy();
+demo();

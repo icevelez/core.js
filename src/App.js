@@ -11,6 +11,14 @@ export default component({
     }
 }, class {
 
+    see = (node, attr) => {
+        console.log("hello from see func", { node, attr });
+
+        return () => {
+            console.log("unmounting see");
+        }
+    }
+
     comp_name = new State("Example");
 
     promise = new Derived(() => import(`./components/${this.comp_name.value}.js`))
@@ -19,7 +27,7 @@ export default component({
 
     todos = new State([
         { title: 'alice', completed: false },
-        { title: 'bob', completed: false },
+        { title: 'bob', completed: true },
         { title: 'matt', completed: false },
         { title: 'nikko', completed: false },
         { title: 'ralph', completed: false },
