@@ -7,11 +7,12 @@
 {{#if showList.value }}
     <div style="padding-top: 1rem;">
         {{#each todos.value as todo, i}}
-            <p>{{ i.value+1 }}. {{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
+            {{ i.value+1 }}.
+            <p>{{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
             <input type="text" value="{{ todo.title }}" oninput="{{ (e) => todo.title = e.target.value }}">
             <input type="checkbox" onclick="{{ () => todo.completed = !todo.completed }}">
             <button onclick="{{ () => removeTodo(i.value) }}">Remove todo</button>
-            <Example item="{{ i.value }}">
+            <Example item="{{ i.value+1 }}">
                 <h1>Hello With item</h1>
             </Example>
         {{empty}}
@@ -21,6 +22,8 @@
             </Example>
         {{/each}}
     </div>
+{{else}}
+    <h1>Hidden list</h1>
 {{/if}}
 
 <div>
@@ -30,3 +33,13 @@
 {{#if todos.value.length > 0 && todos.value.every((todo) => todo.completed) }}
     <h1>YEY!!! All Todos are complete</h1>
 {{/if}}
+
+<h1>Rendering Component {{ comp_name.value }} </h1>
+
+{{#await promise}}
+    <h1>Loading component...</h1>
+{{then comp}}
+    <Component default="{{ comp.value }}" item="{{ 'message from app' }}">
+        <h1>Imported from {{#await}}</h1>
+    </Component>
+{{/await}}

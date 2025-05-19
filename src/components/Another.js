@@ -3,23 +3,20 @@ import { component } from "../../core/template-engine/handlebar.js";
 
 export default component({
     template: `
-        <div>
-            {{ message }}
-            <Slot/>
-        </div>
+        <h1>Greetings Another Component</h1>
     `,
     components: {},
 }, class {
 
-    message = "Greetings from Example!";
+    message = "Greetings from Another!";
 
     constructor(attr) {
         onMount(() => {
-            console.log("onMount Example.js", attr);
+            console.log("onMount Another.js", attr);
         })
 
         onUnmount(() => {
-            console.log("onUnmount Example.js", attr);
+            console.log("onUnmount Another.js", attr);
         });
     }
 });

@@ -4,23 +4,22 @@ import { onMountQueue, onUnmountQueue } from "../internal-core.js"
 
 /**
 * @param {{ template : string, components : { [key:string] : Function } }} options
-* @param {any} Context
-* @param {() => DocumentFragment} slot
+* @param {any} Context anonymous class that encapsulate logic
 * @returns {(props?:Record<string, any>) => DocumentFragment}
 */
 export function component(options, Context) {
-    return function (attrs = {}, slot = null) {
+    return function (attrs = {}, slot_callback_fn = null) {
         if (Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
         onUnmountQueue.push(new Set());
         onMountQueue.push(new Set());
 
-        const ctx = new Context(attrs, slot);
+        const ctx = new Context(attrs);
 
         const unmountSet = onUnmountQueue.pop();
         const mountSet = onMountQueue.pop();
 
-        const template = processTemplate(options.template, ctx, options.components, slot);
+        const template = processTemplate(options.template, ctx, options.components, slot_callback_fn);
 
         onUnmountQueue.push(unmountSet);
         onMountQueue.push(mountSet);
@@ -33,9 +32,9 @@ export function component(options, Context) {
 * @param {string} template
 * @param {any} ctx
 * @param {{ [key:string] : Function }} components
-* @param {() => DocumentFragment} slot
+* @param {() => DocumentFragment} slot_callback_fn
 */
-function processTemplate(template, ctx, components = {}, slot = null) {
+function processTemplate(template, ctx, components = {}, slot_callback_fn = null) {
 
     // holds callback function to convert marked element to its dynamic content
     const processedMaps = {
@@ -47,12 +46,12 @@ function processTemplate(template, ctx, components = {}, slot = null) {
 
     let slotMarkerId;
 
-    if (slot) {
-        slotMarkerId = makeId(24);
-        template = template.replace(/<Slot\s*\/>/g, () => `<div id="${slotMarkerId}"></div>`);
+    if (slot_callback_fn) {
+        template = template.replace(/<Slot\s*\/>/g, () => {
+            slotMarkerId = makeId(24);
+            return `<div id="${slotMarkerId}"></div>`;
+        });
     }
-
-    const originalTemplate = template;
 
     template = processIf(processedMaps.if, template, ctx, components);
     template = processEach(processedMaps.each, template, ctx, components);
@@ -68,7 +67,7 @@ function processTemplate(template, ctx, components = {}, slot = null) {
 
         markerElement.replaceWith(textNodeEnd);
         textNodeEnd.parentElement.insertBefore(textNodeStart, textNodeEnd);
-        textNodeEnd.parentNode.insertBefore(slot(), textNodeEnd);
+        textNodeEnd.parentNode.insertBefore(slot_callback_fn(), textNodeEnd);
     }
 
     Object.entries(processedMaps).forEach(([key, map]) => {
@@ -102,20 +101,11 @@ function processTemplate(template, ctx, components = {}, slot = null) {
 function processNode(node, ctx, parentFragment) {
 
     if (node.nodeType === Node.TEXT_NODE) {
-
-        // prevent reprocessing the same node
-        if (node.__processed_text) {
-            parentFragment.appendChild(node);
-            return;
-        }
-
         const expression = node.textContent;
         const regex = /{{\s*([^#\/][^}]*)\s*}}/g;
         const parts = expression.split(/({{[^}]+}})/g);
 
         if (parts.length <= 1) {
-
-            node.__processed_text = true;
 
             effect(() => {
                 node.textContent = expression.replace(regex, (_, expr) => evaluate(expr, ctx));
@@ -129,11 +119,9 @@ function processNode(node, ctx, parentFragment) {
 
         parts.forEach(part => {
             const cloneNode = node.cloneNode();
-            cloneNode.__processed_text = true;
 
             effect(() => {
                 cloneNode.textContent = part.replace(regex, (_, expr) => evaluate(expr, ctx));
-                console.log("change", { text: cloneNode.textContent });
             });
 
             parentFragment.append(cloneNode)
@@ -325,6 +313,41 @@ function processEach(eachMap, template, ctx, components) {
             const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
             if (parentUnmount && !parentUnmount.has(unmountEach)) parentUnmount.add(unmountEach);
 
+            const removeUnusedItems = (newRenderedItems) => {
+                renderedItems.forEach((r, i) => {
+                    const existingItemIndex = newRenderedItems.findIndex((x) => x === r);
+                    if (existingItemIndex > -1) {
+                        if (existingItemIndex === i) return;
+                        if (r.index) r.index.value = existingItemIndex;
+                        return;
+                    }
+
+                    let node = r.blockStart;
+                    let end = r.blockEnd;
+
+                    while (node && node !== r.blockEnd) {
+                        const next = node.nextSibling;
+                        node.remove();
+                        node = next;
+                    }
+
+                    if (r.unmount) r.unmount();
+                    if (r.index) {
+                        r.index.deleteState();
+                        delete r.index;
+                    }
+
+                    delete r.item;
+                    delete r.blockStart;
+                    delete r.blockEnd;
+                    delete r.unmount;
+
+                    end.remove();
+                });
+
+                renderedItems = newRenderedItems;
+            }
+
             effect(() => {
                 let currentMarker = startMarker;
                 let newRenderedItems = [];
@@ -377,7 +400,6 @@ function processEach(eachMap, template, ctx, components) {
                             }
 
                             cleanup = untrackedEffect(() => {
-                                console.log("RENDERING ITEM");
 
                                 unmount();
                                 removeNodesBetween(blockStart, blockEnd);
@@ -398,92 +420,52 @@ function processEach(eachMap, template, ctx, components) {
                             existing.unmount = unmount;
                         }
 
-                        if (existing.blockStart.previousSibling !== currentMarker) {
-                            console.log("MOVING ITEM");
-                            const nodesToMove = [];
-                            let node = existing.blockStart;
-
-                            while (node !== existing.blockEnd.nextSibling) {
-                                nodesToMove.push(node);
-                                node = node.nextSibling;
-                            }
-
-                            let previousMarker;
-
-                            nodesToMove.forEach((n, i) => {
-                                if (i === 0) previousMarker = n;
-                                parent.insertBefore(n, currentMarker);
-                            });
-
-                            // insert currentMarker back to its original position
-                            parent.insertBefore(currentMarker, previousMarker);
-                        }
-
                         newRenderedItems.push(existing);
                         currentMarker = existing.blockEnd;
                     });
-                } else if (elseBlock) {
-                    const [blockStart, blockEnd] = startEndTextNode();
-
-                    const unMountSet = new Set();
-                    const mountSet = new Set();
-
-                    const unmount = () => {
-                        unMountSet.forEach((umount) => umount());
-                        unMountSet.clear();
-                    };
-
-                    const mount = () => {
-                        mountSet.forEach((mount) => mount());
-                        mountSet.clear();
-                    }
-
-                    parent.insertBefore(blockStart, currentMarker.nextSibling);
-                    parent.insertBefore(blockEnd, blockStart.nextSibling);
-
-                    const existing = { item: 0, blockStart, blockEnd, index: 0 };
-
-                    onUnmountQueue.push(unMountSet);
-                    onMountQueue.push(mountSet);
-
-                    const elseContent = processTemplate(elseBlock, ctx, components);
-
-                    onUnmountQueue.pop();
-                    onMountQueue.pop();
-
-                    blockEnd.before(...elseContent.childNodes);
-                    mount();
-
-                    currentMarker = existing.blockEnd;
-                    existing.unmount = unmount;
-
-                    newRenderedItems.push(existing);
+                    removeUnusedItems(newRenderedItems);
+                    return;
                 }
 
-                // Remove items no longer present
-                renderedItems.forEach((r, i) => {
-                    const existingItemIndex = newRenderedItems.findIndex((x) => x === r);
-                    if (existingItemIndex > -1) {
-                        if (existingItemIndex === i) return;
-                        if (r.index) r.index.value = existingItemIndex;
-                        return;
-                    }
+                if (!elseBlock) return
 
-                    let node = r.blockStart;
-                    let end = r.blockEnd;
+                const [blockStart, blockEnd] = startEndTextNode();
 
-                    while (node && node !== r.blockEnd) {
-                        const next = node.nextSibling;
-                        node.remove();
-                        node = next;
-                    }
+                const unMountSet = new Set();
+                const mountSet = new Set();
 
-                    if (r.unmount) r.unmount();
+                const unmount = () => {
+                    unMountSet.forEach((umount) => umount());
+                    unMountSet.clear();
+                };
 
-                    end.remove();
-                });
+                const mount = () => {
+                    mountSet.forEach((mount) => mount());
+                    mountSet.clear();
+                }
 
-                renderedItems = newRenderedItems;
+                parent.insertBefore(blockStart, currentMarker.nextSibling);
+                parent.insertBefore(blockEnd, blockStart.nextSibling);
+
+                const existing = { item: 0, blockStart, blockEnd, index: 0 };
+
+                onUnmountQueue.push(unMountSet);
+                onMountQueue.push(mountSet);
+
+                const elseContent = processTemplate(elseBlock, ctx, components);
+
+                onUnmountQueue.pop();
+                onMountQueue.pop();
+
+                blockEnd.before(...elseContent.childNodes);
+                mount();
+
+                currentMarker = existing.blockEnd;
+                existing.unmount = unmount;
+
+                newRenderedItems.push(existing);
+
+                removeUnusedItems(newRenderedItems);
             });
         }));
 
@@ -541,7 +523,7 @@ function processAwait(awaitMap, template, ctx, components) {
                     onUnmountQueue.push(unMountSet);
                     onMountQueue.push(mountSet);
 
-                    const loadingNodes = processTemplate(loadingContent, ctx);
+                    const loadingNodes = processTemplate(loadingContent, ctx, components);
 
                     onUnmountQueue.pop();
                     onMountQueue.pop();
@@ -558,7 +540,7 @@ function processAwait(awaitMap, template, ctx, components) {
                     onUnmountQueue.push(unMountSet);
                     onMountQueue.push(mountSet);
 
-                    const thenNodes = processTemplate(thenBlock, { ...ctx, [varName]: result });
+                    const thenNodes = processTemplate(thenBlock, { ...ctx, [varName]: result }, components);
 
                     onUnmountQueue.pop();
                     onMountQueue.pop();
@@ -568,6 +550,8 @@ function processAwait(awaitMap, template, ctx, components) {
                 };
 
                 const showCatch = (error) => {
+                    console.error(error);
+
                     clearContent();
                     if (!catchMatch) return;
                     const [_, varName, catchBlock] = catchMatch;
@@ -575,7 +559,7 @@ function processAwait(awaitMap, template, ctx, components) {
                     onUnmountQueue.push(unMountSet);
                     onMountQueue.push(mountSet);
 
-                    const catchNodes = processTemplate(catchBlock, { ...ctx, [varName]: error });
+                    const catchNodes = processTemplate(catchBlock, { ...ctx, [varName]: error }, components);
 
                     onUnmountQueue.pop();
                     onMountQueue.pop();
@@ -612,11 +596,12 @@ function processAwait(awaitMap, template, ctx, components) {
 * @param {Record<string, Function>} components
 */
 function processComponents(componentMap, template, ctx, components) {
-    const componentRegex = /<([A-Z][A-Za-z0-9]*)\b([^>]*)\/>|<([A-Z][A-Za-z0-9]*)\b([^>]*)>([\s\S]*?)<\/\3>/g;
+
+    const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
 
     function parseAttributes(attrString, ctx) {
         const attrs = {};
-        const regex = /([\w:-]+)(?:="([^"]*)")?/g;
+        const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
         let match;
 
         while ((match = regex.exec(attrString)) !== null) {
@@ -627,12 +612,58 @@ function processComponents(componentMap, template, ctx, components) {
         return attrs;
     }
 
-    return template.replace(componentRegex, (match, selfTag, selfAttrs, openTag, openAttrs, content) => {
+    return template.replace(componentRegex, (match, tag, attrStr, _, inner_content) => {
+        if (tag === "Component") {
+            // throw new Error("not yet implemented");
 
-        const componentName = selfTag || openTag;
-        if (!components[componentName] || componentName === "Slot") return match;
+            const attrs = parseAttributes(attrStr, ctx);
+            const markerId = `component-${makeId(24)}`;
 
-        const attrs = parseAttributes(selfAttrs || openAttrs, ctx);
+            const componentCallbackfn = (attrs.default) ? attrs.default.default : null;
+            delete attrs.default;
+
+            componentMap.set(markerId, (startNode, endNode) => {
+                if (!componentCallbackfn) return () => { };
+
+                let unMountSet = new Set();
+                let mountSet = new Set();
+
+                const unmount = () => {
+                    unMountSet.forEach((umount) => umount());
+                    unMountSet.clear();
+                };
+
+                const mount = () => {
+                    mountSet.forEach((mount) => mount());
+                    mountSet.clear();
+                }
+
+                const renderSlotCallbackfn = () => processTemplate(inner_content, ctx, components);
+
+                return () => {
+                    unmount();
+                    removeNodesBetween(startNode, endNode);
+
+                    const component = inner_content ? componentCallbackfn(attrs, renderSlotCallbackfn) : componentCallbackfn(attrs);
+
+                    unMountSet = onUnmountQueue.pop();
+                    mountSet = onMountQueue.pop();
+
+                    endNode.parentElement.insertBefore(component, endNode);
+                    mount();
+
+                    const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
+                    if (parentUnmount && !parentUnmount.has(unmount)) parentUnmount.add(unmount);
+                }
+            })
+
+            return `<div id="${markerId}"></div>`;
+        }
+
+        if (tag === "Slot" && !inner_content) return '';
+        if (!components[tag]) throw new Error(`could not load component <${tag}/>. component not found`);
+
+        const attrs = parseAttributes(attrStr, ctx);
         const markerId = `component-${makeId(24)}`;
 
         componentMap.set(markerId, (startNode, endNode) => {
@@ -649,13 +680,13 @@ function processComponents(componentMap, template, ctx, components) {
                 mountSet.clear();
             }
 
-            const renderSlot = () => processTemplate(content, ctx, components);
+            const renderSlotCallbackfn = () => processTemplate(inner_content, ctx, components);
 
             return () => {
                 unmount();
                 removeNodesBetween(startNode, endNode);
 
-                const component = content ? components[componentName](attrs, renderSlot) : components[componentName](attrs);
+                const component = inner_content ? components[tag](attrs, renderSlotCallbackfn) : components[tag](attrs);
 
                 unMountSet = onUnmountQueue.pop();
                 mountSet = onMountQueue.pop();

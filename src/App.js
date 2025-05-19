@@ -1,14 +1,19 @@
 import { load, onMount } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { State } from "../core/reactivity.js";
+import { Derived, State } from "../core/reactivity.js";
+
 import Example from "./components/Example.js";
 
 export default component({
     template: await load("src/App.html"),
     components: {
         Example,
-    },
+    }
 }, class {
+
+    comp_name = new State("Example");
+
+    promise = new Derived(() => import(`./components/${this.comp_name.value}.js`))
 
     showList = new State(true);
 
@@ -25,6 +30,10 @@ export default component({
         onMount(() => {
             console.log("===============================")
         })
+
+        setTimeout(() => {
+            this.comp_name.value = "Another";
+        }, 5000)
     }
 
     addTodo = (event) => {
@@ -34,8 +43,7 @@ export default component({
     }
 
     removeTodo = (i) => {
-        console.log(i, 'removing');
-
+        console.log(i, 'x removing');
         this.todos.value.splice(i, 1);
     }
 });
