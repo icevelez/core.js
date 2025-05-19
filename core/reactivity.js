@@ -242,9 +242,11 @@ function createProxy(object, subscriberMap = new Map()) {
         subscriberMap,
         id: makeId(12),
         get(target, key) {
-            // console.log("get", target, key);
+            // console.log("get", target, key, target[key]);
 
-            if (effectStack.length <= 0) return target[key];
+            // source: https://stackoverflow.com/questions/47874488/proxy-on-a-date-object
+            if (effectStack.length <= 0) return (typeof target[key] === "function") ? target[key].bind(target) : target[key];
+
             if (!subscriberMap.has(key)) subscriberMap.set(key, new Set());
 
             const currentEffect = effectStack[effectStack.length - 1];
@@ -259,10 +261,10 @@ function createProxy(object, subscriberMap = new Map()) {
             currentEffect.dependencies.add(unsubscribe);
             state_listener.add(unsubscribe);
 
-            return target[key];
+            return (typeof target[key] === "function") ? target[key].bind(target) : target[key];
         },
         set(target, key, new_value) {
-            // console.log("Set", target[key], key, new_value);
+            // console.log("set", target[key], target, key, new_value);
 
             const subscribers = subscriberMap.get(key);
 

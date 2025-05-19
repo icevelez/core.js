@@ -102,37 +102,22 @@ import { Derived, State, effect } from "../core/reactivity.js";
 
 // test_deepProxy();
 
-function demo() {
+function proxied_date() {
 
-    console.log("1")
-    setTimeout(() => {
-        console.log("2")
-        setTimeout(() => {
-            console.log("3")
-        });
-    });
-    setTimeout(() => {
-        console.log("4")
-    });
-    console.log("5");
+    const handler = {
+        get: function (target, name) {
+            return name in target ?
+                target[name].bind(target) : undefined
+        }
+    };
 
-    // const items = new State([]);
+    const p = new Proxy(new Date(), handler);
 
-    // effect(() => {
+    console.log(p.getMonth());
 
-    //     document.body.innerHTML = "";
+    const x = new State(new Date());
 
-    //     for (const item of items.value) {
-
-    //         const h1 = document.createElement("h1");
-    //         h1.textContent = `${item}`;
-
-    //         document.body.append(h1);
-    //     }
-    // });
-
-    // items.value.push("nikko")
-    // items.value.push("yssa")
+    console.log("Year", x.value.getFullYear())
 }
 
-demo();
+proxied_date();

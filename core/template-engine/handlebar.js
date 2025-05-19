@@ -156,17 +156,38 @@ function processNode(node, ctx, parentFragment) {
 
             if (attrName.startsWith('bind:')) {
                 const attr = attrName.slice(5);
+                const type = node.type;
+                const tagname = node.tagName;
+
                 const eventDic = {
-                    "checked": "click",
-                    "value": "input",
+                    "checked": type === "date" ? "change" : "click",
+                    "value": tagname === "select" ? "change" : "input",
                 };
 
                 const binding = evaluate(`(value) => ${attrValue} = value`, ctx);
-                const eventListener = (event) => binding(event.target[attr]);
+                const eventListener = (event) => {
+                    const type = event.target.type;
+
+                    if (type === "date") {
+                        binding(new Date(event.target.value))
+                        return;
+                    }
+
+                    binding(event.target[attr])
+                };
 
                 node.addEventListener(eventDic[attr] ? eventDic[attr] : attr, eventListener);
 
                 effect(() => {
+                    const type = node.type;
+
+                    if (type === "date") {
+                        const date = evaluate(attrValue, ctx);
+                        if (!(date instanceof Date)) return;
+                        node.value = date.toISOString().split('T')[0];
+                        return;
+                    }
+
                     node[attr] = evaluate(attrValue, ctx);
                 })
 
