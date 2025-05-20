@@ -1,5 +1,5 @@
 import { effect, State, untrackedEffect } from "../reactivity.js";
-import { evaluate, makeId, removeNodesBetween, startEndTextNode } from "../helper-functions.js";
+import { evaluate, makeId, removeNodesBetween, startEndTextNode, newSetFunc } from "../helper-functions.js";
 import { onMountQueue, onUnmountQueue, core_context } from "../internal-core.js"
 
 /**
@@ -133,7 +133,6 @@ function processNode(node, ctx, parentFragment) {
     }
 
     if (node.nodeType === Node.ELEMENT_NODE) {
-        // Process attributes with {{ }}
         Array.from(node.attributes).forEach(attr => {
             const attrName = attr.name.toLowerCase();
             const attrValue = attr.value;
@@ -289,10 +288,8 @@ function processIf(ifMap, template, ctx, components) {
 
         ifMap.set(markerId, (startNode, endNode) => {
             return () => {
-                const unMountSet = new Set();
-                const mountSet = new Set();
-                unMountSet.tag = "if";
-                mountSet.tag = "if";
+                const unMountSet = newSetFunc();
+                const mountSet = newSetFunc();
 
                 const unmount = () => {
                     unMountSet.forEach((umount) => umount());
@@ -322,6 +319,7 @@ function processIf(ifMap, template, ctx, components) {
                             onMountQueue.pop();
 
                             endNode.parentNode.insertBefore(fragment, endNode);
+
                             (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                             const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
@@ -353,28 +351,26 @@ function processEach(eachMap, template, ctx, components) {
             const [mainBlock, elseBlock] = block.split(/{{empty}}/);
             const parent = startMarker.parentNode;
 
+            /**
+            * @type {RenderItem[]}
+            */
             let renderedItems = [];
 
             const unmountEach = () => {
-                renderedItems.forEach((r) => {
+                for (const r of renderedItems) {
                     r.unmount();
-
-                    if (r.index) {
-                        r.index.deleteState();
-                        delete r.index;
-                    }
-
-                    delete r.item;
-                    delete r.blockStart;
-                    delete r.blockEnd;
-                    delete r.unmount;
-                });
+                    if (r.index) r.index.deleteState();
+                    r.deleteItself();
+                };
                 renderedItems = [];
             };
 
             const parentUnmount = onUnmountQueue[onUnmountQueue.length - 1];
             if (parentUnmount && !parentUnmount.has(unmountEach)) parentUnmount.add(unmountEach);
 
+            /**
+            * @param {RenderItem[]} newRenderedItems
+            */
             const removeUnusedItems = (newRenderedItems) => {
                 renderedItems.forEach((r, i) => {
                     const existingItemIndex = newRenderedItems.findIndex((x) => x === r);
@@ -393,16 +389,9 @@ function processEach(eachMap, template, ctx, components) {
                         node = next;
                     }
 
-                    if (r.unmount) r.unmount();
-                    if (r.index) {
-                        r.index.deleteState();
-                        delete r.index;
-                    }
-
-                    delete r.item;
-                    delete r.blockStart;
-                    delete r.blockEnd;
-                    delete r.unmount;
+                    r.unmount();
+                    if (r.index) r.index.deleteState();
+                    r.deleteItself();
 
                     end.remove();
                 });
@@ -421,9 +410,12 @@ function processEach(eachMap, template, ctx, components) {
                         const existingIndex = renderedItems.findIndex((r) => r.item === item);
                         let existing = renderedItems[existingIndex];
 
-                        const unMountSet = new Set();
-                        const mountSet = new Set();
+                        const unMountSet = newSetFunc();
+                        const mountSet = newSetFunc();
 
+                        /**
+                        * @type {Function}
+                        */
                         let cleanup;
 
                         const unmount = () => {
@@ -443,7 +435,8 @@ function processEach(eachMap, template, ctx, components) {
                             parent.insertBefore(blockStart, currentMarker.nextSibling);
                             parent.insertBefore(blockEnd, blockStart.nextSibling);
 
-                            existing = { item, blockStart, blockEnd, index: new State(index) };
+                            existing = new RenderItem(new State(index), item, blockStart, blockEnd, unmount);
+
                             const childCtx = { ...ctx, [itemName]: item };
 
                             if (indexName) {
@@ -478,8 +471,6 @@ function processEach(eachMap, template, ctx, components) {
                                 (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                             })
-
-                            existing.unmount = unmount;
                         }
 
                         newRenderedItems.push(existing);
@@ -493,8 +484,8 @@ function processEach(eachMap, template, ctx, components) {
 
                 const [blockStart, blockEnd] = startEndTextNode();
 
-                const unMountSet = new Set();
-                const mountSet = new Set();
+                const unMountSet = newSetFunc();
+                const mountSet = newSetFunc();
 
                 const unmount = () => {
                     unMountSet.forEach((umount) => umount());
@@ -509,7 +500,7 @@ function processEach(eachMap, template, ctx, components) {
                 parent.insertBefore(blockStart, currentMarker.nextSibling);
                 parent.insertBefore(blockEnd, blockStart.nextSibling);
 
-                const existing = { item: 0, blockStart, blockEnd, index: 0 };
+                const existing = new RenderItem(null, null, blockStart, blockEnd, unmount)
 
                 onUnmountQueue.push(unMountSet);
                 onMountQueue.push(mountSet);
@@ -523,7 +514,6 @@ function processEach(eachMap, template, ctx, components) {
                 (core_context.mounted) ? mount() : core_context.mounts.add(mount);
 
                 currentMarker = existing.blockEnd;
-                existing.unmount = unmount;
 
                 newRenderedItems.push(existing);
 
@@ -547,17 +537,25 @@ function processAwait(awaitMap, template, ctx, components) {
     const catchRegex = /{{catch\s+(\w+)}}([\s\S]*?)(?={{:|$)/;
     const blockRegex = /{{then[\s\S]*?}}|{{catch[\s\S]*?}}/;
     return template.replace(awaitRegex, (_, promiseExpr, block) => {
-
+        /**
+        * @type {string[]}
+        */
         const thenMatch = block.match(thenRegex);
+        /**
+        * @type {string[]}
+        */
         const catchMatch = block.match(catchRegex);
+        /**
+        * @type {string}
+        */
         const loadingContent = block.split(blockRegex)[0] || '';
 
         const markerId = `await-${makeId(24)}`;
 
         awaitMap.set(markerId, (markerStart, markerEnd) => {
             return () => {
-                let unMountSet = new Set();
-                let mountSet = new Set();
+                let unMountSet = newSetFunc();
+                let mountSet = newSetFunc();
 
                 const unmount = () => {
                     unMountSet.forEach((umount) => umount());
@@ -676,8 +674,6 @@ function processComponents(componentMap, template, ctx, components) {
 
     return template.replace(componentRegex, (match, tag, attrStr, _, inner_content) => {
         if (tag === "Component") {
-            // throw new Error("not yet implemented");
-
             const attrs = parseAttributes(attrStr, ctx);
             const markerId = `component-${makeId(24)}`;
 
@@ -687,8 +683,8 @@ function processComponents(componentMap, template, ctx, components) {
             componentMap.set(markerId, (startNode, endNode) => {
                 if (!componentCallbackfn) return () => { };
 
-                let unMountSet = new Set();
-                let mountSet = new Set();
+                let unMountSet = newSetFunc();
+                let mountSet = newSetFunc();
 
                 const unmount = () => {
                     unMountSet.forEach((umount) => umount());
@@ -729,8 +725,8 @@ function processComponents(componentMap, template, ctx, components) {
         const markerId = `component-${makeId(24)}`;
 
         componentMap.set(markerId, (startNode, endNode) => {
-            let unMountSet = new Set();
-            let mountSet = new Set();
+            let unMountSet = newSetFunc();
+            let mountSet = newSetFunc();
 
             const unmount = () => {
                 unMountSet.forEach((umount) => umount());
@@ -763,4 +759,48 @@ function processComponents(componentMap, template, ctx, components) {
 
         return `<div id="${markerId}"></div>`;
     });
+}
+
+// ==================================================== //
+
+/**
+* This class is used in `{{#each}}`
+*/
+class RenderItem {
+
+    /**
+    * @type {State<number> | undefined}
+    */
+    index;
+
+    /**
+    * @type {any}
+    */
+    item;
+
+    /**
+    * @type {Function}
+    */
+    unmount;
+
+    /**
+    * @type {Text}
+    */
+    blockStart;
+    /**
+    * @type {Text}
+    */
+    blockEnd;
+
+    constructor(index, item, blockStart, blockEnd, unmount) {
+        this.index = index;
+        this.item = item;
+        this.blockStart = blockStart;
+        this.blockEnd = blockEnd;
+        this.unmount = unmount;
+    }
+
+    deleteItself = () => {
+        this.blockEnd = this.blockStart = this.index = this.item = this.unmount = null;
+    }
 }

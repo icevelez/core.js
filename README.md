@@ -20,7 +20,7 @@ Core.js is my attempt at building my own framework.
 
 *Story Time*-- When I started web dev, I made my own paradigm at making it "easy" for myself to write component-based HTML/JS unaware that it looked exactly like React code but instead of JSX it was calling a helper function to create HTML `$.create("div")` and it wasn't easy, it just made it a lot harder and crappier
 
-I moved on to using JS Frameworks and fell in love with [Svelte](https://svelte.dev/), used it in every project, it has the expressiveness, the lightweight app bundle size, the friendly ecosystem, It is perfect! It felt like doing traditional web development
+I moved on to using JS Frameworks and fell in love with [Svelte](https://svelte.dev/), used it in every project, it has the expressiveness, the lightweight app bundle size, the friendly ecosystem, It felt like traditional web development, Perfect!
 
 BUT! that itch of finishing what I started kept coming back which lead me to try again. (multiple attempts were made before landing here)
 
@@ -30,31 +30,23 @@ BUT! that itch of finishing what I started kept coming back which lead me to try
 
 There's two components that make up `Core.js`. It's **reactivity system** and **template engine**
 
-The reactivity system handles tracking state update, deletion, and creation while the template engine is in charge of parsing tempalte string to the DOM. Combined the two and you get this framework
+The reactivity system handles tracking state update, deletion, and creation while the template engine is in charge of parsing template string to the DOM. Combined the two and you get this framework
 
-> One neat tidbit you might have not notice is that you can build your own template engine that parses whatever syntax you want, as long as you use `effect()` and integrate the reactivity system.
+> One neat tidbit you might have not notice is that you can build your own template engine that parses whatever syntax you want, as long as the reactivity system is integrated by using `effect()` among other primitives.
 >
 > You can have a template engine that parses `{{ handlebar }}` and another for `@{ razor }`
 
 ---
 
-### Internal process of how it works
-1. The template engine parses your html file by collecting all expression block like `{{#if}}` or `{{#each}}` and replacing it with a div element with a marker id (`<div id="marker">`) and converts it to a DOM element
-2. Which is then processed by replacing the marked div elements with **anchor tags** (represented as a comment element or text node to make it invisible in the elements tab) and render the dynamic content in between the anchor elements using the saved expression block
-
-    The anchor tags are used to keep track of the placement of each dynamic content
-
-3. All processed DOM elements are ran inside the reactive primitive `effect()` to keep track of updates and re-renders
-4. Then put all rendered DOM element inside a `DocumentFragment`
-5. Which is then appended to a target element using the `mount()` function
-
----
-
 ## Installation
+
+> You can skip all of the step by downloading this repository and start creating your app under the `src` folder
+>
+> just delete the stuff you don't need like `documentation` and `testing` folder
 
 1. Create a folder for your project
 
-2. Download `core.js.v0.1.0.zip` or this repository
+2. Download this repository
 
 3. Extract its content and copy a folder named `core` to your project folder
 
@@ -106,33 +98,11 @@ We are importing `App.js` from the `src` folder to render it to our target eleme
 
 ---
 
-## Quick Tutorial
+## Documentation
 
-In this section I'll run you through how its syntax work
+All documentation can be read under the `./documentation` folder
 
-### Expressions
-
-```html
-<h1>Hello {{ "world" + "!" }}</h1>
-```
-
-### Special Syntax
-
-`bind:[attribute]`
-
-`use:[method]="{{ prop }}"`
-
-### Conditionals
-
-`{{#if}} ... {{else if}} ... {{/if}}`
-
-`{{#each}} ... {{empty}} ... {{/each}}`
-
-`{{#await}} ... {{then}} ... {{catch}} ... {{/await}}`
-
-### Components
-
-`<MyCustomComponent/>`
+- [Handlebar](./handlebar.md)
 
 ---
 
@@ -140,7 +110,6 @@ In this section I'll run you through how its syntax work
 
 - zulu -- from the Solid Discord group for helping me debug a reactivity problem regarding proxies
 - Patrick -- from the Svelte Discord group for helping me better understand fine-grain reactivity
-- ChatGPT -- carrying me by giving the right `regex` to parse a specific syntax
 
 ---
 
@@ -169,7 +138,7 @@ A: It's easier to instantiated a class and use its properties than to call a fun
 
 I'm not God, I make mistakes, I have not benchmarked this code in any way so it may have poor performance or memory leak somewhere that I am not aware of.
 
-I have tested this to the best of my ability but if you find any bugs or issues, kindly report it please, and if you have a fix/patch, feel free to create a pull request for me to look in to
+I have tested this to the best of my ability but if you find any bugs or issues, kindly email me about it and if you have a fix/patch, feel free to include that in your email.
 
 ---
 

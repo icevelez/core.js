@@ -9,6 +9,14 @@ export function isObject(object) {
 }
 
 /**
+* To make it easier for myself to have a "typed" Set instead of adding type for each declaration
+* @returns {Set<Function>}
+*/
+export function newSetFunc() {
+    return new Set();
+}
+
+/**
 * @param {number} length
 */
 export function makeId(length) {

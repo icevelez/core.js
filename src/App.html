@@ -1,41 +1,5 @@
+<h1>Greetings! {{ name }}</h1>
 <div>
-    <label>Todo:</label>
-    <input type="text" onkeypress="{{ addTodo }}">
-    <button onclick="{{ () => showList.value = !showList.value }}">Show List</button>
+    <p>Counter: {{ counter.value }}</p>
+    <button onclick="{{ increment }}">Click Me!</button>
 </div>
-
-{{#if showList.value }}
-    <div style="padding-top: 1rem;" id="each">
-        {{#each todos.value as todo, i}}
-            <p use:see="{{ todo.title }}">{{ i.value+1 }}. {{ todo.title }} {{ todo.completed ? "(complete)" : "" }}</p>
-            <input type="text" bind:value="todo.title">
-            <input type="checkbox" bind:checked="todo.completed">
-            <button onclick="{{ () => removeTodo(i.value) }}">Remove todo</button>
-        {{empty}}
-            <h1>No Items Shown</h1>
-            <Example item="-1">
-                <h1>Hello Without item</h1>
-            </Example>
-        {{/each}}
-    </div>
-{{else}}
-    <h1>Hidden list</h1>
-{{/if}}
-
-<div>
-    <p>Completed ({{ (todos.value.filter((todo) => todo.completed)).length }} / {{ todos.value.length }})</p>
-</div>
-
-{{#if todos.value.length > 0 && todos.value.every((todo) => todo.completed) }}
-    <h1>YEY!!! All Todos are complete</h1>
-{{/if}}
-
-<h1>Rendering Component {{ comp_name.value }} </h1>
-
-{{#await promise}}
-    <h1>Loading component...</h1>
-{{then comp}}
-    <Component default="{{ comp.value }}" item="{{ 'message from app' }}">
-        <h1>Imported from {{#await}}</h1>
-    </Component>
-{{/await}}

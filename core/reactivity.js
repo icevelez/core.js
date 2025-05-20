@@ -215,6 +215,11 @@ export function untrackedEffect(callbackfn) {
 const $proxy = Symbol('PROXY');             // unique identify to prevent creating duplicate Proxies
 const state_proxy_listener = [];            // push a `new Set()` and collect all subscription that happens inside a proxy for later disposal
 
+function isBuiltIn(obj) {
+    const type = Object.prototype.toString.call(obj);
+    return /\[object (?:Date|URL|RegExp|Map|Set|WeakMap|WeakSet|Error|ArrayBuffer|DataView|Promise)\]/.test(type);
+}
+
 /**
 * @template {any} T
 * @param {T} object
@@ -244,8 +249,10 @@ function createProxy(object, subscriberMap = new Map()) {
         get(target, key) {
             // console.log("get", target, key, target[key]);
 
+            const bindCheck = isBuiltIn(target) && typeof target[key] === "function";
+
             // source: https://stackoverflow.com/questions/47874488/proxy-on-a-date-object
-            if (effectStack.length <= 0) return (typeof target[key] === "function") ? target[key].bind(target) : target[key];
+            if (effectStack.length <= 0) return bindCheck ? target[key].bind(target) : target[key];
 
             if (!subscriberMap.has(key)) subscriberMap.set(key, new Set());
 
@@ -261,7 +268,7 @@ function createProxy(object, subscriberMap = new Map()) {
             currentEffect.dependencies.add(unsubscribe);
             state_listener.add(unsubscribe);
 
-            return (typeof target[key] === "function") ? target[key].bind(target) : target[key];
+            return bindCheck ? target[key].bind(target) : target[key];
         },
         set(target, key, new_value) {
             // console.log("set", target[key], target, key, new_value);
