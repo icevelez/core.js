@@ -111,30 +111,40 @@ Expressions can be embedded inside HTML attributes.
 
 ## 5.1 Creating Components
 
-### Directly embedding template inside a component
+### Basic Usage
+
+To create components you must use the `component` function from `/template-engine/handlebar.js` file
+
 ```js
 import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { State } from "../core/reactivity.js";
-
-import CustomComponent from "./components/CustomComponent.js";
 
 export default component({
+    // Directly embedding template inside a component
     template: `
-        <h1>Hello {{ name }}
+        <h1>Hello World!</h1>
     `
-}, class {
-    // all component logic lives here
-
-    name = "Viewer"
-
-    constructor() {}
-
 });
 ```
 
-### Using the `load()` function to load an html template
+### Adding in context and logic to your component
+```js
+import { load } from "../core/core.js";
+import { component } from "../core/template-engine/handlebar.js";
 
+export default component({
+    template: `
+        <h1>Hello {{ name }}</h1>
+    `
+}, class {
+    // all component logic lives here
+    name = "Viewer"
+
+    constructor() {}
+});
+```
+
+### Using the `load` function to load an html template
 ```js
 import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";

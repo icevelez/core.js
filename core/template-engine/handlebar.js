@@ -7,14 +7,14 @@ import { onMountQueue, onUnmountQueue, core_context } from "../internal-core.js"
 * @param {any} Context anonymous class that encapsulate logic
 * @returns {(props?:Record<string, any>) => DocumentFragment}
 */
-export function component(options, Context) {
+export function component(options, Context = null) {
     return function (attrs = {}, slot_callback_fn = null) {
-        if (Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
+        if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
         onUnmountQueue.push(new Set());
         onMountQueue.push(new Set());
 
-        const ctx = new Context(attrs);
+        const ctx = !Context ? {} : new Context(attrs);
 
         const unmountSet = onUnmountQueue.pop();
         const mountSet = onMountQueue.pop();
