@@ -4,6 +4,8 @@ The handlebar template engine supports dynamic rendering using a Handlebars-insp
 
 ---
 
+---
+
 ## 1. Expression Interpolation
 
 ### Usage
@@ -105,7 +107,69 @@ Expressions can be embedded inside HTML attributes.
 
 ---
 
-## 5. Components
+# Components
+
+## 5.1 Creating Components
+
+### Directly embedding template inside a component
+```js
+import { load } from "../core/core.js";
+import { component } from "../core/template-engine/handlebar.js";
+import { State } from "../core/reactivity.js";
+
+import CustomComponent from "./components/CustomComponent.js";
+
+export default component({
+    template: `
+        <h1>Hello {{ name }}
+    `
+}, class {
+    // all component logic lives here
+
+    name = "Viewer"
+
+    constructor() {}
+
+});
+```
+
+### Using the `load()` function to load an html template
+
+```js
+import { load } from "../core/core.js";
+import { component } from "../core/template-engine/handlebar.js";
+import { State } from "../core/reactivity.js";
+
+import CustomComponent from "./components/CustomComponent.js";
+
+export default component({
+    template: await load("src/App.html")
+}, class {
+    // all component logic lives here
+
+});
+```
+
+## 5.2 Importing Components
+
+```js
+import { load } from "../core/core.js";
+import { component } from "../core/template-engine/handlebar.js";
+import { State } from "../core/reactivity.js";
+
+import CustomComponent from "./components/CustomComponent.js";
+import AnotherComponent from "./components/AnotherComponent.js";
+
+export default component({
+    template: await load("src/App.html"),
+    component : {
+        CustomComponent,
+        AnotherComponent
+    }
+}, ...);
+```
+
+## 5.3 Using Component
 
 ### Self-closing components
 ```html
@@ -118,6 +182,14 @@ Expressions can be embedded inside HTML attributes.
   <h1>This is a child element</h1>
 </CustomComponent>
 ```
+
+## 5.4 Custom Component Attributes
+
+### Supports passing any expression as an attribute:
+```html
+<MyButton onClick="{{ () => submit(form) }}" text="{{ buttonText }}" />
+```
+
 ---
 
 ## 6. Event Listeners
@@ -134,16 +206,7 @@ Expressions can be embedded inside HTML attributes.
 
 ---
 
-## 7. Custom Component Attributes
-
-### Supports passing any expression as an attribute:
-```html
-<MyButton onClick="{{ () => submit(form) }}" text="{{ buttonText }}" />
-```
-
----
-
-## 8. `bind:` Directive (Two-Way Binding)
+## 7. `bind:` Directive (Two-Way Binding)
 
 ### Bind `value`
 ```html
@@ -157,7 +220,7 @@ Expressions can be embedded inside HTML attributes.
 
 ---
 
-## 9. `use:` Directive (Action Support)
+## 8. `use:` Directive (Action Support)
 
 ### Basic usage
 ```html

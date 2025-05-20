@@ -1,6 +1,6 @@
-import { load, onMount, onUnmount } from "../core/core.js";
+import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { Derived, effect, State } from "../core/reactivity.js";
+import { State } from "../core/reactivity.js";
 
 export default component({
     template: await load("src/App.html"),
