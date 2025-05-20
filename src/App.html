@@ -1,5 +1,35 @@
-<h1>Greetings! {{ name }}</h1>
+<h1>Greetings {{ name.value }}</h1>
 <div>
     <p>Counter: {{ counter.value }}</p>
-    <button onclick="{{ increment }}">Click Me!</button>
+    <button onclick="{{ () => counter.value++ }}">Click Me!</button>
+    <button onclick="{{ () => hide_names.value = !hide_names.value }}">Hide names</button>
+    <input type="text" bind:value="name.value">
 </div>
+<br/>
+
+<Greetings/>
+<TestComponent/>
+
+<div>
+    <div>
+        <label>Press 'Enter' to add the name to the list</label>
+    </div>
+    <input type="text" onkeypress="{{ addName }}" placeholder="Type a name">
+</div>
+
+{{#if hide_names.value}}
+    <h1>Names hidden</h1>
+    <TestComponent/>
+{{else}}
+    {{#each names.value as name, i}}
+        <h1>{{ i.value+1 }}. {{ name }}</h1>
+    {{empty}}
+        <h1>No names</h1>
+    {{/each}}
+{{/if}}
+
+{{#each test_arr as item}}
+    <h1>Not empty arr</h1>
+{{empty}}
+    <h1>Empty arr</h1>
+{{/each}}

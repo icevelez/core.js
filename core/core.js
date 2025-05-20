@@ -22,10 +22,10 @@ export function mount(component, options) {
     const unMountSet = onUnmountQueue.pop();
     const mountSet = onMountQueue.pop();
 
-    mountSet.forEach((mount) => mount());
+    for (const mount of mountSet) mount();
 
     core_context.mounted = true;
-    core_context.mounts.forEach((mount) => mount());
+    for (const mount of core_context.mounts) mount();
     core_context.mounts.clear();
 
     return () => {
@@ -40,7 +40,7 @@ export function mount(component, options) {
 export function onMount(callback) {
     if (typeof callback !== "function") throw new TypeError("callback is not a function");
     const onMount = onMountQueue[onMountQueue.length - 1];
-    if (!onMount) throw new Error("no unmount set has been created");
+    if (!onMount) throw new Error("no mount set has been created");
     onMount.add(callback);
 }
 

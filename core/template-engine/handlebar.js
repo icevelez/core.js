@@ -16,10 +16,10 @@ export function component(options, Context = null) {
 
         const ctx = !Context ? {} : new Context(attrs);
 
+        const template = processTemplate(options.template, ctx, options.components, slot_callback_fn);
+
         const unmountSet = onUnmountQueue.pop();
         const mountSet = onMountQueue.pop();
-
-        const template = processTemplate(options.template, ctx, options.components, slot_callback_fn);
 
         onUnmountQueue.push(unmountSet);
         onMountQueue.push(mountSet);
@@ -70,9 +70,8 @@ function processTemplate(template, ctx, components = {}, slot_callback_fn = null
         textNodeEnd.parentNode.insertBefore(slot_callback_fn(), textNodeEnd);
     }
 
-    Object.entries(processedMaps).forEach(([key, map]) => {
+    for (const [key, map] of Object.entries(processedMaps)) {
         map.forEach((func, marker_key) => {
-
             const markerElement = div.querySelector(`#${marker_key}`);
             const [textNodeStart, textNodeEnd] = startEndTextNode(key);
 
@@ -81,13 +80,13 @@ function processTemplate(template, ctx, components = {}, slot_callback_fn = null
 
             func(textNodeStart, textNodeEnd)();
         })
-    })
+    }
 
     const fragment = document.createDocumentFragment();
 
-    Array.from(div.childNodes).forEach(node => {
+    for (const node of Array.from(div.childNodes)) {
         processNode(node, ctx, fragment)
-    });
+    };
 
     return fragment;
 }
@@ -96,9 +95,9 @@ function processTemplate(template, ctx, components = {}, slot_callback_fn = null
 *
 * @param {HTMLElement} node
 * @param {any} ctx
-* @param {DocumentFragment} parentFragment
+* @param {DocumentFragment} parentNode
 */
-function processNode(node, ctx, parentFragment) {
+function processNode(node, ctx, parentNode) {
 
     if (node.nodeType === Node.TEXT_NODE) {
         const expression = node.textContent;
@@ -111,21 +110,21 @@ function processNode(node, ctx, parentFragment) {
                 node.textContent = expression.replace(regex, (_, expr) => evaluate(expr, ctx));
             });
 
-            parentFragment.appendChild(node)
+            parentNode.appendChild(node)
             return;
         }
 
         node.textContent = "";
 
-        parts.forEach(part => {
+        for (const part of parts) {
             const cloneNode = node.cloneNode();
 
             effect(() => {
                 cloneNode.textContent = part.replace(regex, (_, expr) => evaluate(expr, ctx));
             });
 
-            parentFragment.append(cloneNode)
-        });
+            parentNode.append(cloneNode)
+        };
 
         node.parentElement.removeChild(node);
 
@@ -133,7 +132,7 @@ function processNode(node, ctx, parentFragment) {
     }
 
     if (node.nodeType === Node.ELEMENT_NODE) {
-        Array.from(node.attributes).forEach(attr => {
+        for (const attr of node.attributes) {
             const attrName = attr.name.toLowerCase();
             const attrValue = attr.value;
 
@@ -150,7 +149,7 @@ function processNode(node, ctx, parentFragment) {
                 });
 
                 node.removeAttribute(attrName); // Clean up raw attribute
-                return;
+                continue;
             }
 
             if (attrName.startsWith('bind:')) {
@@ -191,15 +190,16 @@ function processNode(node, ctx, parentFragment) {
                 })
 
                 const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+
                 unmountSet.add(() => {
                     node.removeEventListener('click', eventListener)
                 });
 
                 node.removeAttribute(attrName); // Clean up raw attribute
-                return;
+                continue;
             }
 
-            if (!attr.value.includes('{{')) return;
+            if (!attr.value.includes('{{')) continue;
 
             if (attrName.startsWith('on')) {
 
@@ -213,25 +213,25 @@ function processNode(node, ctx, parentFragment) {
                     node.addEventListener(attrName.slice(2), func);
                 })
 
-                return;
+                continue;
             }
 
             effect(() => {
                 const newValue = attrValue.replace(/{{\s*(.+?)\s*}}/g, (_, expr) => evaluate(expr, ctx));
                 node.setAttribute(attr.name, newValue);
             })
-        });
+        };
 
-        parentFragment.appendChild(node);
+        parentNode.appendChild(node);
 
-        Array.from(node.childNodes).forEach(child => {
+        for (const child of Array.from(node.childNodes)) {
             processNode(child, ctx, node);
-        });
+        };
         return;
     }
 
     if (node.nodeType === Node.COMMENT_NODE) {
-        parentFragment.appendChild(node);
+        parentNode.appendChild(node);
     }
 }
 
@@ -292,12 +292,12 @@ function processIf(ifMap, template, ctx, components) {
                 const mountSet = newSetFunc();
 
                 const unmount = () => {
-                    unMountSet.forEach((umount) => umount());
+                    for (const unmount of unMountSet) unmount();
                     unMountSet.clear();
                 };
 
                 const mount = () => {
-                    mountSet.forEach((mount) => mount());
+                    for (const mount of mountSet) mount();
                     mountSet.clear();
                 }
 
@@ -349,7 +349,6 @@ function processEach(eachMap, template, ctx, components) {
 
         eachMap.set(markerId, (startMarker, _) => (() => {
             const [mainBlock, elseBlock] = block.split(/{{empty}}/);
-            const parent = startMarker.parentNode;
 
             /**
             * @type {RenderItem[]}
@@ -372,12 +371,13 @@ function processEach(eachMap, template, ctx, components) {
             * @param {RenderItem[]} newRenderedItems
             */
             const removeUnusedItems = (newRenderedItems) => {
-                renderedItems.forEach((r, i) => {
+                for (const i in renderedItems) {
+                    const r = renderedItems[i];
                     const existingItemIndex = newRenderedItems.findIndex((x) => x === r);
                     if (existingItemIndex > -1) {
-                        if (existingItemIndex === i) return;
+                        if (existingItemIndex === i) continue;
                         if (r.index) r.index.value = existingItemIndex;
-                        return;
+                        continue;
                     }
 
                     let node = r.blockStart;
@@ -394,7 +394,7 @@ function processEach(eachMap, template, ctx, components) {
                     r.deleteItself();
 
                     end.remove();
-                });
+                };
 
                 renderedItems = newRenderedItems;
             }
@@ -406,7 +406,8 @@ function processEach(eachMap, template, ctx, components) {
                 const list = evaluate(listExpr, ctx) || [];
 
                 if (list.length > 0) {
-                    list.forEach((item, index) => {
+                    for (const index in list) {
+                        const item = list[index];
                         const existingIndex = renderedItems.findIndex((r) => r.item === item);
                         let existing = renderedItems[existingIndex];
 
@@ -420,22 +421,22 @@ function processEach(eachMap, template, ctx, components) {
 
                         const unmount = () => {
                             if (cleanup) cleanup();
-                            unMountSet.forEach((umount) => umount());
+                            for (const unmount of unMountSet) unmount();
                             unMountSet.clear();
                         };
 
                         const mount = () => {
-                            mountSet.forEach((mount) => mount());
+                            for (const mount of mountSet) mount();
                             mountSet.clear();
                         }
 
                         if (!existing) {
                             const [blockStart, blockEnd] = startEndTextNode();
 
-                            parent.insertBefore(blockStart, currentMarker.nextSibling);
-                            parent.insertBefore(blockEnd, blockStart.nextSibling);
+                            currentMarker.parentElement.insertBefore(blockStart, currentMarker.nextSibling);
+                            currentMarker.parentElement.insertBefore(blockEnd, blockStart.nextSibling);
 
-                            existing = new RenderItem(new State(index), item, blockStart, blockEnd, unmount);
+                            existing = new RenderItem(new State(parseInt(index)), item, blockStart, blockEnd, unmount);
 
                             const childCtx = { ...ctx, [itemName]: item };
 
@@ -475,7 +476,7 @@ function processEach(eachMap, template, ctx, components) {
 
                         newRenderedItems.push(existing);
                         currentMarker = existing.blockEnd;
-                    });
+                    };
                     removeUnusedItems(newRenderedItems);
                     return;
                 }
@@ -488,17 +489,17 @@ function processEach(eachMap, template, ctx, components) {
                 const mountSet = newSetFunc();
 
                 const unmount = () => {
-                    unMountSet.forEach((umount) => umount());
+                    for (const unmount of unMountSet) unmount();
                     unMountSet.clear();
                 };
 
                 const mount = () => {
-                    mountSet.forEach((mount) => mount());
+                    for (const mount of mountSet) mount();
                     mountSet.clear();
                 }
 
-                parent.insertBefore(blockStart, currentMarker.nextSibling);
-                parent.insertBefore(blockEnd, blockStart.nextSibling);
+                currentMarker.parentElement.insertBefore(blockStart, currentMarker.nextSibling);
+                blockStart.parentElement.insertBefore(blockEnd, blockStart.nextSibling);
 
                 const existing = new RenderItem(null, null, blockStart, blockEnd, unmount)
 
@@ -558,12 +559,12 @@ function processAwait(awaitMap, template, ctx, components) {
                 let mountSet = newSetFunc();
 
                 const unmount = () => {
-                    unMountSet.forEach((umount) => umount());
+                    for (const unmount of unMountSet) unmount();
                     unMountSet.clear();
                 };
 
                 const mount = () => {
-                    mountSet.forEach((mount) => mount());
+                    for (const mount of mountSet) mount();
                     mountSet.clear();
                 }
 
@@ -687,12 +688,12 @@ function processComponents(componentMap, template, ctx, components) {
                 let mountSet = newSetFunc();
 
                 const unmount = () => {
-                    unMountSet.forEach((umount) => umount());
+                    for (const unmount of unMountSet) unmount();
                     unMountSet.clear();
                 };
 
                 const mount = () => {
-                    mountSet.forEach((mount) => mount());
+                    for (const mount of mountSet) mount();
                     mountSet.clear();
                 }
 
@@ -729,12 +730,12 @@ function processComponents(componentMap, template, ctx, components) {
             let mountSet = newSetFunc();
 
             const unmount = () => {
-                unMountSet.forEach((umount) => umount());
+                for (const unmount of unMountSet) unmount();
                 unMountSet.clear();
             };
 
             const mount = () => {
-                mountSet.forEach((mount) => mount());
+                for (const mount of mountSet) mount();
                 mountSet.clear();
             }
 

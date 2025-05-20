@@ -74,6 +74,16 @@ Expressions can be embedded inside HTML attributes.
 </ul>
 ```
 
+### ✅ With index
+```html
+{{#each items as product, i}}
+  <div>{{ i.value }}. {{ product.name }}</div>
+{{/each}}
+```
+> The second alias (`i`) is optional. You can name it anything:
+>
+> Note: The `i` is a type `State<number>` it requires to use `.value`
+
 ---
 
 ## 4. Awaiting Promises
@@ -96,6 +106,23 @@ Expressions can be embedded inside HTML attributes.
 {{catch error}}
   <p class="text-red-500">Error: {{ error.message }}</p>
 {{/await}}
+```
+
+### ✅ Advance Await. Async Components
+```html
+{{#await import("./components/List.js")}}
+  <p>Loading list..</p>
+{{then listComponent}}
+  <Component default="{{ listComponent }}"/>
+{{catch error}}
+  <p class="text-red-500">Error loading list component</p>
+{{/await}}
+```
+
+The `<Component/>` direvtive allows a **custom component** to be displayed
+
+```html
+<Component default="{{ component }}">
 ```
 
 ---
@@ -188,6 +215,28 @@ export default component({
 ### ✅ Supports passing any expression as an attribute:
 ```html
 <MyButton onClick="{{ () => submit(form) }}" text="{{ buttonText }}" />
+```
+
+## 5.5 Component Content Insertion
+
+The `<Slot />` directive allows a **custom component** to display child content passed into it.
+
+---
+
+### ✅ Basic Usage
+
+**Component Definition:**
+
+```html
+<!-- MyComponent.html -->
+<div class="card">
+  <Slot />
+</div>
+```
+```html
+<MyComponent>
+  <h1>Hello from outside</h1>
+</MyComponent>
 ```
 
 ---
