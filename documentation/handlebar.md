@@ -119,7 +119,7 @@ Expressions can be embedded inside HTML attributes.
 {{/await}}
 ```
 
-The `<Component/>` direvtive allows a **custom component** to be displayed
+The `<Component/>` directive allows a **custom component** to be displayed
 
 ```html
 <Component default="{{ component }}">
@@ -136,7 +136,6 @@ The `<Component/>` direvtive allows a **custom component** to be displayed
 To create components you must use the `component` function from `/template-engine/handlebar.js` file
 
 ```js
-import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
 
 export default component({
@@ -149,7 +148,6 @@ export default component({
 
 ### ✅  Adding in context and logic to your component
 ```js
-import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
 
 export default component({
