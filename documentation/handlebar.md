@@ -4,21 +4,14 @@ The handlebar template engine supports dynamic rendering using a Handlebars-insp
 
 ---
 
----
-
 ## 1. Expression Interpolation
 
-### Usage
+### ✅ Basic Usage
 ```html
-<h1>{{ someExpression }}</h1>
+<h1>{{ "Hello World" }}</h1>
 ```
 
-### Expressions
-```html
-<h1>Hello {{ "world" + "!" }}</h1>
-```
-
-### Attribute Support
+### ✅ Attribute Support
 
 Expressions can be embedded inside HTML attributes.
 ```html
@@ -30,14 +23,14 @@ Expressions can be embedded inside HTML attributes.
 
 ## 2. Conditional Blocks
 
-### Basic `if`
+### ✅ Basic `if`
 ```html
 {{#if isLoggedIn}}
   <p>Welcome back!</p>
 {{/if}}
 ```
 
-### `if` with `else`
+### ✅ `if` with `else`
 ```html
 {{#if isAdmin}}
   <p>Admin Panel</p>
@@ -46,7 +39,7 @@ Expressions can be embedded inside HTML attributes.
 {{/if}}
 ```
 
-### `if`, `else if` with `else`
+### ✅ `if`, `else if` with `else`
 ```html
 {{#if user.isAdmin}}
   <p>Admin Panel</p>
@@ -61,7 +54,7 @@ Expressions can be embedded inside HTML attributes.
 
 ## 3. Loops
 
-### `each` block
+### ✅ `each` block
 ```html
 <ul>
   {{#each items as item, i}}
@@ -70,7 +63,7 @@ Expressions can be embedded inside HTML attributes.
 </ul>
 ```
 
-### `each` with empty fallback
+### ✅ `each` with empty fallback
 ```html
 <ul>
   {{#each users as user}}
@@ -85,7 +78,7 @@ Expressions can be embedded inside HTML attributes.
 
 ## 4. Awaiting Promises
 
-### Basic await
+### ✅ Basic await
 ```html
 {{#await userPromise}}
   <p>Loading...</p>
@@ -94,7 +87,7 @@ Expressions can be embedded inside HTML attributes.
 {{/await}}
 ```
 
-### With error handling
+### ✅ Await with error handling
 ```html
 {{#await dataPromise}}
   <p>Loading data...</p>
@@ -107,11 +100,11 @@ Expressions can be embedded inside HTML attributes.
 
 ---
 
-# Components
+# 5. Components
 
 ## 5.1 Creating Components
 
-### Basic Usage
+### ✅ Basic Usage
 
 To create components you must use the `component` function from `/template-engine/handlebar.js` file
 
@@ -127,7 +120,7 @@ export default component({
 });
 ```
 
-### Adding in context and logic to your component
+### ✅  Adding in context and logic to your component
 ```js
 import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
@@ -144,13 +137,10 @@ export default component({
 });
 ```
 
-### Using the `load` function to load an html template
+### ✅  Using the `load` function to load an html template
 ```js
 import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { State } from "../core/reactivity.js";
-
-import CustomComponent from "./components/CustomComponent.js";
 
 export default component({
     template: await load("src/App.html")
@@ -162,10 +152,10 @@ export default component({
 
 ## 5.2 Importing Components
 
+### ✅ Usage
 ```js
 import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { State } from "../core/reactivity.js";
 
 import CustomComponent from "./components/CustomComponent.js";
 import AnotherComponent from "./components/AnotherComponent.js";
@@ -179,23 +169,23 @@ export default component({
 }, ...);
 ```
 
-## 5.3 Using Component
+## 5.3 Using imported Component
 
-### Self-closing components
+### ✅ Self-closing components
 ```html
 <CustomComponent />
 ```
 
-### Component with children
+### ✅ Component with children
 ```html
-<CustomComponent>
+<AnotherComponent>
   <h1>This is a child element</h1>
-</CustomComponent>
+</AnotherComponent>
 ```
 
 ## 5.4 Custom Component Attributes
 
-### Supports passing any expression as an attribute:
+### ✅ Supports passing any expression as an attribute:
 ```html
 <MyButton onClick="{{ () => submit(form) }}" text="{{ buttonText }}" />
 ```
@@ -204,12 +194,12 @@ export default component({
 
 ## 6. Event Listeners
 
-### Inline event handler
+### ✅ Inline event handler
 ```html
 <button onclick="{{ () => alert('clicked!') }}">Click</button>
 ```
 
-### Using a context method
+### ✅ Using a context method
 ```html
 <button onclick="{{ handleClick }}">Click</button>
 ```
@@ -218,12 +208,12 @@ export default component({
 
 ## 7. `bind:` Directive (Two-Way Binding)
 
-### Bind `value`
+### ✅ Bind `value`
 ```html
 <input type="text" bind:value="user.name" />
 ```
 
-### Bind `type="checkbox"` or other inputs
+### ✅ Bind `type="checkbox"` or other inputs
 ```html
 <input type="checkbox" bind:checked="user.is_admin" />
 ```
@@ -232,17 +222,17 @@ export default component({
 
 ## 8. `use:` Directive (Action Support)
 
-### Basic usage
+### ✅ Basic usage
 ```html
-<input use:focus />
+<input use:myAction />
 ```
 
-### With parameters
+### ✅ With parameters
 ```html
-<input use:tooltip="{{ 'Enter your name' }}" />
+<input use:myAction="{{ 'Enter your name' }}" />
 ```
 
-### Action Function Signature
+### ✅ Action Function Signature
 Each action should be a function with the signature:
 ```js
 function myAction(node, parameter) {
@@ -259,16 +249,15 @@ function myAction(node, parameter) {
 ## 🛠️ Notes
 
 - Templates are parsed into real DOM nodes (not strings).
-
 - JavaScript expressions inside `{{ }}` are evaluated in the current context.
 
-## Internal process of how the Handlebar engine works
+## ⚙️ Internal process of how the Handlebar engine works
 
 1. The template engine parses your html file by collecting all expression block like `{{#if}}` or `{{#each}}` and replacing it with a div element with a marker id (`<div id="marker">`) and converts it to a DOM element
-2. Which is then processed by replacing the marked div elements with **anchor tags** (represented as a comment element or text node to make it invisible in the elements tab) and render the dynamic content in between the anchor elements using the saved expression block
+2. Which is then processed by replacing the marked div elements with **anchor tags** (represented as a comment element or text node to make it invisible in the elements tab) and render the dynamic content in between the anchor tags by evaluating the saved expression
 
-    The anchor tags are used to keep track of the placement of each dynamic content
+> The anchor tags are used to keep track each dynamic content's placement in the DOM
 
-3. All processed DOM elements are ran inside the reactive primitive `effect()` to keep track of updates and re-renders
+3. All processed DOM elements are ran inside the reactive primitive `effect` to keep track of any updates and re-renders
 4. Then put all rendered DOM element inside a `DocumentFragment`
-5. Which is then appended to a target element using the `mount()` function from `core.js`
+5. Which is then appended to a target element using the `mount` function from `core.js`

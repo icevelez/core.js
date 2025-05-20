@@ -1,6 +1,6 @@
 # Core.js
 
-A framework without a bundler
+A Framework without a bundler
 
 ---
 
@@ -10,11 +10,11 @@ License: MIT
 
 ---
 
-## What is Core.js?
+## 👁️👄👁️ What is Core.js?
 
-Core.js is my attempt at building my own framework.
+Core.js is my attempt at building my own framework
 
-## Why?
+## 🙋 Why?
 
 > tl:dr -- satisfy an itch in my brain
 
@@ -22,27 +22,28 @@ Core.js is my attempt at building my own framework.
 
 I moved on to using JS Frameworks and fell in love with [Svelte](https://svelte.dev/), used it in every project, it has the expressiveness, the lightweight app bundle size, the friendly ecosystem, It felt like traditional web development, Perfect!
 
-BUT! that itch of finishing what I started kept coming back which lead me to try again. (multiple attempts were made before landing here)
+BUT! I want to break free from having a build step you have to do when using traditional frameworks and that itch of finishing what I started kept coming back which lead me to try and build a framework. (multiple attempts was made before landing here)
 
 > [`Alpine.js`](https://alpinejs.dev/) exists, you can use that instead of this, this is my personal project, don't expect too much from it
 
-## How does it work?
+## 👷 How does it work?
 
 There's two components that make up `Core.js`. It's **reactivity system** and **template engine**
 
-The reactivity system handles tracking state update, deletion, and creation while the template engine is in charge of parsing template string to the DOM. Combined the two and you get this framework
+The reactivity system handles tracking state update, deletion, and creation of data while the template engine is in charge of parsing template string to the DOM. Combined the two and you get this framework
 
 > One neat tidbit you might have not notice is that you can build your own template engine that parses whatever syntax you want, as long as the reactivity system is integrated by using `effect()` among other primitives.
 >
 > You can have a template engine that parses `{{ handlebar }}` and another for `@{ razor }`
 
+The reactivity system is my implementation of *Signals* based from my understanding from [Svelte](https://svelte.dev/) and [Solid.js](https://www.solidjs.com/)
+
 ---
 
-## Installation
+## 🧰 Installation
 
 > You can skip all of the step by downloading this repository and start creating your app under the `src` folder
 >
-> just delete the stuff you don't need like `documentation` and `testing` folder
 
 1. Create a folder for your project
 
@@ -52,7 +53,7 @@ The reactivity system handles tracking state update, deletion, and creation whil
 
 4. Create a folder named `src` in your project folder. This is where all your app code will go
 
-5. Inside the `src` folder create a file named `App.js` and `App.html` with the following content
+5. Inside the `src` folder create a file named `App.html` and `App.js` with the following content respectively
 ```html
 <h1>{{ message }}</h1>
 ```
@@ -73,7 +74,7 @@ export default component({
 });
 ```
 
-6. In the root of your project folder create a file named `index.html` and `index.js` with the following content.
+6. In the root of your project folder create a file named `index.html` and `index.js` with the following content respectively
 
 ```html
 <html>
@@ -96,45 +97,41 @@ We are importing `App.js` from the `src` folder to render it to our target eleme
 
 7. Congratulations! You're now ready to build your application using Core.js
 
----
-
-## Documentation
-
-All documentation can be read under the `./documentation` folder
-
-- [Handlebar](./handlebar.md)
+> You can use the `Live Server` extension in VSCode to run and start developing you app
 
 ---
 
-## Special Thanks
+## 📖 Documentation
 
-- zulu -- from the Solid Discord group for helping me debug a reactivity problem regarding proxies
-- Patrick -- from the Svelte Discord group for helping me better understand fine-grain reactivity
-
----
-
-## F.A.Q
-
-### Q: Why use an Angular class-like approach for component logic?
-
-A: It's easier to instantiated a class and use its properties than to call a function that returns an object with properties the template needs i.e Vue setup
+You can read the full documentation of how to use this framework by opening the `handlerbar.md` file under `documentation` folder
 
 ---
 
-## Known Bugs
+## 🫶 Special Thanks
 
-- Infinite recursion via components i.e ComponetA uses ComponentB and ComponentB uses ComponentA
+- zulu - from the Solid Discord group for helping me debug a reactivity problem regarding proxies
+- Patrick - from the Svelte Discord group for helping me better understand fine-grain reactivity
+
+---
+
+## 🐛 Known Bugs
+
+- Infinite recursion via components
+
+> `<ComponetA>` uses `<ComponetB>` and `<ComponetB>` uses `<ComponetA>`
 
 ## Limitation
 
 *"Nothing is free, everything is a trade-off"* - Hussein Nasser
 
-- Lack of code minification leading to bigger bundle sizes
-- Lack of code optimization i.e: removing unused code and comment when compiling; compiling for an older ES version;
-- Less performant than traditional frameworks due to the runtime process of parsing templates and attaching reactivity
-- Intellisense in IDEs
+- Lack of code minification leading to bigger bundle sizes (~39kb)
+- Lack of code optimization
+    - removing unused code and comment when compiling;
+    - compiling for an older ES version;
+- Less performant than traditional frameworks due to the runtime process of parsing template strings and attaching reactivity
+- Missing IntelliSense support in VSCode, Zed, etc...
 
-## P.S
+## 📝 P.S
 
 I'm not God, I make mistakes, I have not benchmarked this code in any way so it may have poor performance or memory leak somewhere that I am not aware of.
 
@@ -142,10 +139,10 @@ I have tested this to the best of my ability but if you find any bugs or issues,
 
 ---
 
-## Contact
+## 📇 Contact
 
 ```
 Email Address: icevelezdev@gmail.com
 ```
 
-Hey! you made it this far in the documentation. Thank you for reading everything!
+Hey! you made it this far. Thank you for reading everything!
