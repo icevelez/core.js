@@ -358,7 +358,6 @@ function processEach(eachMap, template, ctx, components) {
             const unmountEach = () => {
                 for (const r of renderedItems) {
                     r.unmount();
-                    if (r.index) r.index.deleteState();
                     r.deleteItself();
                 };
                 renderedItems = [];
@@ -390,7 +389,6 @@ function processEach(eachMap, template, ctx, components) {
                     }
 
                     r.unmount();
-                    if (r.index) r.index.deleteState();
                     r.deleteItself();
 
                     end.remove();

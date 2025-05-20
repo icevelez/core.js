@@ -88,17 +88,6 @@ export class State {
 
         return true;
     }
-
-    deleteState = () => {
-        if (is_debugger_on) __reactivity.states.delete(this);
-
-        this.#subscribers.clear();
-        this.#value = null;
-        this.#id = null;
-
-        this.#deep_proxy_subscribers.forEach((subscriber) => subscriber());
-        this.#deep_proxy_subscribers.clear();
-    }
 }
 
 /**
