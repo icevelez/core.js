@@ -81,7 +81,12 @@ export class State {
     set value(newValue) {
         if (newValue === this.#value) return true;
 
-        this.#value = newValue;
+        if (typeof newValue === "object" && typeof this.#value === "object") {
+            for (const key in this.#value) delete this.#value[key];
+            for (const key in newValue) this.#value[key] = newValue[key];
+        } else {
+            this.#value = newValue;
+        }
 
         if (this.#subscribers.size <= 0) return true;
         notifySubscribers(this.#subscribers);
@@ -179,8 +184,7 @@ let is_in_untrack_from_parent_effect_scope = [];
 
 /**
 * Effect that is detached from any parent effect
-*
-* It is used in `template/engine/handlerbar.js` for processing {{#each}}
+* It is used in `template/engine/handlerbar.js` for processing item inside an {{#each}} block
 *
 * @param {Function} callbackfn
 */
@@ -204,6 +208,8 @@ export function untrackedEffect(callbackfn) {
 const $proxy = Symbol('PROXY');             // unique identify to prevent creating duplicate Proxies
 const state_proxy_listener = [];            // push a `new Set()` and collect all subscription that happens inside a proxy for later disposal
 
+// Class method call don't work when wrapped in a Proxy so we use this to detect any built in class
+// that is being used inside a Proxy to that method call back to its original class
 function isBuiltIn(obj) {
     const type = Object.prototype.toString.call(obj);
     return /\[object (?:Date|URL|RegExp|Map|Set|WeakMap|WeakSet|Error|ArrayBuffer|DataView|Promise)\]/.test(type);
