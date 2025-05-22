@@ -1,4 +1,5 @@
-import { onMountQueue, onUnmountQueue, core_context } from "./internal-core.js"
+import { newSetFunc } from "./helper-functions.js";
+import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } from "./internal-core.js"
 
 /**
 * @param {string} component_url
@@ -17,16 +18,19 @@ export function mount(component, options) {
     if (!(options.target instanceof HTMLElement)) throw new TypeError("options.target is not an HTMLElement");
     if (component instanceof Promise) throw new Error("component should not be an async function");
 
-    options.target.innerHTML = "";
-    options.target.appendChild(component());
-    const unMountSet = onUnmountQueue.pop();
-    const mountSet = onMountQueue.pop();
+    const onMountSet = newSetFunc();
+    const onUnmountSet = newSetFunc();
 
-    for (const mount of mountSet) mount();
+    pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
+        options.target.innerHTML = "";
+        options.target.appendChild(component());
+    })
 
-    core_context.mounted = true;
-    for (const mount of core_context.mounts) mount();
-    core_context.mounts.clear();
+    for (const mount of onMountSet) mount();
+
+    core_context.is_mounted_to_the_DOM = true;
+    for (const mount of core_context.onMountSet) mount();
+    core_context.onMountSet.clear();
 
     return () => {
         unMountSet.forEach((unmount) => unmount());

@@ -55,7 +55,7 @@ export function insertTextAfter(targetElement, text) {
 
 let commentCounter = 1;
 
-export function startEndTextNode(name = 'item') {
+export function createStartEndNode(name = 'item') {
     const rand = commentCounter++;
     const blockStart = use_comment ? document.createComment(`${name}-start-${rand}`) : document.createTextNode("");
     const blockEnd = use_comment ? document.createComment(`${name}-end-${rand}`) : document.createTextNode("");

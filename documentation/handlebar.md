@@ -119,10 +119,12 @@ Expressions can be embedded inside HTML attributes.
 {{/await}}
 ```
 
-The `<Component/>` directive allows a **custom component** to be displayed
+The `<Core:component/>` directive allows a **custom component** to be displayed
+
+> in v0.1.1 and below. the component syntax was `<Component>`
 
 ```html
-<Component default="{{ component }}">
+<Core:component default="component">
 ```
 
 ---
@@ -217,7 +219,9 @@ export default component({
 
 ## 5.5 Component Content Insertion
 
-The `<Slot />` directive allows a **custom component** to display child content passed into it.
+The `<Core:slot />` directive allows a **custom component** to display child content passed into it.
+
+> in v0.1.1 and below. the directive was called `<Slot>`
 
 ---
 
