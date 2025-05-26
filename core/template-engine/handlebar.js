@@ -71,7 +71,7 @@ function parseOuterBlocks(template, openTag, closeTag) {
 
 /**
 * Process and store all `{{#..}}` directives to be used later when rendering
-* @param {stringg} template
+* @param {string} template
 * @param {number} imported_components_id
 */
 function preprocessTemplates(template, imported_components_id) {
@@ -679,6 +679,7 @@ export function processIfBlock(ifBlock) {
             }
 
             if (!condition) {
+                previousCondition = null; // remember to remove the previous condition if there is none, or else it won't re-render
                 unmount();
                 removeNodesBetween(startNode, endNode);
                 return;
@@ -825,6 +826,7 @@ export function processAwaitBlock(awaitBlock) {
         effect(() => {
             try {
                 const promise = evaluate(awaitConfig.promiseExpr, ctx);
+                if (promise === undefined) return;
 
                 if (promise instanceof Promise) {
                     showLoading();

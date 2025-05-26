@@ -37,14 +37,10 @@ function notifySubscribers(subscribers) {
     });
 }
 
-let stateid = 1;
-
 /**
 * @template {any} T
 */
 export class State {
-
-    #id = stateid++;
 
     /**
     * @type {T}

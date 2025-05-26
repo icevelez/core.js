@@ -118,7 +118,7 @@ You can read the full documentation of how to use this framework by opening the 
 
 - Infinite recursion via components
 
-> `<ComponetA>` uses `<ComponetB>` and `<ComponetB>` uses `<ComponetA>`
+> `<ComponentA>` uses `<ComponentB>` and `<ComponentB>` uses `<ComponentA>`
 
 ## Limitation
 
