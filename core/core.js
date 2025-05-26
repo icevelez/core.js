@@ -1,5 +1,6 @@
 import { newSetFunc } from "./helper-functions.js";
 import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } from "./internal-core.js"
+import { effect } from "./reactivity.js";
 
 /**
 * @param {string} component_url
@@ -12,6 +13,7 @@ export async function load(component_url) {
 /**
 * @param {() => DocumentFragment} component
 * @param {{ target : HTMLElement }} target
+* @returns {() => void} unmount function
 */
 export function mount(component, options) {
     if (typeof options !== "object") throw new TypeError("options is not an object");
@@ -21,20 +23,25 @@ export function mount(component, options) {
     const onMountSet = newSetFunc();
     const onUnmountSet = newSetFunc();
 
-    pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-        options.target.innerHTML = "";
-        options.target.appendChild(component());
+    const cleanup = effect(() => {
+        pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
+            options.target.innerHTML = "";
+            options.target.appendChild(component());
+        })
+
+        for (const mount of onMountSet) mount();
+
+        core_context.is_mounted_to_the_DOM = true;
+        for (const mount of core_context.onMountSet) mount();
+        core_context.onMountSet.clear();
     })
 
-    for (const mount of onMountSet) mount();
-
-    core_context.is_mounted_to_the_DOM = true;
-    for (const mount of core_context.onMountSet) mount();
-    core_context.onMountSet.clear();
-
     return () => {
-        unMountSet.forEach((unmount) => unmount());
-        unMountSet.clear();
+        cleanup();
+        onUnmountSet.forEach((unmount) => unmount());
+        onUnmountSet.clear();
+        for (const unmount of core_context.onUnmountSet) unmount();
+        core_context.onUnmountSet.clear();
     };
 }
 

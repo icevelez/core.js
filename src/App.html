@@ -1,8 +1,14 @@
-<h1>Greetings {{ name.value }}</h1>
+<h1>Greetings {{ data.value.deep.deeper.deepest.user }}</h1>
 <div>
-    <p>Counter: {{ counter.value }}</p>
-    <button onclick="{{ () => counter.value++ }}">Click Me!</button>
-    <input type="text" bind:value="name.value">
+    <p>Counter: {{ data.value.deep.deeper.deepest.counter }}</p>
+    <button onclick="{{ () => data.value.deep.deeper.deepest.counter++ }}">Click Me!</button>
+    <input type="text" bind:value="data.value.deep.deeper.deepest.user">
 </div>
 <br/>
+<input type="text" bind:value="data.value.deep.deeper.deepest.names[0]">
+    {{#each data.value.deep.deeper.deepest.names as name, i}}
+        <h1>{{ i.value+1}}. {{name.toUpperCase() }}</h1>
+    {{/each}}
+<br/>
 <TestComponent/>
+<ExampleSub/>

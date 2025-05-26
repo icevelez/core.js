@@ -1,6 +1,6 @@
 // This file exists so I don't have to export this internal variable inside "core.js"
 
-export const core_context = { is_mounted_to_the_DOM: false, onMountSet: new Set() };
+export const core_context = { is_mounted_to_the_DOM: false, onMountSet: new Set(), onUnmountSet: new Set() };
 
 /**
 * @type {Set<Function>[]}

@@ -1,8 +1,9 @@
-import { isObject, makeId } from "./helper-functions.js";
+import { isObject } from "./helper-functions.js";
 
 // =======================================================================
 
-const is_debugger_on = true;
+const is_debugger_on = false;
+const turn_on_warnings = false;
 
 const __reactivity = {
     states: new Set(),
@@ -44,6 +45,7 @@ let stateid = 1;
 export class State {
 
     #id = stateid++;
+    #firstrun = true;
 
     /**
     * @type {T}
@@ -55,17 +57,13 @@ export class State {
     */
     #subscribers = new Set();
 
-    #deep_proxy_subscribers = new Set();
-
     /**
     * @param {T} initialValue
     */
     constructor(initialValue) {
         if (is_debugger_on) __reactivity.states.add(this);
-
-        state_proxy_listener.push(this.#deep_proxy_subscribers);
-        this.value = isObject(initialValue) ? createProxy(initialValue, new Map()) : initialValue;
-        state_proxy_listener.pop();
+        this.value = (typeof initialValue === "object") ? createProxy(initialValue) : initialValue;
+        this.#firstrun = false;
     }
 
     get value() {
@@ -73,22 +71,30 @@ export class State {
 
         const currentEffect = effectStack[effectStack.length - 1];
         this.#subscribers.add(currentEffect.effect);
-        currentEffect.dependencies.add(() => this.#subscribers.delete(currentEffect.effect));
+
+        currentEffect.dependencies.add(() => {
+            this.#subscribers.delete(currentEffect.effect);
+        });
 
         return this.#value;
     }
 
-    set value(newValue) {
-        if (newValue === this.#value) return true;
+    set value(new_value) {
+        if (new_value === this.#value) return true;
 
-        if (typeof newValue === "object" && typeof this.#value === "object") {
-            for (const key in this.#value) delete this.#value[key];
-            for (const key in newValue) this.#value[key] = newValue[key];
-        } else {
-            this.#value = newValue;
+        if (typeof new_value === "object" && !new_value[$proxy]) {
+            new_value = (typeof this.#value === "object" && this.#value[$proxy]) ?
+                createProxy(new_value, this.#value[$proxy].subscriberMap) :
+                createProxy(new_value);
         }
 
-        if (this.#subscribers.size <= 0) return true;
+        this.#value = new_value;
+
+        if (this.#subscribers.size <= 0 && !this.#firstrun) {
+            console.warn("setting new value for State with no subscribers.\n", this);
+            return true;
+        }
+
         notifySubscribers(this.#subscribers);
 
         return true;
@@ -143,39 +149,39 @@ const effectStack = [];
 export function effect(callbackfn) {
     if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
 
+    let untackedEffect;
+
+    if (is_in_untrack_from_parent_effect_scope.length > 0) {
+        untackedEffect = is_in_untrack_from_parent_effect_scope.pop();
+        untackedEffect.add(cleanupfn);
+        return cleanupfn;
+    }
+
+    if (!untackedEffect) {
+        const parentEffect = effectStack[effectStack.length - 1];
+        if (parentEffect) parentEffect.dependencies.add(cleanupfn);
+    }
+
     const dependencies = new Set();
     let cleanup;
 
     function cleanupfn() {
         if (typeof cleanup === "function") cleanup();
         if (dependencies.size <= 0) return;
-
-        // console.log('cleaniing up', callbackfn);
-
         for (let unsubscribe of dependencies) unsubscribe();
         dependencies.clear();
     }
 
     const wrappedEffect = () => {
         cleanupfn();
-
         effectStack.push({ effect: wrappedEffect, dependencies });
-
         cleanup = callbackfn();
-
         effectStack.pop();
     };
 
     wrappedEffect();
 
-    if (is_in_untrack_from_parent_effect_scope.length > 0) {
-        const untackedEffect = is_in_untrack_from_parent_effect_scope[is_in_untrack_from_parent_effect_scope.length - 1];
-        untackedEffect.add(cleanupfn);
-        return cleanupfn;
-    }
-
-    const parentEffect = effectStack[effectStack.length - 1];
-    if (parentEffect) parentEffect.dependencies.add(cleanupfn);
+    if (untackedEffect) is_in_untrack_from_parent_effect_scope.push(untackedEffect);
 
     return cleanupfn;
 }
@@ -206,7 +212,6 @@ export function untrackedEffect(callbackfn) {
 // =======================================================================
 
 const $proxy = Symbol('PROXY');             // unique identify to prevent creating duplicate Proxies
-const state_proxy_listener = [];            // push a `new Set()` and collect all subscription that happens inside a proxy for later disposal
 
 // Class method call don't work when wrapped in a Proxy so we use this to detect any built in class
 // that is being used inside a Proxy to that method call back to its original class
@@ -214,6 +219,10 @@ function isBuiltIn(obj) {
     const type = Object.prototype.toString.call(obj);
     return /\[object (?:Date|URL|RegExp|Map|Set|WeakMap|WeakSet|Error|ArrayBuffer|DataView|Promise)\]/.test(type);
 }
+
+const setterGetterConst = ["has", "set", "get"];
+
+let proxy_id = 1;
 
 /**
 * @template {any} T
@@ -223,31 +232,68 @@ function isBuiltIn(obj) {
 */
 function createProxy(object, subscriberMap = new Map()) {
 
-    Object.defineProperties(object, { [$proxy]: {} });
-
-    const state_listener = state_proxy_listener[state_proxy_listener.length - 1];
-
-    /**
-    * @type {Map<any, Set<Function>>}
-    */
-    const objectSubMap = {};
+    Object.defineProperties(object, {
+        [$proxy]: {
+            value: {
+                proxy_id: proxy_id++,
+                subscriberMap,
+                /**
+                * @param {Map<any, Set<Function>>} new_subscriberMap
+                */
+                setSubscriberMap: (new_subscriberMap) => {
+                    subscriberMap = new_subscriberMap;
+                },
+                clearProxy: () => {
+                    subscriberMap.forEach((subscribers) => subscribers.clear());
+                    subscriberMap.clear();
+                }
+            }
+        }
+    });
 
     for (const key in object) {
+        if (key == $proxy) continue;
         if (!isObject(object[key])) continue;
-        objectSubMap[key] = new Map();
-        object[key] = createProxy(object[key], objectSubMap[key]);
+
+        const objectProperty = Object.getOwnPropertyDescriptor(object, key);
+        if (!objectProperty || !objectProperty.writable) {
+            if (turn_on_warnings)
+                console.warn(`Warning! property descriptor of "${key}" is undefined or not writable. Unable to create a proxy and using property "${key}" will not be reactive\n`, object)
+            continue;
+        }
+
+        object[key] = createProxy(object[key]);
     }
 
     const proxy = new Proxy(object, {
-        subscriberMap,
-        id: makeId(12),
         get(target, key) {
-            // console.log("get", target, key, target[key]);
+            if (key === $proxy) return target[key];
 
-            const bindCheck = isBuiltIn(target) && typeof target[key] === "function";
+            // console.log("get", key, target[key]);
+
+            const isFunc = typeof target[key] === "function";
+            const value = !isFunc ? target[key] : function (...args) {
+                const return_value = target[key](...args);
+                if (args.length <= 0) return return_value;
+                if (setterGetterConst.includes(key) && args.length <= 1) return return_value;
+
+                if (turn_on_warnings)
+                    console.warn(`object get ${key} is a function taht accepts arguments which is likely to update some state. Looping through all property of this object and notifying all effects`);
+
+                subscriberMap.forEach((subscribers, key) => {
+                    if (!subscribers) return;
+                    if (subscribers.size <= 0) {
+                        subscriberMap.delete(key);
+                        return;
+                    }
+                    notifySubscribers(subscribers);
+                })
+
+                return return_value;
+            }
 
             // source: https://stackoverflow.com/questions/47874488/proxy-on-a-date-object
-            if (effectStack.length <= 0) return bindCheck ? target[key].bind(target) : target[key];
+            if (effectStack.length <= 0) return value;
 
             if (!subscriberMap.has(key)) subscriberMap.set(key, new Set());
 
@@ -257,46 +303,46 @@ function createProxy(object, subscriberMap = new Map()) {
             subscribers.add(currentEffect.effect);
 
             const unsubscribe = () => {
-                subscribers.delete(currentEffect.effect)
+                subscribers.delete(currentEffect.effect);
+                if (subscribers.size > 0) return;
+                subscriberMap.delete(key);
             };
 
             currentEffect.dependencies.add(unsubscribe);
-            state_listener.add(unsubscribe);
 
-            return bindCheck ? target[key].bind(target) : target[key];
+            return value;
         },
         set(target, key, new_value) {
-            // console.log("set", target[key], target, key, new_value);
-
-            const subscribers = subscriberMap.get(key);
+            // console.log("set", key, target[key], new_value);
 
             const checIfArrayMutation = (Array.isArray(target) && typeof key === "number");
             const checkIfPrimitiveDatatypes = typeof target[key] !== "object" && target[key] === new_value;
 
             if (checIfArrayMutation && checkIfPrimitiveDatatypes) return true;
 
-            if (isObject(new_value) && (!target[key] || new_value[$proxy] !== target[key][$proxy])) {
+            const new_value_is_a_proxy = target[key] && new_value[$proxy] === target[key][$proxy];
 
-                if (state_listener) state_proxy_listener.push(state_listener);
-                target[key] = createProxy(new_value, objectSubMap[key]);
-                if (state_listener) state_proxy_listener.pop();
-
+            if (isObject(new_value) && !new_value_is_a_proxy) {
+                target[key] = createProxy(new_value);
             } else {
                 target[key] = new_value;
             }
 
-            if (!subscribers || subscribers.size <= 0) return true;
+            const subscribers = subscriberMap.get(key);
+            if (!subscribers) return true;
+
+            if (subscribers.size <= 0) {
+                console.warn("setting new value for State with no subscribers.\n", proxy);
+                return;
+            }
 
             notifySubscribers(subscribers);
             return true;
-        }
+        },
     })
 
     if (is_debugger_on) {
         __reactivity.proxies.add(proxy);
-        state_listener.add(() => {
-            __reactivity.proxies.delete(proxy);
-        })
     }
 
     return proxy;

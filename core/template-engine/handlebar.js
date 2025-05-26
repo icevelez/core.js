@@ -1,4 +1,3 @@
-import { onMount } from "../core.js";
 import { createStartEndNode, makeId, evaluate, removeNodesBetween, newSetFunc } from "../helper-functions.js";
 import { core_context, onMountQueue, onUnmountQueue, pushPopMountUnmountSet } from "../internal-core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
@@ -6,7 +5,7 @@ import { effect, untrackedEffect, State } from "../reactivity.js";
 const is_dev_mode = true;
 
 /**
-* @type {Record<string, Map<string, (startNode:Node, endNode:Node, ctx:any, components?:Record<string, Function>) => void>>}
+* @type {Record<string, Map<string, (startNode:Node, endNode:Node, ctx:any) => void>>}
 */
 const processedBlocks = {
     await: new Map(),
@@ -15,13 +14,15 @@ const processedBlocks = {
     component: new Map(),
 }
 
-const __imported_components = [];
+/**
+* @type {Map<number, Record<string, Function>>}
+*/
+const imported_components = new Map();
 
 const __blocks = {
     await: [],
     if: [],
     each: [],
-    components: [],
 }
 
 const __marker_id_to_block = {};
@@ -33,7 +34,7 @@ if (is_dev_mode) {
 }
 
 /**
-* Regex alone mismatch `{{}}` syntax, which needs this to properly get a handlebar block
+* Regex alone mismatch nest `{{#directive}}` syntax so to fix that issue, this function was created to properly get the outermost handlebar block
 * @param {string} template
 * @param {string} openTag
 * @param {string} clsoeTag
@@ -52,7 +53,6 @@ function parseOuterBlocks(template, openTag, closeTag) {
             i += openTag.length;
             continue;
         }
-
         if (template.slice(i, i + closeTag.length) === closeTag) {
             depth--;
             if (depth === 0 && start !== -1) {
@@ -63,7 +63,6 @@ function parseOuterBlocks(template, openTag, closeTag) {
             i += closeTag.length;
             continue;
         }
-
         i++;
     }
 
@@ -79,7 +78,6 @@ function preprocessTemplates(template) {
     template = processAllDirectiveBlocks(template, "await", processAwaitBlock);
     template = processAllDirectiveBlocks(template, "if", processIfBlock);
     template = processAllDirectiveBlocks(template, "each", processEachBlock);
-    template = processAllComponents(template, processComponent);
 
     return template;
 }
@@ -117,18 +115,19 @@ function processAllDirectiveBlocks(template, directive, processBlocks) {
 
 /**
 * @param {string} template
+* @param {number} imported_components_id
 * @param {Function} processComponent
 */
-function processAllComponents(template, processComponent) {
+function processAllComponents(template, imported_components_id, processComponent) {
     const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
     const directive = "component";
 
     template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
         if (match.startsWith("<Core:slot")) return `<div data-directive="slot"></div>`;
-        if (match.startsWith("<Core:component")) return `<div data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</div>`;
+        if (match.startsWith("<Core:component")) return `<div data-import-id="${imported_components_id}" data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</div>`;
 
         const marker_id = `${directive}-${makeId(8)}`;
-        const component = { tag, attrStr, slot_content };
+        const component = { import_id: imported_components_id, tag, attrStr, slot_content };
         processedBlocks[directive].set(marker_id, processComponent(component));
         return `<div data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
     })
@@ -156,6 +155,8 @@ function parseAttributes(attrString, ctx) {
 
 // ============================= //
 
+let imported_components_id_counter = 1;
+
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
 * @param {Object} Context anonymous class that encapsulate logic
@@ -163,8 +164,11 @@ function parseAttributes(attrString, ctx) {
 */
 export function component(options, Context = class { }) {
 
-    const template = preprocessTemplates(options.template);
-    if (options.components) __imported_components.push(options.components)
+    const imported_components_id = imported_components_id_counter;
+    imported_components_id_counter++;
+
+    const template = processAllComponents(preprocessTemplates(options.template), imported_components_id, processComponent);
+    if (options.components) imported_components.set(imported_components_id, options.components);
 
     return function (attrs, render_slot_callbackfn) {
         if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
@@ -179,7 +183,7 @@ export function component(options, Context = class { }) {
 * @param {Record<string, Function>} components
 * @param {Function} render_slot_callbackfn
 */
-function processTemplate(template, ctx, components = {}, render_slot_callbackfn) {
+function processTemplate(template, ctx, render_slot_callbackfn) {
 
     const div = document.createElement("div");
     div.innerHTML = template;
@@ -187,7 +191,7 @@ function processTemplate(template, ctx, components = {}, render_slot_callbackfn)
     const fragment = document.createDocumentFragment();
 
     for (const childNode of Array.from(div.childNodes)) {
-        processNode(childNode, fragment, ctx, components, render_slot_callbackfn);
+        processNode(childNode, fragment, ctx, render_slot_callbackfn);
     }
 
     return fragment;
@@ -201,7 +205,7 @@ function processTemplate(template, ctx, components = {}, render_slot_callbackfn)
 * @param {Record<string, Function>} components
 * @param {Function} render_slot_callbackfn
 */
-function processNode(node, destinationNode, ctx, components = {}, render_slot_callbackfn) {
+function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
 
     const isText = node.nodeType === Node.TEXT_NODE;
 
@@ -229,6 +233,11 @@ function processNode(node, destinationNode, ctx, components = {}, render_slot_ca
         };
 
         node.remove();
+        return;
+    }
+
+    if (node.nodeType === Node.COMMENT_NODE) {
+        destinationNode.appendChild(node);
         return;
     }
 
@@ -266,7 +275,7 @@ function processNode(node, destinationNode, ctx, components = {}, render_slot_ca
         const content = node.innerHTML;
 
         if (content) {
-            const renderSlotCallbackfn = () => processTemplate(content, ctx, components);
+            const renderSlotCallbackfn = () => processTemplate(content, ctx);
             destinationNode.append(component(attrs, renderSlotCallbackfn));
         } else {
             destinationNode.append(component(attrs));
@@ -290,7 +299,7 @@ function processNode(node, destinationNode, ctx, components = {}, render_slot_ca
         destinationNode.append(fragment);
         node.remove();
 
-        func(nodeStart, nodeEnd, ctx, components);
+        func(nodeStart, nodeEnd, ctx);
         return;
     }
 
@@ -415,60 +424,57 @@ export function processEachBlock(eachBlock) {
         [eachConfig.mainContent, eachConfig.emptyContent] = content.split(/{{:empty}}/);
     });
 
-    /**
-    * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number> | null, unmount : Function }[]}
-    */
-    let renderedBlocks = [];
+    return function (startNode, _, ctx) {
+        /**
+        * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number> | null, unmount : Function }[]}
+        */
+        let renderedBlocks = [];
 
-    /**
-    * @param {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number> | null }[]} newRenderedBlocks
-    */
-    const discardUnusedBlocks = (newRenderedBlocks) => {
-        for (const i in renderedBlocks) {
-            const renderBlock = renderedBlocks[i];
-            const existingBlockIndex = newRenderedBlocks.findIndex((newBlock) => newBlock.blockData === renderBlock.blockData);
+        /**
+        * @param {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number> | null }[]} newRenderedBlocks
+        */
+        const discardUnusedBlocks = (newRenderedBlocks) => {
+            for (const i in renderedBlocks) {
+                const renderBlock = renderedBlocks[i];
+                const existingBlockIndex = newRenderedBlocks.findIndex((newBlock) => newBlock.blockData === renderBlock.blockData);
 
-            if (existingBlockIndex > -1) {
-                if (existingItemIndex === i) continue;
-                if (renderBlock.index) renderBlock.index.value = existingItemIndex;
-                continue;
-            }
+                if (existingBlockIndex > -1) {
+                    if (existingBlockIndex === i) continue;
+                    if (renderBlock.index) renderBlock.index.value = existingBlockIndex;
+                    continue;
+                }
 
-            let node = renderBlock.nodeStart;
-            let nodeEnd = renderBlock.nodeEnd;
+                let node = renderBlock.nodeStart;
+                let nodeEnd = renderBlock.nodeEnd;
 
-            while (node && node !== nodeEnd) {
-                const next = node.nextSibling;
-                node.remove();
-                node = next;
-            }
+                while (node && node !== nodeEnd) {
+                    const next = node.nextSibling;
+                    node.remove();
+                    node = next;
+                }
 
-            nodeEnd.remove();
+                nodeEnd.remove();
+            };
+
+            renderedBlocks = newRenderedBlocks;
+        }
+
+        const unmountEachBlock = () => {
+            for (const renderBlock of renderedBlocks) {
+                renderBlock.unmount();
+            };
+            renderedBlocks = [];
         };
 
-        renderedBlocks = newRenderedBlocks;
-    }
-
-    const unmountEachBlock = () => {
-        for (const renderBlock of renderedBlocks) {
-            renderBlock.unmount();
-        };
-        renderedItems = [];
-    };
-
-    return function (startNode, endNode, ctx, components) {
         const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
         if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock))
             parentOnUnmountSet.add(unmountEachBlock);
 
         let currentNode = startNode;
 
-        /**
-        * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : any }[]}
-        */
-        let newRenderedBlocks = [];
-
         effect(() => {
+
+            const newRenderedBlocks = [];
             const blockDatas = evaluate(eachConfig.expression, ctx) || [];
 
             if (blockDatas.length <= 0) {
@@ -478,7 +484,7 @@ export function processEachBlock(eachBlock) {
                 const onMountSet = newSetFunc();
 
                 const unmount = () => {
-                    if (cleanupEffect) cleanupEffect();
+                    if (typeof cleanupEffect === "function") cleanupEffect();
                     for (const unmount of onUnmountSet) unmount();
                     onUnmountSet.clear();
                 };
@@ -507,6 +513,7 @@ export function processEachBlock(eachBlock) {
                     mount();
                 } else {
                     core_context.onMountSet.add(mount)
+                    core_context.onUnmountSet.add(unmount)
                 }
 
                 currentNode = nodeEnd;
@@ -531,7 +538,7 @@ export function processEachBlock(eachBlock) {
                     let cleanupEffect;
 
                     const unmount = () => {
-                        if (cleanupEffect) cleanupEffect();
+                        if (typeof cleanupEffect === "function") cleanupEffect();
                         for (const unmount of onUnmountSet) unmount();
                         onUnmountSet.clear();
                     };
@@ -559,7 +566,7 @@ export function processEachBlock(eachBlock) {
                         removeNodesBetween(nodeStart, nodeEnd);
 
                         pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                            const mainBlock = processTemplate(eachConfig.mainContent, childCtx, components);
+                            const mainBlock = processTemplate(eachConfig.mainContent, childCtx);
                             nodeEnd.before(...mainBlock.childNodes);
                         });
 
@@ -567,8 +574,30 @@ export function processEachBlock(eachBlock) {
                             mount();
                         } else {
                             core_context.onMountSet.add(mount)
+                            core_context.onUnmountSet.add(unmount)
                         }
                     });
+                }
+
+                // re-organize blocks, only happens when the array has primitive data types i.e: [1,2,3,4] or ["name1", "name2"]
+                if (block.nodeStart.previousSibling !== currentNode) {
+                    const nodesToMove = [];
+                    let node = block.nodeStart;
+
+                    while (node !== block.nodeEnd.nextSibling) {
+                        nodesToMove.push(node);
+                        node = node.nextSibling;
+                    }
+
+                    let previousNode;
+
+                    nodesToMove.forEach((n, i) => {
+                        if (i === 0) previousNode = n;
+                        currentNode.parentNode.insertBefore(n, currentNode);
+                    });
+
+                    // insert currentNode back to its original position
+                    currentNode.parentNode.insertBefore(currentNode, previousNode);
                 }
 
                 newRenderedBlocks.push(block);
@@ -626,20 +655,20 @@ export function processIfBlock(ifBlock) {
         }
     });
 
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
+    return function (startNode, endNode, ctx) {
+        const onUnmountSet = newSetFunc();
+        const onMountSet = newSetFunc();
 
-    const unmount = () => {
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
+        const unmount = () => {
+            for (const unmount of onUnmountSet) unmount();
+            onUnmountSet.clear();
+        };
 
-    const mount = () => {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
-    }
+        const mount = () => {
+            for (const mount of onMountSet) mount();
+            onMountSet.clear();
+        }
 
-    return function (startNode, endNode, ctx, components) {
         const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
         if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount))
             parentOnUnmountSet.add(unmount);
@@ -654,7 +683,7 @@ export function processIfBlock(ifBlock) {
                     const fragment = document.createDocumentFragment();
 
                     pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                        const segmentBlock = processTemplate(segment.block, ctx, components);
+                        const segmentBlock = processTemplate(segment.block, ctx);
                         fragment.appendChild(segmentBlock);
                         endNode.parentNode.insertBefore(fragment, endNode);
                     })
@@ -663,13 +692,13 @@ export function processIfBlock(ifBlock) {
                         mount();
                     } else {
                         core_context.onMountSet.add(mount)
+                        core_context.onUnmountSet.add(unmount)
                     }
 
                     break;
                 }
             }
         })
-
     }
 }
 
@@ -709,20 +738,20 @@ export function processAwaitBlock(awaitBlock) {
         awaitConfig.pendingContent = pendingContent;
     });
 
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
+    return function (startNode, endNode, ctx) {
+        const onUnmountSet = newSetFunc();
+        const onMountSet = newSetFunc();
 
-    const unmount = () => {
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
+        const unmount = () => {
+            for (const unmount of onUnmountSet) unmount();
+            onUnmountSet.clear();
+        };
 
-    const mount = () => {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
-    }
+        const mount = () => {
+            for (const mount of onMountSet) mount();
+            onMountSet.clear();
+        }
 
-    return function (startNode, endNode, ctx, components) {
         const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
         if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount))
             parentOnUnmountSet.add(unmount);
@@ -732,7 +761,7 @@ export function processAwaitBlock(awaitBlock) {
             removeNodesBetween(startNode, endNode);
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const pendingNodes = processTemplate(awaitConfig.pendingContent, ctx, components);
+                const pendingNodes = processTemplate(awaitConfig.pendingContent, ctx);
                 endNode.before(...pendingNodes.childNodes);
             })
 
@@ -740,6 +769,7 @@ export function processAwaitBlock(awaitBlock) {
                 mount();
             } else {
                 core_context.onMountSet.add(mount)
+                core_context.onUnmountSet.add(unmount)
             }
         };
 
@@ -751,7 +781,7 @@ export function processAwaitBlock(awaitBlock) {
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
                 const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
-                const thenNodes = processTemplate(awaitConfig.then.content, childCtx, components);
+                const thenNodes = processTemplate(awaitConfig.then.content, childCtx);
                 endNode.before(...thenNodes.childNodes);
             })
 
@@ -759,11 +789,12 @@ export function processAwaitBlock(awaitBlock) {
                 mount();
             } else {
                 core_context.onMountSet.add(mount)
+                core_context.onUnmountSet.add(unmount)
             }
         };
 
         const showCatch = (error) => {
-            console.error(error);
+            console.trace(error);
 
             unmount();
             removeNodesBetween(startNode, endNode);
@@ -772,7 +803,7 @@ export function processAwaitBlock(awaitBlock) {
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
                 const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
-                const catchNodes = processTemplate(awaitConfig.catch.content, childCtx, components);
+                const catchNodes = processTemplate(awaitConfig.catch.content, childCtx);
                 endNode.before(...catchNodes.childNodes);
             })
 
@@ -780,6 +811,7 @@ export function processAwaitBlock(awaitBlock) {
                 mount();
             } else {
                 core_context.onMountSet.add(mount)
+                core_context.onUnmountSet.add(unmount)
             }
         };
 
@@ -801,58 +833,30 @@ export function processAwaitBlock(awaitBlock) {
 }
 
 /**
-* @param {{ tag : string, attrStr : string, slot_content : string | null }} component
+* @param {{ import_id:number, tag : string, attrStr : string, slot_content : string | null }} component
 */
 function processComponent(component) {
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
-
-    const unmount = () => {
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
-
-    const mount = () => {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
-    }
-
-    return function (startNode, endNode, ctx, components) {
-        unmount();
+    return function (startNode, endNode, ctx) {
         removeNodesBetween(startNode, endNode);
 
+        const components = imported_components.get(component.import_id);
+        if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
+
         let componentFunc = components[component.tag];
-
-        // if a component can't be found in the current contenxt. We fallback to searching to a shared array of all imported components
-        if (!componentFunc) {
-            for (const imported_components of __imported_components) {
-                if (!imported_components[component.tag]) continue;
-                componentFunc = imported_components[component.tag];
-                break;
-            }
-        }
-
         if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
-        pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-            const attrs = parseAttributes(component.attrStr, ctx);
+        const attrs = parseAttributes(component.attrStr, ctx);
 
-            let componentBlock;
+        let componentBlock;
 
-            if (component.slot_content) {
-                const renderSlotCallbackfn = () => processTemplate(component.slot_content, ctx, components);
-                componentBlock = componentFunc(attrs, renderSlotCallbackfn)
-            } else {
-                componentBlock = componentFunc(attrs);
-            }
-
-            endNode.parentNode.insertBefore(componentBlock, endNode);
-        });
-
-        if (core_context.is_mounted_to_the_DOM) {
-            mount();
+        if (component.slot_content) {
+            const renderSlotCallbackfn = () => processTemplate(component.slot_content, ctx);
+            componentBlock = componentFunc(attrs, renderSlotCallbackfn)
         } else {
-            core_context.onMountSet.add(mount)
+            componentBlock = componentFunc(attrs);
         }
+
+        endNode.parentNode.insertBefore(componentBlock, endNode);
+
     }
 }
