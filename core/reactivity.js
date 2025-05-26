@@ -267,11 +267,12 @@ function createProxy(object, subscriberMap = new Map()) {
             const isFunc = !Array.isArray(target) && typeof target[key] === "function";
             const value = !isFunc ? target[key] : function (...args) {
                 const return_value = target[key](...args);
+
                 if (args.length <= 0) return return_value;
                 if (setterGetterConst.includes(key) && args.length <= 1) return return_value;
 
                 if (turn_on_warnings)
-                    console.warn(`object get ${key} is a function taht accepts arguments which is likely to update some state. Looping through all property of this object and notifying all effects`);
+                    console.warn(`object get ${key} is a function that accepts arguments which is likely to update some state. Looping through all property of this object and notifying all effects`);
 
                 subscriberMap.forEach((subscribers, key) => {
                     if (!subscribers) return;

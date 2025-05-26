@@ -14,7 +14,6 @@ export default component({
 }, class {
 
     data = new State({ deep: { deeper: { deepest: { user: "User!", counter: 0, names: ['ice', 'ian', 'takeru', 'piox'] } } } });
-    // data = new State({ deep: { deeper: { deepest: { user: "User!", counter: 0, names: ['ice', 'ian', 'takeru', 'piox'].map((i) => ({ name: i })) } } } });
 
     constructor() {
         onMount(() => {

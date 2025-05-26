@@ -183,7 +183,6 @@ export function component(options, Context = class { }) {
 /**
 * @param {string} template
 * @param {Record<string, any>} ctx
-* @param {Record<string, Function>} components
 * @param {Function} render_slot_callbackfn
 */
 function processTemplate(template, ctx, render_slot_callbackfn) {
@@ -204,7 +203,6 @@ function processTemplate(template, ctx, render_slot_callbackfn) {
 * @param {ChildNode} node
 * @param {DocumentFragment} destinationNode
 * @param {Record<string, any>} ctx
-* @param {Record<string, Function>} components
 * @param {Function} render_slot_callbackfn
 */
 function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
