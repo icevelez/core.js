@@ -72,12 +72,14 @@ function parseOuterBlocks(template, openTag, closeTag) {
 /**
 * Process and store all `{{#..}}` directives to be used later when rendering
 * @param {stringg} template
+* @param {number} imported_components_id
 */
-function preprocessTemplates(template) {
+function preprocessTemplates(template, imported_components_id) {
 
-    template = processAllDirectiveBlocks(template, "await", processAwaitBlock);
-    template = processAllDirectiveBlocks(template, "if", processIfBlock);
-    template = processAllDirectiveBlocks(template, "each", processEachBlock);
+    template = processAllDirectiveBlocks(template, imported_components_id, "await", processAwaitBlock);
+    template = processAllDirectiveBlocks(template, imported_components_id, "if", processIfBlock);
+    template = processAllDirectiveBlocks(template, imported_components_id, "each", processEachBlock);
+    template = processAllComponents(template, imported_components_id, processComponent);
 
     return template;
 }
@@ -85,10 +87,11 @@ function preprocessTemplates(template) {
 /**
 *
 * @param {string} template
+* @param {number} imported_components_id
 * @param {string} directive
 * @param {Function} processBlocks
 */
-function processAllDirectiveBlocks(template, directive, processBlocks) {
+function processAllDirectiveBlocks(template, imported_components_id, directive, processBlocks) {
 
     const openTag = `{{#${directive}`;
     const closeTag = `{{/${directive}}}`;
@@ -103,7 +106,7 @@ function processAllDirectiveBlocks(template, directive, processBlocks) {
         const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
         const block = blocks[i].slice(0, end).replace(start, "");
 
-        blocks[i] = start + preprocessTemplates(block) + `{{/${directive}}}`;
+        blocks[i] = start + preprocessTemplates(block, imported_components_id) + `{{/${directive}}}`;
 
         if (is_dev_mode) __blocks[directive].push(blocks[i]);
 
@@ -124,12 +127,12 @@ function processAllComponents(template, imported_components_id, processComponent
 
     template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
         if (match.startsWith("<Core:slot")) return `<div data-directive="slot"></div>`;
-        if (match.startsWith("<Core:component")) return `<div data-import-id="${imported_components_id}" data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</div>`;
+        if (match.startsWith("<Core:component")) return `<div data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</div>`;
 
         const marker_id = `${directive}-${makeId(8)}`;
         const component = { import_id: imported_components_id, tag, attrStr, slot_content };
         processedBlocks[directive].set(marker_id, processComponent(component));
-        return `<div data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
+        return `<div data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
     })
 
     return template;
@@ -167,7 +170,7 @@ export function component(options, Context = class { }) {
     const imported_components_id = imported_components_id_counter;
     imported_components_id_counter++;
 
-    const template = processAllComponents(preprocessTemplates(options.template), imported_components_id, processComponent);
+    const template = preprocessTemplates(options.template, imported_components_id);
     if (options.components) imported_components.set(imported_components_id, options.components);
 
     return function (attrs, render_slot_callbackfn) {
@@ -184,7 +187,6 @@ export function component(options, Context = class { }) {
 * @param {Function} render_slot_callbackfn
 */
 function processTemplate(template, ctx, render_slot_callbackfn) {
-
     const div = document.createElement("div");
     div.innerHTML = template;
 
@@ -206,7 +208,6 @@ function processTemplate(template, ctx, render_slot_callbackfn) {
 * @param {Function} render_slot_callbackfn
 */
 function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
-
     const isText = node.nodeType === Node.TEXT_NODE;
 
     if (isText) {
@@ -407,21 +408,12 @@ function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
 * @returns {(startNode:Node, endNode:Node) => void}
 */
 export function processEachBlock(eachBlock) {
-
     const eachRegex = /{{#each\s+(.+?)\s+as\s+(\w+)(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
-    const eachConfig = {
-        expression: "",
-        mainContent: "",
-        emptyContent: "",
-        blockVar: "",
-        indexVar: ""
-    }
+    let eachConfig = { expression: "", mainContent: "", emptyContent: "", blockVar: "", indexVar: "" }
 
-    eachBlock.replace(eachRegex, (_, expr, blockVar, indexVar, content) => {
-        eachConfig.expression = expr;
-        eachConfig.blockVar = blockVar;
-        eachConfig.indexVar = indexVar;
-        [eachConfig.mainContent, eachConfig.emptyContent] = content.split(/{{:empty}}/);
+    eachBlock.replace(eachRegex, (_, expression, blockVar, indexVar, content) => {
+        const [mainContent, emptyContent] = content.split(/{{:empty}}/);
+        eachConfig = { expression, blockVar, indexVar, mainContent, emptyContent };
     });
 
     return function (startNode, _, ctx) {
@@ -453,6 +445,7 @@ export function processEachBlock(eachBlock) {
                     node = next;
                 }
 
+                renderBlock.unmount();
                 nodeEnd.remove();
             };
 
@@ -473,7 +466,6 @@ export function processEachBlock(eachBlock) {
         let currentNode = startNode;
 
         effect(() => {
-
             const newRenderedBlocks = [];
             const blockDatas = evaluate(eachConfig.expression, ctx) || [];
 
@@ -658,8 +650,10 @@ export function processIfBlock(ifBlock) {
     return function (startNode, endNode, ctx) {
         const onUnmountSet = newSetFunc();
         const onMountSet = newSetFunc();
+        let cleanup;
 
         const unmount = () => {
+            if (cleanup) cleanup();
             for (const unmount of onUnmountSet) unmount();
             onUnmountSet.clear();
         };
@@ -673,31 +667,44 @@ export function processIfBlock(ifBlock) {
         if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount))
             parentOnUnmountSet.add(unmount);
 
+        let previousCondition;
+
         effect(() => {
-            unmount();
-            removeNodesBetween(startNode, endNode);
+            let condition;
 
             for (const segment of segments) {
-                if (evaluate(segment.condition, ctx)) {
-
-                    const fragment = document.createDocumentFragment();
-
-                    pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                        const segmentBlock = processTemplate(segment.block, ctx);
-                        fragment.appendChild(segmentBlock);
-                        endNode.parentNode.insertBefore(fragment, endNode);
-                    })
-
-                    if (core_context.is_mounted_to_the_DOM) {
-                        mount();
-                    } else {
-                        core_context.onMountSet.add(mount)
-                        core_context.onUnmountSet.add(unmount)
-                    }
-
-                    break;
-                }
+                if (!evaluate(segment.condition, ctx)) continue;
+                condition = segment;
+                break;
             }
+
+            if (!condition) {
+                unmount();
+                removeNodesBetween(startNode, endNode);
+                return;
+            }
+
+            if (condition === previousCondition) return;
+            previousCondition = condition;
+
+            cleanup = untrackedEffect(() => {
+                unmount();
+                removeNodesBetween(startNode, endNode);
+
+                pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
+                    const fragment = document.createDocumentFragment();
+                    const segmentBlock = processTemplate(condition.block, ctx);
+                    fragment.appendChild(segmentBlock);
+                    endNode.parentNode.insertBefore(fragment, endNode);
+                })
+
+                if (core_context.is_mounted_to_the_DOM) {
+                    mount();
+                } else {
+                    core_context.onMountSet.add(mount)
+                    core_context.onUnmountSet.add(unmount)
+                }
+            })
         })
     }
 }
@@ -840,7 +847,8 @@ function processComponent(component) {
         removeNodesBetween(startNode, endNode);
 
         const components = imported_components.get(component.import_id);
-        if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
+        if (!components)
+            throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
         let componentFunc = components[component.tag];
         if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);

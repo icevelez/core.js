@@ -5,6 +5,8 @@
     <input type="text" bind:value="data.value.deep.deeper.deepest.user">
 </div>
 <br/>
+<input type="text" onkeypress="{{ addName }}">
+<br/>
 <input type="text" bind:value="data.value.deep.deeper.deepest.names[0]">
     {{#each data.value.deep.deeper.deepest.names as name, i}}
         <h1>{{ i.value+1}}. {{name.toUpperCase() }}</h1>

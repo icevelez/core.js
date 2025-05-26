@@ -2,7 +2,7 @@ import { isObject } from "./helper-functions.js";
 
 // =======================================================================
 
-const is_debugger_on = false;
+const is_debugger_on = true;
 const turn_on_warnings = false;
 
 const __reactivity = {
@@ -45,7 +45,6 @@ let stateid = 1;
 export class State {
 
     #id = stateid++;
-    #firstrun = true;
 
     /**
     * @type {T}
@@ -61,9 +60,7 @@ export class State {
     * @param {T} initialValue
     */
     constructor(initialValue) {
-        if (is_debugger_on) __reactivity.states.add(this);
-        this.value = (typeof initialValue === "object") ? createProxy(initialValue) : initialValue;
-        this.#firstrun = false;
+        this.value = initialValue && typeof initialValue === "object" ? createProxy(initialValue) : initialValue;
     }
 
     get value() {
@@ -74,7 +71,13 @@ export class State {
 
         currentEffect.dependencies.add(() => {
             this.#subscribers.delete(currentEffect.effect);
+
+            if (!is_debugger_on) return;
+            if (this.#subscribers.size > 0) return;
+            __reactivity.states.delete(this);
         });
+
+        if (is_debugger_on) __reactivity.states.add(this);
 
         return this.#value;
     }
@@ -90,8 +93,8 @@ export class State {
 
         this.#value = new_value;
 
-        if (this.#subscribers.size <= 0 && !this.#firstrun) {
-            console.warn("setting new value for State with no subscribers.\n", this);
+        if (this.#subscribers.size <= 0) {
+            if (turn_on_warnings) console.warn("setting new value for State with no subscribers.\n", this);
             return true;
         }
 
@@ -154,7 +157,6 @@ export function effect(callbackfn) {
     if (is_in_untrack_from_parent_effect_scope.length > 0) {
         untackedEffect = is_in_untrack_from_parent_effect_scope.pop();
         untackedEffect.add(cleanupfn);
-        return cleanupfn;
     }
 
     if (!untackedEffect) {
@@ -212,14 +214,6 @@ export function untrackedEffect(callbackfn) {
 // =======================================================================
 
 const $proxy = Symbol('PROXY');             // unique identify to prevent creating duplicate Proxies
-
-// Class method call don't work when wrapped in a Proxy so we use this to detect any built in class
-// that is being used inside a Proxy to that method call back to its original class
-function isBuiltIn(obj) {
-    const type = Object.prototype.toString.call(obj);
-    return /\[object (?:Date|URL|RegExp|Map|Set|WeakMap|WeakSet|Error|ArrayBuffer|DataView|Promise)\]/.test(type);
-}
-
 const setterGetterConst = ["has", "set", "get"];
 
 let proxy_id = 1;
@@ -262,6 +256,9 @@ function createProxy(object, subscriberMap = new Map()) {
             continue;
         }
 
+        const is_object_key_proxy = object[key] && object[key][$proxy];
+        if (is_object_key_proxy) continue;
+
         object[key] = createProxy(object[key]);
     }
 
@@ -271,7 +268,7 @@ function createProxy(object, subscriberMap = new Map()) {
 
             // console.log("get", key, target[key]);
 
-            const isFunc = typeof target[key] === "function";
+            const isFunc = !Array.isArray(target) && typeof target[key] === "function";
             const value = !isFunc ? target[key] : function (...args) {
                 const return_value = target[key](...args);
                 if (args.length <= 0) return return_value;
@@ -306,7 +303,13 @@ function createProxy(object, subscriberMap = new Map()) {
                 subscribers.delete(currentEffect.effect);
                 if (subscribers.size > 0) return;
                 subscriberMap.delete(key);
+
+                if (!is_debugger_on) return;
+                if (subscriberMap.size > 0) return;
+                __reactivity.proxies.delete(proxy);
             };
+
+            __reactivity.proxies.add(proxy);
 
             currentEffect.dependencies.add(unsubscribe);
 
@@ -320,9 +323,7 @@ function createProxy(object, subscriberMap = new Map()) {
 
             if (checIfArrayMutation && checkIfPrimitiveDatatypes) return true;
 
-            const new_value_is_a_proxy = target[key] && new_value[$proxy] === target[key][$proxy];
-
-            if (isObject(new_value) && !new_value_is_a_proxy) {
+            if (isObject(new_value) && !new_value[$proxy]) {
                 target[key] = createProxy(new_value);
             } else {
                 target[key] = new_value;
@@ -332,7 +333,7 @@ function createProxy(object, subscriberMap = new Map()) {
             if (!subscribers) return true;
 
             if (subscribers.size <= 0) {
-                console.warn("setting new value for State with no subscribers.\n", proxy);
+                if (turn_on_warnings) console.warn("setting new value for State with no subscribers.\n", proxy);
                 return;
             }
 
@@ -340,10 +341,6 @@ function createProxy(object, subscriberMap = new Map()) {
             return true;
         },
     })
-
-    if (is_debugger_on) {
-        __reactivity.proxies.add(proxy);
-    }
 
     return proxy;
 }

@@ -25,4 +25,11 @@ export default component({
             console.log("unmounting App")
         })
     }
+
+    addName = (event) => {
+        if (event.key !== "Enter") return;
+
+        this.data.value.deep.deeper.deepest.names.push(event.target.value)
+        event.target.value = "";
+    }
 });
