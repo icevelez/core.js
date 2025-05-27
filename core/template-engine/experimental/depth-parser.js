@@ -1,67 +1,93 @@
+import { makeId } from "../../helper-functions.js";
+
+const directiveBlocks = {
+    if: [],
+    each: [],
+    await: [],
+    component: [],
+};
+
+window.__directiveBlocks = directiveBlocks;
 
 /**
-* Regex alone mismatch `{{}}` syntax, which needs this to properly get a handlebar block
 * @param {string} template
-* @param {string} openTag
-* @param {string} clsoeTag
 */
-function parseOuterBlocks(template, openTag, closeTag) {
+function parseDirectiveBlocks(template) {
+    const directives = ["if", "each", "await"].map((i) => [`{{#${i}`, `{{/${i}}}`, i]);
+    const directiveBlockDepth = [];
 
-    const blocks = [];
     let i = 0;
-    let depth = 0;
-    let start = -1;
+    let depth = -1;
 
     const openTagIndexes = [];
-    const closeTagIndexes = [];
 
+    templateLoop:
     while (i < template.length) {
-        if (template.slice(i, i + openTag.length) === openTag) {
-            openTagIndexes.push(i);
-            if (depth === 0) start = i;
-            depth++;
-            i += openTag.length;
-            continue;
-        }
-        if (template.slice(i, i + closeTag.length) === closeTag) {
-            closeTagIndexes.push(i + closeTag.length);
-            depth--;
-            if (depth === 0 && start !== -1) {
-                const block = template.slice(start, i + closeTag.length);
-                blocks.push(block);
-                start = -1;
+
+        for (const [openTag, closeTag, directive] of directives) {
+            if (template.slice(i, i + openTag.length) === openTag) {
+                openTagIndexes.push(i);
+                i += openTag.length;
+                depth++;
+                continue templateLoop;
             }
-            i += closeTag.length;
-            continue;
+
+            if (template.slice(i, i + closeTag.length) === closeTag) {
+                const closeTagIndex = i + closeTag.length;
+                const openTagIndex = openTagIndexes.pop();
+
+                const block = template.slice(openTagIndex, closeTagIndex);
+                directiveBlocks[directive].push(block);
+
+                if (!directiveBlockDepth[depth]) directiveBlockDepth[depth] = [];
+
+                directiveBlockDepth[depth].push([block, directive]);
+
+                depth--;
+                i += closeTag.length;
+                continue templateLoop;
+            }
         }
+
         i++;
     }
 
-    if (openTagIndexes.length !== closeTagIndexes.length) throw new Error("template error");
-
-    const closeTagBase = closeTagIndexes[4];
-
-    const openTagsInBetween = [];
-    const closeTagInBetween = [];
-
-    for (let i = 0; i < openTagIndexes.length; i++) {
-        const openTag = openTagIndexes[i];
-        const closeTag = closeTagIndexes[i];
-        if (openTag < closeTagBase) openTagsInBetween.push(openTag);
-        if (closeTag < closeTagBase) closeTagInBetween.push(closeTag);
-    }
-
-    openTagsInBetween.splice(openTagsInBetween.length - closeTagInBetween.length, closeTagInBetween.length)
-
-    const lastOpenTag = openTagsInBetween[openTagsInBetween.length - 1];
-
-    console.log(template.slice(lastOpenTag, closeTagBase));
-
-    console.log("final", openTagIndexes, closeTagIndexes, closeTagBase, lastOpenTag)
-    return blocks;
+    return directiveBlockDepth;
 }
 
-const template = `
+function preprocessTemplates(template, directiveBlockDepth, depth) {
+    const depthBlocks = directiveBlockDepth[depth];
+
+    for (const i in depthBlocks) {
+        let [block, directive] = depthBlocks[i];
+        const marker_id = `${directive}-${makeId(8)}`;
+        const marker_element = `<div data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
+        block = preprocessTemplates(block, directiveBlockDepth, depth + 1);
+        template = template.replace(block, marker_element);
+    }
+
+    return template;
+}
+
+function processComponentBlocks(template, imported_components_id) {
+    const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
+    const directive = "component";
+
+    template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
+        if (match.startsWith("<Core:slot")) return `<div data-directive="slot"></div>`;
+        if (match.startsWith("<Core:component")) return `<div data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</div>`;
+
+        const marker_id = `${directive}-${makeId(8)}`;
+        const component = { import_id: imported_components_id, tag, attrStr, slot_content };
+        directiveBlocks[directive].push(component);
+
+        return `<div data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
+    })
+
+    return template;
+}
+
+let template = `
         {{#if outer}}
             {{#if inner}}
                 {{#if inner_inner}}
@@ -70,6 +96,13 @@ const template = `
             {{:else}}
                 {{#if inner_inner_else}}
 
+                    {{#each items as item}}
+                        {{#if inner_inner_each}}
+
+                        {{/if}}
+                    {{:empty}}
+                        <MyComponent/>
+                    {{/each}}
                 {{/if}}
             {{/if}}
         {{/if}}
@@ -80,4 +113,8 @@ const template = `
         {{/if}}
     `;
 
-const blocks = parseOuterBlocks(template, "{{#if", "{{/if}}");
+template = processComponentBlocks(template, 1);
+
+const depthBlock = parseDirectiveBlocks(template);
+
+console.log(preprocessTemplates(template, depthBlock, 0), depthBlock);

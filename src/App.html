@@ -14,3 +14,23 @@
 <br/>
 <TestComponent/>
 <ExampleSub/>
+
+{{#if outer}}e
+    <h1>Outer</h1>
+    {{#if inner}}
+        <h1>Inner</h1>
+        {{#if inner_inner}}
+            <h1>Inner inner</h1>
+        {{/if}}
+    {{:else}}
+        <h1>Inner else</h1>
+        {{#if inner_inner_else}}
+            <h1>Inner inner else</h1>
+        {{/if}}
+    {{/if}}
+{{/if}}
+
+
+{{#if outer_sibling}}
+    <h1>Outer sibling</h1>
+{{/if}}

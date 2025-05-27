@@ -13,6 +13,12 @@ export default component({
     }
 }, class {
 
+    outer = true;
+    inner = false;
+    inner_inner = true;
+    inner_inner_else = true;
+    outer_sibling = true;
+
     data = new State({ deep: { deeper: { deepest: { user: "User!", counter: 0, names: ['ice', 'ian', 'takeru', 'piox'] } } } });
 
     constructor() {

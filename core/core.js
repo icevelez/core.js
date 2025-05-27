@@ -3,10 +3,10 @@ import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } fr
 import { effect } from "./reactivity.js";
 
 /**
-* @param {string} component_url
+* @param {string} template_url
 */
-export async function load(component_url) {
-    const response = await fetch(component_url);
+export async function load(template_url) {
+    const response = await fetch(template_url);
     return response.text();
 }
 
