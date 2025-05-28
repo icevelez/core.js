@@ -59,9 +59,8 @@ The reactivity system is my implementation of *Signals* based from my understand
 ```
 
 ```js
-import { load, onMount } from "../core/core.js";
+import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { State } from "../core/reactivity.js";
 
 export default component({
     template: await load("src/App.html"),
@@ -122,13 +121,10 @@ You can read the full documentation of how to use this framework by opening the 
 
 ## Limitation
 
-*"Nothing is free, everything is a trade-off"* - Hussein Nasser
+*"Nothing is free. There is always a trade off"* - Hussein Nasser
 
-- Lack of code minification leading to bigger bundle sizes (~39kb)
-- Lack of code optimization
-    - removing unused code and comment when compiling;
-    - compiling for an older ES version;
-- Less performant than traditional frameworks due to the runtime process of parsing template strings and attaching reactivity
+- No bundler means. Lack of code minification leading to bigger bundle sizes and optimization by removing comments and unused code
+- Runtime processing and parsing template strings has performance overhead
 - Missing IntelliSense support in VSCode, Zed, etc...
 
 ## 📝 P.S
