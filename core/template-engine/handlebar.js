@@ -72,14 +72,12 @@ function parseOuterBlocks(template, openTag, closeTag) {
 /**
 * Process and store all `{{#..}}` directives to be used later when rendering
 * @param {string} template
-* @param {number} imported_components_id
 */
-function preprocessTemplates(template, imported_components_id) {
+function preprocessTemplates(template) {
 
-    template = processAllDirectiveBlocks(template, imported_components_id, "await", processAwaitBlock);
-    template = processAllDirectiveBlocks(template, imported_components_id, "if", processIfBlock);
-    template = processAllDirectiveBlocks(template, imported_components_id, "each", processEachBlock);
-    template = processAllComponents(template, imported_components_id, processComponent);
+    template = processAllDirectiveBlocks(template, "await", processAwaitBlock);
+    template = processAllDirectiveBlocks(template, "if", processIfBlock);
+    template = processAllDirectiveBlocks(template, "each", processEachBlock);
 
     return template;
 }
@@ -87,11 +85,10 @@ function preprocessTemplates(template, imported_components_id) {
 /**
 *
 * @param {string} template
-* @param {number} imported_components_id
 * @param {string} directive
 * @param {Function} processBlocks
 */
-function processAllDirectiveBlocks(template, imported_components_id, directive, processBlocks) {
+function processAllDirectiveBlocks(template, directive, processBlocks) {
 
     const openTag = `{{#${directive}`;
     const closeTag = `{{/${directive}}}`;
@@ -106,7 +103,7 @@ function processAllDirectiveBlocks(template, imported_components_id, directive, 
         const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
         const block = blocks[i].slice(0, end).replace(start, "");
 
-        blocks[i] = start + preprocessTemplates(block, imported_components_id) + `{{/${directive}}}`;
+        blocks[i] = start + preprocessTemplates(block) + `{{/${directive}}}`;
 
         if (is_dev_mode) __blocks[directive].push(blocks[i]);
 
@@ -170,8 +167,10 @@ export function component(options, Context = class { }) {
     const imported_components_id = imported_components_id_counter;
     imported_components_id_counter++;
 
-    const template = preprocessTemplates(options.template, imported_components_id);
+    let template = processAllComponents(options.template, imported_components_id, processComponent);
     if (options.components) imported_components.set(imported_components_id, options.components);
+
+    template = preprocessTemplates(template);
 
     return function (attrs, render_slot_callbackfn) {
         if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
@@ -829,8 +828,7 @@ function processComponent(component) {
         removeNodesBetween(startNode, endNode);
 
         const components = imported_components.get(component.import_id);
-        if (!components)
-            throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
+        if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
         let componentFunc = components[component.tag];
         if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
@@ -847,6 +845,5 @@ function processComponent(component) {
         }
 
         endNode.parentNode.insertBefore(componentBlock, endNode);
-
     }
 }
