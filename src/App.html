@@ -7,9 +7,9 @@
 <br/>
 <input type="text" onkeypress="{{ addName }}">
 <br/>
-<input type="text" bind:value="data.value.deep.deeper.deepest.names[0]">
+<input type="text" bind:value="data.value.deep.deeper.deepest.names[0].name">
     {{#each data.value.deep.deeper.deepest.names as name, i}}
-        <h1>{{ i.value+1}}. {{name.toUpperCase() }}</h1>
+        <h1>{{ i.value+1}}. {{name.name.toUpperCase() }}</h1>
         <button onclick="{{ () => { console.log(i.value); data.value.deep.deeper.deepest.names.splice(i.value, 1) } }}">Delete</button>
     {{/each}}
 <br/>

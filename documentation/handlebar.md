@@ -34,7 +34,7 @@ Expressions can be embedded inside HTML attributes.
 ```html
 {{#if isAdmin}}
   <p>Admin Panel</p>
-{{else}}
+{{:else}}
   <p>Access Denied</p>
 {{/if}}
 ```
@@ -43,9 +43,9 @@ Expressions can be embedded inside HTML attributes.
 ```html
 {{#if user.isAdmin}}
   <p>Admin Panel</p>
-{{else if user.isModerator}}
+{{:else if user.isModerator}}
   <p>Moderator Tools</p>
-{{else}}
+{{:else}}
   <p>Access Denied</p>
 {{/if}}
 ```
@@ -68,7 +68,7 @@ Expressions can be embedded inside HTML attributes.
 <ul>
   {{#each users as user}}
     <li>{{ user.name }}</li>
-  {{empty}}
+  {{:empty}}
     <li>No users found.</li>
   {{/each}}
 </ul>
@@ -92,7 +92,7 @@ Expressions can be embedded inside HTML attributes.
 ```html
 {{#await userPromise}}
   <p>Loading...</p>
-{{then user}}
+{{:then user}}
   <p>Hello {{ user.name }}</p>
 {{/await}}
 ```
@@ -101,9 +101,9 @@ Expressions can be embedded inside HTML attributes.
 ```html
 {{#await dataPromise}}
   <p>Loading data...</p>
-{{then data}}
+{{:then data}}
   <pre>{{ data }}</pre>
-{{catch error}}
+{{:catch error}}
   <p class="text-red-500">Error: {{ error.message }}</p>
 {{/await}}
 ```
@@ -112,9 +112,9 @@ Expressions can be embedded inside HTML attributes.
 ```html
 {{#await import("./components/List.js")}}
   <p>Loading list..</p>
-{{then listComponent}}
+{{:then listComponent}}
   <Component default="{{ listComponent }}"/>
-{{catch error}}
+{{:catch error}}
   <p class="text-red-500">Error loading list component</p>
 {{/await}}
 ```

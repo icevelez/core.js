@@ -19,7 +19,7 @@ export default component({
     inner_inner_else = true;
     outer_sibling = true;
 
-    data = new State({ deep: { deeper: { deepest: { user: "User!", counter: 0, names: ['ice', 'ian', 'takeru', 'piox'] } } } });
+    data = new State({ deep: { deeper: { deepest: { user: "User!", counter: 0, names: ['ice', 'ian', 'takeru', 'piox'].map(i => ({ name: i })) } } } });
 
     constructor() {
         onMount(() => {
