@@ -461,14 +461,17 @@ export function processEachBlock(eachBlock) {
         if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock))
             parentOnUnmountSet.add(unmountEachBlock);
 
-        let currentNode = startNode;
-
         effect(() => {
+            let currentNode = startNode;
+
             const newRenderedBlocks = [];
             const blockDatas = evaluate(eachConfig.expression, ctx) || [];
 
             if (blockDatas.length <= 0) {
-                if (!eachConfig.emptyContent) return
+                if (!eachConfig.emptyContent) {
+                    discardUnusedBlocks(newRenderedBlocks);
+                    return;
+                }
 
                 const onUnmountSet = newSetFunc();
                 const onMountSet = newSetFunc();
@@ -567,27 +570,6 @@ export function processEachBlock(eachBlock) {
                             core_context.onUnmountSet.add(unmount)
                         }
                     });
-                }
-
-                // re-organize blocks, only happens when the array has primitive data types i.e: [1,2,3,4] or ["name1", "name2"]
-                if (block.nodeStart.previousSibling !== currentNode) {
-                    const nodesToMove = [];
-                    let node = block.nodeStart;
-
-                    while (node !== block.nodeEnd.nextSibling) {
-                        nodesToMove.push(node);
-                        node = node.nextSibling;
-                    }
-
-                    let previousNode;
-
-                    nodesToMove.forEach((n, i) => {
-                        if (i === 0) previousNode = n;
-                        currentNode.parentNode.insertBefore(n, currentNode);
-                    });
-
-                    // insert currentNode back to its original position
-                    currentNode.parentNode.insertBefore(currentNode, previousNode);
                 }
 
                 newRenderedBlocks.push(block);

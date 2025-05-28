@@ -37,11 +37,9 @@ function parseDirectiveBlocks(template) {
                 const openTagIndex = openTagIndexes.pop();
 
                 const block = template.slice(openTagIndex, closeTagIndex);
-                directiveBlocks[directive].push(block);
 
                 if (!directiveBlockDepth[depth]) directiveBlockDepth[depth] = [];
-
-                directiveBlockDepth[depth].push([block, directive]);
+                directiveBlockDepth[depth].push({ block, directive });
 
                 depth--;
                 i += closeTag.length;
@@ -52,7 +50,13 @@ function parseDirectiveBlocks(template) {
         i++;
     }
 
-    return directiveBlockDepth;
+    let blocks = [];
+
+    for (const depthBlock of directiveBlockDepth) {
+        blocks = [...depthBlock, ...blocks];
+    }
+
+    return blocks;
 }
 
 function preprocessTemplates(template, directiveBlockDepth, depth) {
@@ -62,9 +66,13 @@ function preprocessTemplates(template, directiveBlockDepth, depth) {
         let [block, directive] = depthBlocks[i];
         const marker_id = `${directive}-${makeId(8)}`;
         const marker_element = `<div data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
-        block = preprocessTemplates(block, directiveBlockDepth, depth + 1);
+        console.log({ template, block });
+        debugger;
         template = template.replace(block, marker_element);
+        directiveBlocks[directive].push({ marker_id, block: preprocessTemplates(block, directiveBlockDepth, depth + 1) });
     }
+
+    directiveBlockDepth[depth] = [];
 
     return template;
 }
@@ -115,6 +123,6 @@ let template = `
 
 template = processComponentBlocks(template, 1);
 
-const depthBlock = parseDirectiveBlocks(template);
+const blocks = parseDirectiveBlocks(template);
 
-console.log(preprocessTemplates(template, depthBlock, 0), depthBlock);
+console.log(blocks);
