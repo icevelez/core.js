@@ -643,8 +643,7 @@ export function processIfBlock(ifBlock) {
         }
 
         const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-        if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount))
-            parentOnUnmountSet.add(unmount);
+        if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount)) parentOnUnmountSet.add(unmount);
 
         let previousCondition;
 
@@ -740,8 +739,17 @@ export function processAwaitBlock(awaitBlock) {
         }
 
         const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-        if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount))
-            parentOnUnmountSet.add(unmount);
+        if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount)) parentOnUnmountSet.add(unmount);
+
+        const mountInit = () => {
+            if (core_context.is_mounted_to_the_DOM) {
+                mount();
+                return;
+            }
+
+            core_context.onMountSet.add(mount);
+            core_context.onUnmountSet.add(unmount);
+        }
 
         const showLoading = () => {
             unmount();
@@ -752,12 +760,7 @@ export function processAwaitBlock(awaitBlock) {
                 endNode.before(...pendingNodes.childNodes);
             })
 
-            if (core_context.is_mounted_to_the_DOM) {
-                mount();
-            } else {
-                core_context.onMountSet.add(mount)
-                core_context.onUnmountSet.add(unmount)
-            }
+            mountInit();
         };
 
         const showThen = (result) => {
@@ -772,12 +775,7 @@ export function processAwaitBlock(awaitBlock) {
                 endNode.before(...thenNodes.childNodes);
             })
 
-            if (core_context.is_mounted_to_the_DOM) {
-                mount();
-            } else {
-                core_context.onMountSet.add(mount)
-                core_context.onUnmountSet.add(unmount)
-            }
+            mountInit();
         };
 
         const showCatch = (error) => {
@@ -794,12 +792,7 @@ export function processAwaitBlock(awaitBlock) {
                 endNode.before(...catchNodes.childNodes);
             })
 
-            if (core_context.is_mounted_to_the_DOM) {
-                mount();
-            } else {
-                core_context.onMountSet.add(mount)
-                core_context.onUnmountSet.add(unmount)
-            }
+            mountInit();
         };
 
         effect(() => {
