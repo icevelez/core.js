@@ -83,6 +83,8 @@ Expressions can be embedded inside HTML attributes.
 > The second alias (`i`) is optional. You can name it anything:
 >
 > Note: The `i` is a type `State<number>` it requires to use `.value`
+>
+> and Object deconstruction (`{{#each item as { name, price }}}`) is not (yet) supported.
 
 ---
 
@@ -113,7 +115,7 @@ Expressions can be embedded inside HTML attributes.
 {{#await import("./components/List.js")}}
   <p>Loading list..</p>
 {{:then listComponent}}
-  <Component default="{{ listComponent }}"/>
+  <Core:component default="listComponent"/>
 {{:catch error}}
   <p class="text-red-500">Error loading list component</p>
 {{/await}}
@@ -121,7 +123,7 @@ Expressions can be embedded inside HTML attributes.
 
 The `<Core:component/>` directive allows a **custom component** to be displayed
 
-> in v0.1.1 and below. the component syntax was `<Component>`
+> in v0.1.1 and below. the component syntax was `<Component default="{{ componentName }}">`
 
 ```html
 <Core:component default="component">
@@ -232,7 +234,7 @@ The `<Core:slot />` directive allows a **custom component** to display child con
 ```html
 <!-- MyComponent.html -->
 <div class="card">
-  <Slot />
+  <Core:slot/>
 </div>
 ```
 ```html

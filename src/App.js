@@ -34,7 +34,7 @@ export default component({
     addName = (event) => {
         if (event.key !== "Enter") return;
 
-        this.data.value.deep.deeper.deepest.names.push(event.target.value)
+        this.data.value.deep.deeper.deepest.names.push({ name: event.target.value })
         event.target.value = "";
     }
 });
