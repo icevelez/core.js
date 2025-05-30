@@ -1,15 +1,15 @@
 import { onMount, onUnmount } from "../../core/core.js";
-import { effect, State } from "../../core/reactivity.js";
+import { effect, createState } from "../../core/reactivity.js";
 import { component } from "../../core/template-engine/handlebar.js";
 
 export default component({
     template: `
-        <h1>Hello from Test Component! {{ name.value }}</h1>
-        <input type="text" bind:value="name.value">
+        <h1>Hello from Test Component! {{ name() }}</h1>
+        <input type="text" bind:value="name()">
     `,
 }, class {
 
-    name = new State("TestComponent");
+    name = createState("TestComponent");
 
     constructor() {
 
