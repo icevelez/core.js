@@ -1,6 +1,6 @@
 import { createStartEndNode, makeId, evaluate, removeNodesBetween, newSetFunc } from "../helper-functions.js";
 import { core_context, onMountQueue, onUnmountQueue, pushPopMountUnmountSet } from "../internal-core.js";
-import { effect, untrackedEffect, createState } from "../reactivity.js";
+import { effect, untrackedEffect, State } from "../reactivity.js";
 
 const is_dev_mode = true;
 
@@ -415,12 +415,12 @@ export function processEachBlock(eachBlock) {
 
     return function (startNode, _, ctx) {
         /**
-        * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : Function | null, unmount : Function }[]}
+        * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number> | null, unmount : Function }[]}
         */
         let renderedBlocks = [];
 
         /**
-        * @param {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : Function | null }[]} newRenderedBlocks
+        * @param {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number> | null }[]} newRenderedBlocks
         */
         const discardUnusedBlocks = (newRenderedBlocks) => {
             for (const i in renderedBlocks) {
@@ -517,11 +517,12 @@ export function processEachBlock(eachBlock) {
 
             for (const index in blockDatas) {
                 const blockData = blockDatas[index];
+                const existingBlockIndex = renderedBlocks.findIndex((block) => block.blockData === blockData);
 
                 /**
-                * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : Function, unmount:Function }}
+                * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number>, unmount:Function }}
                 */
-                let block = renderedBlocks[index];
+                let block = renderedBlocks[existingBlockIndex];
 
                 if (!block) {
                     const onUnmountSet = newSetFunc();
@@ -544,16 +545,12 @@ export function processEachBlock(eachBlock) {
                     currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
                     currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
 
-                    block = { nodeStart, nodeEnd, blockData, index: createState(parseInt(index)), unmount };
+                    block = { nodeStart, nodeEnd, blockData, index: new State(parseInt(index)), unmount };
 
-                    const childCtx = {
-                        ...ctx, [eachConfig.blockVar]: () => {
-                            return blockDatas[index]
-                        }
-                    };
+                    const childCtx = { ...ctx, [eachConfig.blockVar]: blockData };
 
                     if (eachConfig.indexVar) {
-                        childCtx[eachConfig.indexVar] = () => { return block.index() };
+                        childCtx[eachConfig.indexVar] = { get value() { return block.index.value } };
                     }
 
                     cleanupEffect = untrackedEffect(() => {

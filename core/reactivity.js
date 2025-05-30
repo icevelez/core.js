@@ -1,4 +1,4 @@
-import { isObject, makeId } from "./helper-functions.js";
+import { isObject } from "./helper-functions.js";
 
 // =======================================================================
 
@@ -39,99 +39,108 @@ function notifySubscribers(subscribers) {
 
 /**
 * @template {any} T
-* @param {T} initial_value
 */
-export function createState(initial_value) {
+export class State {
+
     /**
     * @type {T}
     */
-    let value = initial_value && typeof initial_value === "object" ? createProxy(initial_value) : initial_value;
+    #value;
 
     /**
     * @type {Set<Function>}
     */
-    const subscribers = new Set();
+    #subscribers = new Set();
 
-    const read = () => {
-        if (effectStack.length <= 0) return value;
+    /**
+    * @param {T} initialValue
+    */
+    constructor(initialValue) {
+        this.value = initialValue && typeof initialValue === "object" ? createProxy(initialValue) : initialValue;
+    }
+
+    get value() {
+        if (effectStack.length <= 0) return this.#value;
 
         const currentEffect = effectStack[effectStack.length - 1];
-        subscribers.add(currentEffect.effect);
+        this.#subscribers.add(currentEffect.effect);
 
         currentEffect.dependencies.add(() => {
-            subscribers.delete(currentEffect.effect);
+            this.#subscribers.delete(currentEffect.effect);
 
             if (!is_debugger_on) return;
-            if (subscribers.size > 0) return;
+            if (this.#subscribers.size > 0) return;
             __reactivity.states.delete(this);
         });
 
         if (is_debugger_on) __reactivity.states.add(this);
 
-        return value;
+        return this.#value;
     }
 
-    /**
-    * @param {T} new_value
-    */
-    read.set = (new_value) => {
-        if (new_value === value) return true;
+    set value(new_value) {
+        if (new_value === this.#value) return true;
 
         if (typeof new_value === "object" && !new_value[$proxy]) {
-            new_value = (typeof value === "object" && value[$proxy]) ?
-                createProxy(new_value, value[$proxy].subscriberMap) :
+            new_value = (typeof this.#value === "object" && this.#value[$proxy]) ?
+                createProxy(new_value, this.#value[$proxy].subscriberMap) :
                 createProxy(new_value);
         }
 
-        value = new_value;
+        this.#value = new_value;
 
-        if (subscribers.size <= 0) {
+        if (this.#subscribers.size <= 0) {
             if (turn_on_warnings) console.warn("setting new value for State with no subscribers.\n", this);
             return true;
         }
 
-        notifySubscribers(subscribers);
+        notifySubscribers(this.#subscribers);
 
         return true;
     }
-
-    return read;
 }
 
 /**
 * @template {any} T
-* @param {() => T} callbackfn
 */
-export function createDerived(callbackfn) {
-    if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
+export class Derived {
 
     /**
-    * @type {{ () => T, set : (new_value:T) => boolean }}
+    * @type {State<T>}
     */
-    const state = createState(undefined);
+    #state = new State(undefined);
 
-    let promiseid = null; // used to keep track of the latest promise
+    /**
+    * @param {() => T | () => Promise<T>} callback
+    */
+    constructor(callback) {
+        if (typeof callback !== "function") throw new TypeError("callback is not a function");
 
-    effect(() => {
-        const value = callbackfn();
+        let promiseid = -1; // used to keep track of the latest promise
 
-        if (value instanceof Promise) {
-            promiseid = makeId(4);
-            const current_promiseid = promiseid;
+        effect(() => {
+            const value = callback();
 
-            value.then((value) => {
-                if (current_promiseid !== promiseid) return;
-                state.set(value);
-                promiseid = null;
-            })
+            if (value instanceof Promise) {
+                promiseid++;
+                const current_promiseid = promiseid;
 
-            return;
-        }
+                value.then((value) => {
+                    if (current_promiseid !== promiseid) return;
+                    this.#state.value = value;
+                    promiseid = -1;
+                })
 
-        state.set(value);
-    })
+                return;
+            }
 
-    return () => state();
+            this.#state.value = value;
+        });
+    }
+
+    get value() {
+        return this.#state.value;
+    }
 }
 
 const effectStack = [];
