@@ -101,6 +101,7 @@ export default component({
     };
 
     remove = (row) => {
+        const clone = this.data.value.slice();
         this.data.value.splice(clone.indexOf(row), 1);
     };
 
@@ -113,10 +114,14 @@ export default component({
     };
 
     swapRows = () => {
-        if (this.data.value.length < 998) return;
-        const tmp = this.data.value[1];
-        this.data.value[1] = this.data.value[998];
-        this.data.value[998] = tmp;
+        const tmp = this.data.value;
+        if (tmp < 998) return;
+
+        const a = tmp[1];
+        tmp[1] = tmp[998];
+        tmp[998] = a;
+        this.data.value = tmp;
+        console.log("SWAPPING");
     };
 
 });

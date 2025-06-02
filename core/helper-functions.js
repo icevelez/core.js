@@ -75,3 +75,50 @@ export function evaluate(expr, ctx) {
         return {};
     }
 }
+
+export class EvalContext {
+
+    /**
+     * @type {any}
+     */
+    #ctx;
+
+    /**
+    * @type {string[]}
+    */
+    #evals = [];
+
+    /**
+    * @type {Function[]}
+    */
+    #callbacks = [];
+
+    constructor(ctx) {
+        this.#ctx = ctx;
+    }
+
+    /**
+    * @param {string} expr
+    * @param {(data:any) => void} callback
+    */
+    push = (expr, callback) => {
+        this.#evals.push(expr);
+        this.#callbacks.push(callback);
+    }
+
+    run = () => {
+        try {
+            const evaluatedExpr = Function(...Object.keys(this.#ctx), `return [${this.#evals.join(",")}]`)(...Object.values(this.#ctx));
+            for (const i in evaluatedExpr) callbacks[i](evaluatedExpr[i]);
+        } catch (error) {
+            console.error(`Batch evaluation error:`, error, this.#ctx);
+        }
+    }
+
+    /**
+    * @param {any} additional_ctx
+    */
+    createChildContext = (additional_ctx) => {
+        return new EvalContext({ ...ctx, ...additional_ctx });
+    }
+}
