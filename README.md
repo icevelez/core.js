@@ -102,7 +102,7 @@ We are importing `App.js` from the `src` folder to render it to our target eleme
 
 ## 📖 Documentation
 
-You can read the full documentation of how to use this framework by opening the `handlerbar.md` file under `documentation` folder
+You can read the full documentation of how to use this framework by opening the `handlerbar.md` under `documentation` folder in this repository
 
 ---
 

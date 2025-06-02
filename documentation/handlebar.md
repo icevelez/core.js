@@ -58,7 +58,7 @@ Expressions can be embedded inside HTML attributes.
 ```html
 <ul>
   {{#each items as item, i}}
-    <li>{{ i }}. {{ item.name }}</li>
+    <li>{{ i }}. {{ item.value.name }}</li>
   {{/each}}
 </ul>
 ```
@@ -67,7 +67,7 @@ Expressions can be embedded inside HTML attributes.
 ```html
 <ul>
   {{#each users as user}}
-    <li>{{ user.name }}</li>
+    <li>{{ user.value.name }}</li>
   {{:empty}}
     <li>No users found.</li>
   {{/each}}
@@ -77,14 +77,14 @@ Expressions can be embedded inside HTML attributes.
 ### ✅ With index
 ```html
 {{#each items as product, i}}
-  <div>{{ i.value }}. {{ product.name }}</div>
+  <div>{{ i.value }}. {{ product.value.name }}</div>
 {{/each}}
 ```
 > The second alias (`i`) is optional. You can name it anything:
 >
 > Note: The `i` is a type `State<number>` it requires to use `.value`
 >
-> and Object deconstruction (`{{#each item as { name, price }}}`) is not (yet) supported.
+> Object deconstruction (`{{#each item as { name, price }}}`) is not (yet) supported.
 
 ---
 
