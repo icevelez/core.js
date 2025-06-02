@@ -62,19 +62,30 @@ export function createStartEndNode(name = 'item') {
     return [blockStart, blockEnd];
 }
 
+const evaluateCache = new Map();
+
 /**
 * @param {string} expr
 * @param {any} ctx
 * @returns {any}
 */
 export function evaluate(expr, ctx) {
+    const key = `${Object.keys(ctx).join(",")} ${expr}`;
+    let evalFunc = evaluateCache.get(key)
+    if (!evalFunc) {
+        evalFunc = Function(...Object.keys(ctx), `return (${expr});`);
+        evaluateCache.set(key, evalFunc);
+    }
+
     try {
-        return Function(...Object.keys(ctx), `return (${expr});`)(...Object.values(ctx));
+        return evalFunc(...Object.values(ctx));
     } catch (e) {
         console.error(`Evaluation error: ${expr}`, e, ctx);
         return {};
     }
 }
+
+window.evaluateCache = evaluateCache;
 
 export class EvalContext {
 

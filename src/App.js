@@ -1,6 +1,8 @@
 import { load, onMount, onUnmount } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { State } from "../core/reactivity.js";
+import { effect, State } from "../core/reactivity.js";
+
+import { Router } from "./common/router.js";
 
 import TestComponent from "./components/TestComponent.js";
 import ExampleSub from "./components/ExampleSub.js";
@@ -15,6 +17,7 @@ export default component({
     }
 }, class {
 
+    Router = Router;
     use_benchmark = new State(false);
 
     counter = new State(0);
