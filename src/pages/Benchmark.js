@@ -87,35 +87,36 @@ export default component({
     data = new State([]);
     selected = new State(null);
 
-    add = () => (this.data.value = [...this.data.value, ...buildData(1000)]);
+    add = () => this.data.value.push(...buildData(1000))
+
     clear = () => {
         this.data.value = [];
     };
+
     partialUpdate = () => {
-        for (let i = 0; i < data.length; i += 10) {
+        for (let i = 0; i < this.data.value.length; i += 10) {
             const row = this.data.value[i];
             row.label = row.label + ' !!!';
         }
     };
+
     remove = (row) => {
-        const clone = this.data.value.slice();
-        clone.splice(clone.indexOf(row), 1);
-        this.data.value = clone;
+        this.data.value.splice(clone.indexOf(row), 1);
     };
+
     run = () => {
         this.data.value = buildData(1000);
     };
+
     runLots = () => {
         this.data.value = buildData(10000);
     };
+
     swapRows = () => {
-        if (this.data.value.length > 998) {
-            const clone = this.data.value.slice();
-            const tmp = clone[1];
-            clone[1] = clone[998];
-            clone[998] = tmp;
-            this.data.value = clone;
-        }
+        if (this.data.value.length < 998) return;
+        const tmp = this.data.value[1];
+        this.data.value[1] = this.data.value[998];
+        this.data.value[998] = tmp;
     };
 
 });
