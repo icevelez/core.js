@@ -54,10 +54,12 @@ Expressions can be embedded inside HTML attributes.
 
 ## 3. Loops
 
+> Using `State<T>` variables for `{{#each}}` will require to use `.value` when accessing items in an array. Like the examples below.
+
 ### ✅ `each` block
 ```html
 <ul>
-  {{#each items as item, i}}
+  {{#each items.value as item, i}}
     <li>{{ i }}. {{ item.value.name }}</li>
   {{/each}}
 </ul>
@@ -66,7 +68,7 @@ Expressions can be embedded inside HTML attributes.
 ### ✅ `each` with empty fallback
 ```html
 <ul>
-  {{#each users as user}}
+  {{#each users.value as user}}
     <li>{{ user.value.name }}</li>
   {{:empty}}
     <li>No users found.</li>
@@ -83,8 +85,6 @@ Expressions can be embedded inside HTML attributes.
 > The second alias (`i`) is optional. You can name it anything:
 >
 > Note: The `i` is a type `State<number>` it requires to use `.value`
->
-> Object deconstruction (`{{#each item as { name, price }}}`) is not (yet) supported.
 
 ---
 
