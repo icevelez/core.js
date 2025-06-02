@@ -1,18 +1,15 @@
 import { isObject } from "./helper-functions.js";
 
-// =======================================================================
-
-const is_debugger_on = true;
-const turn_on_warnings = false;
-
-const __reactivity = {
+const reactivity = {
     states: new Set(),
     proxies: new Set(),
 }
 
-if (is_debugger_on) window.__reactivity = __reactivity;
+const dev_mode_on = Boolean(window.__corejs__);
 
-// =======================================================================
+if (window.__corejs__) {
+    window.__corejs__.reactivity = reactivity;
+}
 
 /**
 * @type {Set<Function>}
@@ -68,12 +65,12 @@ export class State {
         currentEffect.dependencies.add(() => {
             this.#subscribers.delete(currentEffect.effect);
 
-            if (!is_debugger_on) return;
+            if (!dev_mode_on) return;
             if (this.#subscribers.size > 0) return;
-            __reactivity.states.delete(this);
+            reactivity.states.delete(this);
         });
 
-        if (is_debugger_on) __reactivity.states.add(this);
+        if (dev_mode_on) reactivity.states.add(this);
 
         return this.#value;
     }
@@ -89,10 +86,7 @@ export class State {
 
         this.#value = new_value;
 
-        if (this.#subscribers.size <= 0) {
-            if (turn_on_warnings) console.warn("setting new value for State with no subscribers.\n", this);
-            return true;
-        }
+        if (this.#subscribers.size <= 0) return true;
 
         notifySubscribers(this.#subscribers);
 
@@ -247,8 +241,7 @@ function createProxy(object, subscriberMap = new Map()) {
 
         const objectProperty = Object.getOwnPropertyDescriptor(object, key);
         if (!objectProperty || !objectProperty.writable) {
-            if (turn_on_warnings)
-                console.warn(`Warning! property descriptor of "${key}" is undefined or not writable. Unable to create a proxy and using property "${key}" will not be reactive\n`, object)
+            console.warn(`Warning! property descriptor of "${key}" is undefined or not writable. Unable to create a proxy and using property "${key}" will not be reactive\n`, object)
             continue;
         }
 
@@ -271,8 +264,8 @@ function createProxy(object, subscriberMap = new Map()) {
                 if (args.length <= 0) return return_value;
                 if (setterGetterConst.includes(key) && args.length <= 1) return return_value;
 
-                if (turn_on_warnings)
-                    console.warn(`object get ${key} is a function that accepts arguments which is likely to update some state. Looping through all property of this object and notifying all effects`);
+
+                console.warn(`object get ${key} is a function that accepts arguments which is likely to update some state. Looping through all property of this object and notifying all effects`);
 
                 subscriberMap.forEach((subscribers, key) => {
                     if (!subscribers) return;
@@ -301,12 +294,12 @@ function createProxy(object, subscriberMap = new Map()) {
                 if (subscribers.size > 0) return;
                 subscriberMap.delete(key);
 
-                if (!is_debugger_on) return;
+                if (!dev_mode_on) return;
                 if (subscriberMap.size > 0) return;
-                __reactivity.proxies.delete(proxy);
+                reactivity.proxies.delete(proxy);
             };
 
-            __reactivity.proxies.add(proxy);
+            reactivity.proxies.add(proxy);
 
             currentEffect.dependencies.add(unsubscribe);
 
@@ -329,10 +322,7 @@ function createProxy(object, subscriberMap = new Map()) {
             const subscribers = subscriberMap.get(key);
             if (!subscribers) return true;
 
-            if (subscribers.size <= 0) {
-                if (turn_on_warnings) console.warn("setting new value for State with no subscribers.\n", proxy);
-                return;
-            }
+            if (subscribers.size <= 0) return true;
 
             notifySubscribers(subscribers);
             return true;

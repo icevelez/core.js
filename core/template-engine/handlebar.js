@@ -2,35 +2,19 @@ import { createStartEndNode, makeId, evaluate, removeNodesBetween, newSetFunc } 
 import { core_context, onMountQueue, onUnmountQueue, pushPopMountUnmountSet } from "../internal-core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
 
-const is_dev_mode = true;
-
 /**
-* @type {Record<string, Map<string, (startNode:Node, endNode:Node, ctx:any) => void>>}
+* @type {Map<string, (startNode:Node, endNode:Node, ctx:any) => void>}
 */
-const processedBlocks = {
-    await: new Map(),
-    if: new Map(),
-    each: new Map(),
-    component: new Map(),
-}
+const processedBlocks = new Map();
 
 /**
 * @type {Map<number, Record<string, Function>>}
 */
 const imported_components = new Map();
 
-const __blocks = {
-    await: [],
-    if: [],
-    each: [],
-}
-
-const __marker_id_to_block = {};
-
-if (is_dev_mode) {
-    window.__blocks = __blocks;
-    window.__processedBlocks = processedBlocks;
-    window.__marker_id_to_block = __marker_id_to_block;
+if (window.__corejs__) {
+    window.__corejs__.processedBlocks = processedBlocks;
+    window.__corejs__.imported_components = imported_components;
 }
 
 /**
@@ -105,9 +89,7 @@ function processAllDirectiveBlocks(template, directive, processBlocks) {
 
         blocks[i] = start + preprocessTemplates(block) + `{{/${directive}}}`;
 
-        if (is_dev_mode) __blocks[directive].push(blocks[i]);
-
-        processedBlocks[directive].set(marker_id, processBlocks(blocks[i]));
+        processedBlocks.set(marker_id, processBlocks(blocks[i]));
     }
 
     return template;
@@ -128,7 +110,7 @@ function processAllComponents(template, imported_components_id, processComponent
 
         const marker_id = `${directive}-${makeId(8)}`;
         const component = { import_id: imported_components_id, tag, attrStr, slot_content };
-        processedBlocks[directive].set(marker_id, processComponent(component));
+        processedBlocks.set(marker_id, processComponent(component));
         return `<div data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
     })
 
@@ -285,7 +267,7 @@ function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
         const process_type = node.dataset.directive;
         const marker_id = node.dataset.markerId;
 
-        const func = processedBlocks[process_type].get(marker_id);
+        const func = processedBlocks.get(marker_id);
         if (!func) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
 
         const [nodeStart, nodeEnd] = createStartEndNode(process_type);
