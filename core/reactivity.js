@@ -78,7 +78,7 @@ export class State {
     set value(new_value) {
         if (new_value === this.#value) return true;
 
-        if (typeof new_value === "object" && !new_value[$proxy]) {
+        if (isObject(new_value) && !new_value[$proxy]) {
             new_value = (typeof this.#value === "object" && this.#value[$proxy]) ?
                 createProxy(new_value, this.#value[$proxy].subscriberMap) :
                 createProxy(new_value);

@@ -4,22 +4,22 @@ import { State } from "../core/reactivity.js";
 
 import TestComponent from "./components/TestComponent.js";
 import ExampleSub from "./components/ExampleSub.js";
+import Benchmark from "./pages/Benchmark.js";
 
 export default component({
     template: await load("src/App.html"),
     components: {
         TestComponent,
         ExampleSub,
+        Benchmark,
     }
 }, class {
 
-    outer = true;
-    inner = false;
-    inner_inner = true;
-    inner_inner_else = true;
-    outer_sibling = true;
+    use_benchmark = new State(false);
 
-    data = new State({ deep: { deeper: { deepest: { user: "User!", counter: 0, names: ['ice', 'ian', 'takeru', 'piox'].map(i => ({ name: i })) } } } });
+    counter = new State(0);
+    user = new State("User!");
+    names = new State(['ice', 'ian', 'takeru', 'piox']);
 
     constructor() {
         onMount(() => {
@@ -34,7 +34,7 @@ export default component({
     addName = (event) => {
         if (event.key !== "Enter") return;
 
-        this.data.value.deep.deeper.deepest.names.push({ name: event.target.value })
+        this.names.value.push(event.target.value)
         event.target.value = "";
     }
 });

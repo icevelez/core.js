@@ -1,39 +1,26 @@
-<h1>Greetings {{ data.value.deep.deeper.deepest.user }}</h1>
-<div>
-    <p>Counter: {{ data.value.deep.deeper.deepest.counter }}</p>
-    <button onclick="{{ () => data.value.deep.deeper.deepest.counter++ }}">Click Me!</button>
-    <input type="text" bind:value="data.value.deep.deeper.deepest.user">
+<div style="width: 100%; display: flex; justify-content: center; padding: 1rem;">
+    <button onclick="{{ () => use_benchmark.value = !use_benchmark.value }}">show benchmark</button>
 </div>
-<br/>
-<input type="text" onkeypress="{{ addName }}">
-<br/>
-<input type="text" bind:value="data.value.deep.deeper.deepest.names[0].name">
-    {{#each data.value.deep.deeper.deepest.names as name, i}}
-        <h1>{{ i.value+1}}. {{name.name.toUpperCase() }}</h1>
-        <button onclick="{{ () => { console.log(i.value); data.value.deep.deeper.deepest.names.splice(i.value, 1) } }}">Delete</button>
-    {{:empty}}
-        <h1>Empty list</h1>
-    {{/each}}
-<br/>
-<TestComponent/>
-<ExampleSub/>
-
-{{#if outer}}
-    <h1>Outer</h1>
-    {{#if inner}}
-        <h1>Inner</h1>
-        {{#if inner_inner}}
-            <h1>Inner inner</h1>
-        {{/if}}
-    {{:else}}
-        <h1>Inner else</h1>
-        {{#if inner_inner_else}}
-            <h1>Inner inner else</h1>
-        {{/if}}
-    {{/if}}
-{{/if}}
-
-
-{{#if outer_sibling}}
-    <h1>Outer sibling</h1>
+{{#if use_benchmark.value}}
+    <Benchmark/>
+{{:else}}
+    <h1>Greetings {{ user.value }}</h1>
+    <div>
+        <p>Counter: {{ counter.value }}</p>
+        <button onclick="{{ () => counter.value++ }}">Click Me!</button>
+        <input type="text" bind:value="user.value">
+    </div>
+    <br/>
+    <input type="text" onkeypress="{{ addName }}">
+    <br/>
+    <input type="text" bind:value="names.value[0]">
+        {{#each names.value as name, i}}
+            <h1>{{ i.value+1}}. {{name.value.toUpperCase() }}</h1>
+            <button onclick="{{ () => { console.log(i.value); names.value.splice(i.value, 1) } }}">Delete</button>
+        {{:empty}}
+            <h1>Empty list</h1>
+        {{/each}}
+    <br/>
+    <TestComponent/>
+    <ExampleSub/>
 {{/if}}

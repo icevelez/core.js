@@ -81,7 +81,7 @@ function processAllDirectiveBlocks(template, directive, processBlocks) {
     for (const i in blocks) {
         const marker_id = `${directive}-${makeId(8)}`;
 
-        template = template.replace(blocks[i], `<div data-directive="${directive}" data-marker-id="${marker_id}"></div>`)
+        template = template.replace(blocks[i], `<template data-directive="${directive}" data-marker-id="${marker_id}"></template>`)
 
         const start = blocks[i].match(new RegExp(`\\{\\{#${directive}\\s+([^\\}]+)\\}\\}`))[0];
         const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
@@ -105,13 +105,13 @@ function processAllComponents(template, imported_components_id, processComponent
     const directive = "component";
 
     template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
-        if (match.startsWith("<Core:slot")) return `<div data-directive="slot"></div>`;
-        if (match.startsWith("<Core:component")) return `<div data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</div>`;
+        if (match.startsWith("<Core:slot")) return `<template data-directive="slot"></template>`;
+        if (match.startsWith("<Core:component")) return `<template data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</template>`;
 
         const marker_id = `${directive}-${makeId(8)}`;
         const component = { import_id: imported_components_id, tag, attrStr, slot_content };
         processedBlocks.set(marker_id, processComponent(component));
-        return `<div data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></div>`;
+        return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
     })
 
     return template;
@@ -167,12 +167,12 @@ export function component(options, Context = class { }) {
 * @param {Function} render_slot_callbackfn
 */
 function processTemplate(template, ctx, render_slot_callbackfn) {
-    const div = document.createElement("div");
-    div.innerHTML = template;
+    const templateElement = document.createElement("template");
+    templateElement.innerHTML = template;
 
     const fragment = document.createDocumentFragment();
 
-    for (const childNode of Array.from(div.childNodes)) {
+    for (const childNode of Array.from(templateElement.content.childNodes)) {
         processNode(childNode, fragment, ctx, render_slot_callbackfn);
     }
 
@@ -493,20 +493,28 @@ export function processEachBlock(eachBlock) {
                 currentNode = nodeEnd;
                 newRenderedBlocks.push(block);
 
+                console.log("blockDatas zero", newRenderedBlocks, renderedBlocks);
                 discardUnusedBlocks(newRenderedBlocks);
                 return;
             }
 
             for (const index in blockDatas) {
-                const blockData = blockDatas[index];
-                const existingBlockIndex = renderedBlocks.findIndex((block) => block.blockData === blockData);
+                const blockData = {
+                    get value() {
+                        return blockDatas[index]
+                    },
+                    set value(new_value) {
+                        blockDatas[index] = new_value;
+                        return true;
+                    }
+                }
 
                 /**
-                * @type {{ nodeStart:Node, nodeEnd:Node, blockData:any, index : State<number>, unmount:Function }}
+                * @type {{ nodeStart:Node, nodeEnd:Node, blockData:{ value : any }, index : State<number>, unmount:Function }}
                 */
-                let block = renderedBlocks[existingBlockIndex];
+                let block = renderedBlocks[index];
 
-                if (!block) {
+                if (!block || !block.index) {
                     const onUnmountSet = newSetFunc();
                     const onMountSet = newSetFunc();
                     let cleanupEffect;
@@ -529,7 +537,10 @@ export function processEachBlock(eachBlock) {
 
                     block = { nodeStart, nodeEnd, blockData, index: new State(parseInt(index)), unmount };
 
-                    const childCtx = { ...ctx, [eachConfig.blockVar]: blockData };
+                    const childCtx = {
+                        ...ctx,
+                        [eachConfig.blockVar]: blockData,
+                    }
 
                     if (eachConfig.indexVar) {
                         childCtx[eachConfig.indexVar] = { get value() { return block.index.value } };
@@ -551,6 +562,10 @@ export function processEachBlock(eachBlock) {
                             core_context.onUnmountSet.add(unmount)
                         }
                     });
+                }
+
+                if (block.index && blockData.value != block.blockData.value) {
+                    block.blockData.value = blockData.value;
                 }
 
                 newRenderedBlocks.push(block);
