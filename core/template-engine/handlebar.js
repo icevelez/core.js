@@ -12,9 +12,15 @@ const processedBlocks = new Map();
 */
 const imported_components = new Map();
 
+/**
+ * @type {Map<string, HTMLTemplateElement>}
+ */
+const childNodesCache = new Map();
+
 if (window.__corejs__) {
     window.__corejs__.processedBlocks = processedBlocks;
     window.__corejs__.imported_components = imported_components;
+    window.__corejs__.childNodesCache = childNodesCache;
 }
 
 /**
@@ -167,16 +173,108 @@ export function component(options, Context = class { }) {
 * @param {Function} render_slot_callbackfn
 */
 function processTemplate(template, ctx, render_slot_callbackfn) {
-    const templateElement = document.createElement("template");
-    templateElement.innerHTML = template;
+
+    let childNodes = childNodesCache.get(template);
+
+    if (!childNodes) {
+        const templateElement = document.createElement("template");
+        templateElement.innerHTML = template;
+        childNodes = Array.from(templateElement.content.childNodes);
+        for (const childNode of childNodes) {
+            processStaticNodes(childNode); // add metadata to static DOM nodes to skip "processNode"
+        }
+        childNodesCache.set(template, childNodes);
+    }
 
     const fragment = document.createDocumentFragment();
 
-    for (const childNode of Array.from(templateElement.content.childNodes)) {
-        processNode(childNode, fragment, ctx, render_slot_callbackfn);
+    for (const childNode of childNodes) {
+        processNode(childNode.cloneNode(true), fragment, ctx, render_slot_callbackfn);
     }
 
     return fragment;
+}
+
+/**
+ * @param {Node} node
+ */
+function processStaticNodes(node) {
+    const isText = node.nodeType === Node.TEXT_NODE;
+
+    if (isText) {
+        const expression = node.textContent;
+        const parts = expression.split(/({{[^}]+}})/g);
+        if (parts.length > 0) return;
+        node.dataset.__is_static__ = true;
+        console.log("is static", node);
+        return;
+    }
+
+    if (node.nodeType === Node.COMMENT_NODE) {
+        node.dataset.__is_static__ = true;
+        console.log("is static", node);
+        return;
+    }
+
+    const isSlotNode = (node) => Boolean(node.dataset.directive === "slot");
+    const isCoreComponentNode = (node) => Boolean(node.dataset.directive === "core-component");
+    const isMarkedNode = (node) => Boolean(node.dataset.directive && node.dataset.markerId)
+
+    if (isSlotNode(node)) {
+        return;
+    }
+
+    if (isCoreComponentNode(node)) {
+        return;
+    }
+
+    if (isMarkedNode(node)) {
+        return;
+    }
+
+    let is_static = true;
+
+    for (const attr of node.attributes) {
+        const attrName = attr.name.toLowerCase();
+        const attrValue = attr.value;
+
+        if (attrName.startsWith('use:')) {
+            is_static = false;
+            continue;
+        }
+
+        if (attrName.startsWith('bind:')) {
+            is_static = false;
+            continue;
+        }
+
+        if (attrName.startsWith('on')) {
+            is_static = false;
+            continue;
+        }
+
+        if (attr.value.includes('{{')) {
+            is_static = false;
+            continue;
+        }
+
+        let expr;
+
+        attrValue.replace(/{{\s*(.+?)\s*}}/g, (_, e) => expr = e);
+
+        if (expr) {
+            is_static = false;
+            continue;
+        }
+    };
+
+    for (const childNode of Array.from(node.childNodes)) {
+        processStaticNodes(childNode);
+    }
+
+    if (!is_static) return;
+
+    node.dataset.__is_static__ = true;
 }
 
 /**
@@ -187,6 +285,17 @@ function processTemplate(template, ctx, render_slot_callbackfn) {
 * @param {Function} render_slot_callbackfn
 */
 function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
+    if (node && node.dataset && node.dataset.__is_static__) {
+
+        for (const childNode of Array.from(node.childNodes)) {
+            processNode(childNode, node, ctx);
+        }
+
+        delete node.dataset.__is_static__;
+        destinationNode.append(node);
+        return;
+    }
+
     const isText = node.nodeType === Node.TEXT_NODE;
 
     if (isText) {

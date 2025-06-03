@@ -1,7 +1,7 @@
 // This file exists so I don't have to export this internal variable inside "core.js"
 
-const dev_mode_on = false;
-if (dev_mode_on) window.__corejs__ = { version: "0.1.4" }
+const dev_mode_on = true;
+if (dev_mode_on) window.__corejs__ = { version: "0.1.6" }
 
 export const core_context = { is_mounted_to_the_DOM: false, onMountSet: new Set(), onUnmountSet: new Set() };
 

@@ -82,7 +82,12 @@ export default component({
     components: {}
 }, class {
 
-    constructor() { }
+    constructor() {
+        // setInterval(() => {
+        //     this.runLots();
+        //     console.log("X");
+        // }, 1000)
+    }
 
     data = new State([]);
     selected = new State(null);
