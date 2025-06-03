@@ -101,8 +101,7 @@ export default component({
     };
 
     remove = (row) => {
-        const clone = this.data.value.slice();
-        this.data.value.splice(clone.indexOf(row), 1);
+        this.data.value.splice(this.data.value.indexOf(row), 1);
     };
 
     run = () => {
@@ -121,7 +120,6 @@ export default component({
         tmp[1] = tmp[998];
         tmp[998] = a;
         this.data.value = tmp;
-        console.log("SWAPPING");
     };
 
 });

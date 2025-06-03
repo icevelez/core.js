@@ -1,4 +1,10 @@
-const use_comment = true; // used to debug anchor points for "if", "each", "await"
+const use_comment = Boolean(window.__corejs__);                     // used to debug anchor points for "if", "each", "await"
+
+const evaluationCache = new Map();
+
+if (window.__corejs__) {
+    window.__corejs__.evaluationCache = evaluationCache;
+}
 
 /**
 * @param {any} object
@@ -62,8 +68,6 @@ export function createStartEndNode(name = 'item') {
     return [blockStart, blockEnd];
 }
 
-const evaluateCache = new Map();
-
 /**
 * @param {string} expr
 * @param {any} ctx
@@ -71,10 +75,10 @@ const evaluateCache = new Map();
 */
 export function evaluate(expr, ctx) {
     const key = `${Object.keys(ctx).join(",")} ${expr}`;
-    let evalFunc = evaluateCache.get(key)
+    let evalFunc = evaluationCache.get(key)
     if (!evalFunc) {
         evalFunc = Function(...Object.keys(ctx), `return (${expr});`);
-        evaluateCache.set(key, evalFunc);
+        evaluationCache.set(key, evalFunc);
     }
 
     try {
@@ -84,8 +88,6 @@ export function evaluate(expr, ctx) {
         return {};
     }
 }
-
-window.evaluateCache = evaluateCache;
 
 export class EvalContext {
 
