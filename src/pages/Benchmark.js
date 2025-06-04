@@ -83,10 +83,10 @@ export default component({
 }, class {
 
     constructor() {
-        // setInterval(() => {
-        //     this.runLots();
-        //     console.log("X");
-        // }, 1000)
+        setTimeout(() => {
+            this.runLots();
+            console.log("X");
+        }, 2000)
     }
 
     data = new State([]);

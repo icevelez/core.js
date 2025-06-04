@@ -17,10 +17,16 @@ const imported_components = new Map();
  */
 const childNodesCache = new Map();
 
+/**
+* @type {WeakMap<Node, ((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]>}
+*/
+const cacheNodeProcesses = new WeakMap();
+
 if (window.__corejs__) {
     window.__corejs__.processedBlocks = processedBlocks;
     window.__corejs__.imported_components = imported_components;
     window.__corejs__.childNodesCache = childNodesCache;
+    window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
 }
 
 /**
@@ -181,7 +187,7 @@ function processTemplate(template, ctx, render_slot_callbackfn) {
         templateElement.innerHTML = template;
         childNodes = Array.from(templateElement.content.childNodes);
         for (const childNode of childNodes) {
-            processStaticNodes(childNode); // add metadata to static DOM nodes to skip "processNode"
+            preprocessNode(childNode);
         }
         childNodesCache.set(template, childNodes);
     }
@@ -189,144 +195,79 @@ function processTemplate(template, ctx, render_slot_callbackfn) {
     const fragment = document.createDocumentFragment();
 
     for (const childNode of childNodes) {
-        processNode(childNode.cloneNode(true), fragment, ctx, render_slot_callbackfn);
+        const processes = cacheNodeProcesses.get(childNode) || [];
+        processNode(processes, childNode.cloneNode(), Array.from(childNode.childNodes), fragment, ctx, render_slot_callbackfn);
     }
 
     return fragment;
 }
 
 /**
- * @param {Node} node
- */
-function processStaticNodes(node) {
-    const isText = node.nodeType === Node.TEXT_NODE;
-
-    if (isText) {
-        const expression = node.textContent;
-        const parts = expression.split(/({{[^}]+}})/g);
-        if (parts.length > 0) return;
-        node.dataset.__is_static__ = true;
-        console.log("is static", node);
-        return;
-    }
-
-    if (node.nodeType === Node.COMMENT_NODE) {
-        node.dataset.__is_static__ = true;
-        console.log("is static", node);
-        return;
-    }
-
-    const isSlotNode = (node) => Boolean(node.dataset.directive === "slot");
-    const isCoreComponentNode = (node) => Boolean(node.dataset.directive === "core-component");
-    const isMarkedNode = (node) => Boolean(node.dataset.directive && node.dataset.markerId)
-
-    if (isSlotNode(node)) {
-        return;
-    }
-
-    if (isCoreComponentNode(node)) {
-        return;
-    }
-
-    if (isMarkedNode(node)) {
-        return;
-    }
-
-    let is_static = true;
-
-    for (const attr of node.attributes) {
-        const attrName = attr.name.toLowerCase();
-        const attrValue = attr.value;
-
-        if (attrName.startsWith('use:')) {
-            is_static = false;
-            continue;
-        }
-
-        if (attrName.startsWith('bind:')) {
-            is_static = false;
-            continue;
-        }
-
-        if (attrName.startsWith('on')) {
-            is_static = false;
-            continue;
-        }
-
-        if (attr.value.includes('{{')) {
-            is_static = false;
-            continue;
-        }
-
-        let expr;
-
-        attrValue.replace(/{{\s*(.+?)\s*}}/g, (_, e) => expr = e);
-
-        if (expr) {
-            is_static = false;
-            continue;
-        }
-    };
-
-    for (const childNode of Array.from(node.childNodes)) {
-        processStaticNodes(childNode);
-    }
-
-    if (!is_static) return;
-
-    node.dataset.__is_static__ = true;
-}
-
-/**
 *
-* @param {ChildNode} node
+* @param {Node} node
 * @param {DocumentFragment} destinationNode
 * @param {Record<string, any>} ctx
 * @param {Function} render_slot_callbackfn
 */
-function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
-    if (node && node.dataset && node.dataset.__is_static__) {
-
-        for (const childNode of Array.from(node.childNodes)) {
-            processNode(childNode, node, ctx);
-        }
-
-        delete node.dataset.__is_static__;
-        destinationNode.append(node);
-        return;
-    }
-
+function preprocessNode(node) {
     const isText = node.nodeType === Node.TEXT_NODE;
+
+    /**
+    * @type {((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]}
+    */
+    const processes = [];
 
     if (isText) {
         const expression = node.textContent;
         const regex = /{{\s*([^#\/][^}]*)\s*}}/g;
         const parts = expression.split(/({{[^}]+}})/g);
+        const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
 
-        if (parts.length <= 1) {
-            effect(() => {
-                node.textContent = expression.replace(regex, (_, expr) => evaluate(expr, ctx));
-            })
-            destinationNode.appendChild(node)
+        if (!has_handlebars) {
+            processes.push((node, destinationNode, _, _2) => {
+                destinationNode.appendChild(node)
+            });
+            cacheNodeProcesses.set(node, processes);
             return;
         }
 
-        node.textContent = "";
+        if (parts.length <= 1) {
 
-        for (const part of parts) {
-            const textNode = document.createTextNode("");
-            effect(() => {
-                textNode.textContent = part.replace(regex, (_, expr) => evaluate(expr, ctx));
-            })
-            destinationNode.append(textNode)
-        };
+            processes.push((node, destinationNode, ctx, _) => {
+                effect(() => {
+                    node.textContent = expression.replace(regex, (_, expr) => evaluate(expr, ctx));
+                })
+                destinationNode.appendChild(node)
+            });
 
-        node.remove();
+            cacheNodeProcesses.set(node, processes);
+            return;
+        }
+
+        processes.push((node, destinationNode, ctx, _) => {
+            node.textContent = "";
+
+            for (const part of parts) {
+
+                const textNode = document.createTextNode("");
+                effect(() => {
+                    textNode.textContent = part.replace(regex, (_, expr) => evaluate(expr, ctx));
+                })
+                destinationNode.append(textNode)
+            };
+
+            node.remove();
+        });
+
+        cacheNodeProcesses.set(node, processes);
         return;
     }
 
     if (node.nodeType === Node.COMMENT_NODE) {
-        destinationNode.appendChild(node);
+        processes.push((node, destinationNode, _, _2) => {
+            destinationNode.appendChild(node);
+        });
+        cacheNodeProcesses.set(node, processes);
         return;
     }
 
@@ -335,60 +276,69 @@ function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
     const isMarkedNode = (node) => Boolean(node.dataset.directive && node.dataset.markerId)
 
     if (isSlotNode(node)) {
-        node.remove();
-        if (!render_slot_callbackfn) return;
-        destinationNode.append(render_slot_callbackfn());
+        processes.push((node, destinationNode, _, render_slot_callbackfn) => {
+            node.remove();
+            if (!render_slot_callbackfn) return;
+            destinationNode.append(render_slot_callbackfn());
+        });
+        cacheNodeProcesses.set(node, processes);
         return;
     }
 
     if (isCoreComponentNode(node)) {
-        node.remove();
-        const componentName = node.getAttribute("default");
-        const component = ctx[componentName]?.default;
-        node.removeAttribute("default");
-        node.removeAttribute("data-directive");
+        processes.push((node, destinationNode, ctx, _) => {
+            node.remove();
+            const componentName = node.getAttribute("default");
+            const component = ctx[componentName]?.default;
+            node.removeAttribute("default");
+            node.removeAttribute("data-directive");
 
-        if (!component) {
-            console.error(`Core component "${componentName}" is undefined. Kindly check if the component has a default export`);
-            return;
-        }
+            if (!component) {
+                console.error(`Core component "${componentName}" is undefined. Kindly check if the component has a default export`);
+                return;
+            }
 
-        const attrs = {};
+            const attrs = {};
 
-        for (const attr of node.attributes) {
-            const attrName = attr.name;
-            const attrValue = attr.value;
-            attrs[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
-        }
+            for (const attr of node.attributes) {
+                const attrName = attr.name;
+                const attrValue = attr.value;
+                attrs[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
+            }
 
-        const content = node.innerHTML;
+            const content = node.innerHTML;
 
-        if (content) {
-            const renderSlotCallbackfn = () => processTemplate(content, ctx);
-            destinationNode.append(component(attrs, renderSlotCallbackfn));
-        } else {
-            destinationNode.append(component(attrs));
-        }
+            if (content) {
+                const renderSlotCallbackfn = () => processTemplate(content, ctx);
+                destinationNode.append(component(attrs, renderSlotCallbackfn));
+            } else {
+                destinationNode.append(component(attrs));
+            }
+        })
+        cacheNodeProcesses.set(node, processes);
         return;
     }
 
     if (isMarkedNode(node)) {
-        const process_type = node.dataset.directive;
-        const marker_id = node.dataset.markerId;
+        processes.push((node, destinationNode, ctx, _) => {
+            const process_type = node.dataset.directive;
+            const marker_id = node.dataset.markerId;
 
-        const func = processedBlocks.get(marker_id);
-        if (!func) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
+            const func = processedBlocks.get(marker_id);
+            if (!func) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
 
-        const [nodeStart, nodeEnd] = createStartEndNode(process_type);
-        const fragment = document.createDocumentFragment();
+            const [nodeStart, nodeEnd] = createStartEndNode(process_type);
+            const fragment = document.createDocumentFragment();
 
-        fragment.append(nodeStart);
-        fragment.append(nodeEnd);
+            fragment.append(nodeStart);
+            fragment.append(nodeEnd);
 
-        destinationNode.append(fragment);
-        node.remove();
+            destinationNode.append(fragment);
+            node.remove();
 
-        func(nodeStart, nodeEnd, ctx);
+            func(nodeStart, nodeEnd, ctx);
+        })
+        cacheNodeProcesses.set(node, processes);
         return;
     }
 
@@ -397,98 +347,127 @@ function processNode(node, destinationNode, ctx, render_slot_callbackfn) {
         const attrValue = attr.value;
 
         if (attrName.startsWith('use:')) {
-            const attr = attrName.slice(4);
-            const func = evaluate(`${attr}`, ctx);
-            const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            processes.push((node, _, ctx, _2) => {
+                const attr = attrName.slice(4);
+                const func = evaluate(`${attr}`, ctx);
+                const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
 
-            const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-            const onMountSet = onMountQueue[onMountQueue.length - 1];
+                const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+                const onMountSet = onMountQueue[onMountQueue.length - 1];
 
-            onMountSet.add(() => {
-                const cleanup = func(node, evaluate(rawExpr, ctx));
-                if (typeof cleanup === "function") onUnmountSet.add(cleanup);
-            });
+                onMountSet.add(() => {
+                    const cleanup = func(node, evaluate(rawExpr, ctx));
+                    if (typeof cleanup === "function") onUnmountSet.add(cleanup);
+                });
 
-            node.removeAttribute(attrName); // Clean up raw attribute
+                node.removeAttribute(attr.name); // Clean up raw attribute
+            })
             continue;
         }
 
         if (attrName.startsWith('bind:')) {
-            const attr = attrName.slice(5);
-            const type = node.type;
-            const tagname = node.tagName;
-            const eventDic = {
-                "checked": type === "date" ? "change" : "click",
-                "value": tagname === "select" ? "change" : "input",
-            };
-
-            const binding = evaluate(`(value) => ${attrValue} = value`, ctx);
-            const eventListener = (event) => {
-                const type = event.target.type;
-
-                if (type === "date") {
-                    binding(new Date(event.target.value))
-                    return;
-                }
-
-                binding(event.target[attr])
-            };
-
-            const event = eventDic[attr] ? eventDic[attr] : attr;
-
-            node.addEventListener(event, eventListener);
-
-            effect(() => {
+            processes.push((node, _, ctx, _2) => {
+                const attr = attrName.slice(5);
                 const type = node.type;
+                const tagname = node.tagName;
+                const eventDic = {
+                    "checked": type === "date" ? "change" : "click",
+                    "value": tagname === "select" ? "change" : "input",
+                };
 
-                if (type === "date") {
-                    const date = evaluate(attrValue, ctx);
-                    if (!(date instanceof Date)) return;
-                    node.value = date.toISOString().split('T')[0];
-                    return;
-                }
+                const binding = evaluate(`(value) => ${attrValue} = value`, ctx);
+                const eventListener = (event) => {
+                    const type = event.target.type;
 
-                node[attr] = evaluate(attrValue, ctx);
+                    if (type === "date") {
+                        binding(new Date(event.target.value))
+                        return;
+                    }
+
+                    binding(event.target[attr])
+                };
+
+                const event = eventDic[attr] ? eventDic[attr] : attr;
+
+                node.addEventListener(event, eventListener);
+
+                effect(() => {
+                    const type = node.type;
+
+                    if (type === "date") {
+                        const date = evaluate(attrValue, ctx);
+                        if (!(date instanceof Date)) return;
+                        node.value = date.toISOString().split('T')[0];
+                        return;
+                    }
+
+                    node[attr] = evaluate(attrValue, ctx);
+                })
+
+                const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+
+                unmountSet.add(() => {
+                    node.removeEventListener('click', eventListener)
+                });
+
+                node.removeAttribute(attrName); // Clean up raw attribute
             })
-
-            const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-
-            unmountSet.add(() => {
-                node.removeEventListener('click', eventListener)
-            });
-
-            node.removeAttribute(attrName); // Clean up raw attribute
             continue;
         }
 
-        if (!attr.value.includes('{{')) continue;
+        if (!attrValue.includes('{{')) continue;
 
         if (attrName.startsWith('on')) {
+            processes.push((node, _, ctx, _2) => {
+                const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
 
-            const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+                node.removeAttribute(attr.name); // Clean up raw attribute
 
-            node.removeAttribute(attr.name); // Clean up raw attribute
-
-            effect(() => {
-                const func = evaluate(rawExpr, ctx);
-                node.removeEventListener(attrName.slice(2), func);
-                node.addEventListener(attrName.slice(2), func);
+                effect(() => {
+                    const func = evaluate(rawExpr, ctx);
+                    node.removeEventListener(attrName.slice(2), func);
+                    node.addEventListener(attrName.slice(2), func);
+                })
             })
-
             continue;
         }
 
-        effect(() => {
-            const newValue = attrValue.replace(/{{\s*(.+?)\s*}}/g, (_, expr) => evaluate(expr, ctx));
-            node.setAttribute(attr.name, newValue);
+        processes.push((node, _, ctx, _2) => {
+            effect(() => {
+                const newValue = attrValue.replace(/{{\s*(.+?)\s*}}/g, (_, expr) => evaluate(expr, ctx));
+                node.setAttribute(attr.name, newValue);
+            })
         })
     };
 
     for (const childNode of Array.from(node.childNodes)) {
-        processNode(childNode, node, ctx);
+        preprocessNode(childNode);
     }
 
-    destinationNode.append(node);
+    processes.push((node, destinationNode, _, _2) => {
+        destinationNode.append(node);
+    })
+
+    cacheNodeProcesses.set(node, processes);
+}
+
+/**
+*
+* @param {((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]} processes
+* @param {Node} node
+* @param {DocumentFragment} destinationNode
+* @param {Record<string, any>} ctx
+* @param {Function} render_slot_callbackfn
+*/
+function processNode(processes, node, childNodes, destinationNode, ctx, render_slot_callbackfn) {
+    for (const process of processes) {
+        process(node, destinationNode, ctx, render_slot_callbackfn)
+    }
+
+    for (const childNode of childNodes) {
+        const processes = cacheNodeProcesses.get(childNode) || [];
+        processNode(processes, childNode.cloneNode(), Array.from(childNode.childNodes), node, ctx, render_slot_callbackfn);
+    }
 }
 
 /**
