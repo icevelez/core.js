@@ -420,6 +420,7 @@ function processEachBlock(eachBlock) {
 
                 nodeEnd.remove();
                 renderBlock.unmount();
+                renderBlock.index = null;
             }
 
             renderedBlocks = newRenderedBlocks;
@@ -533,7 +534,7 @@ function processEachBlock(eachBlock) {
                 currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
                 currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
 
-                block = { nodeStart, nodeEnd, blockData, index: new State(parseInt(index)), unmount, v: blockDatas[index] };
+                block = { nodeStart, nodeEnd, blockData, index: new State(parseInt(index)), unmount };
                 newRenderedBlocks.push(block);
 
                 const childCtx = {
