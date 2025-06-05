@@ -35,6 +35,43 @@ export function makeId(length) {
     return result;
 }
 
+
+/**
+* Regex alone mismatch nested `{{#directive}}` control flow so to fix that issue, this function was created to properly get the outermost handlebar block
+* @param {string} template
+* @param {string} openTag
+* @param {string} clsoeTag
+*/
+export function parseOuterBlocks(template, openTag, closeTag) {
+
+    const blocks = [];
+    let i = 0;
+    let depth = 0;
+    let start = -1;
+
+    while (i < template.length) {
+        if (template.slice(i, i + openTag.length) === openTag) {
+            if (depth === 0) start = i;
+            depth++;
+            i += openTag.length;
+            continue;
+        }
+        if (template.slice(i, i + closeTag.length) === closeTag) {
+            depth--;
+            if (depth === 0 && start !== -1) {
+                const block = template.slice(start, i + closeTag.length);
+                blocks.push(block);
+                start = -1;
+            }
+            i += closeTag.length;
+            continue;
+        }
+        i++;
+    }
+
+    return blocks;
+}
+
 /**
 *
 * @param {Node} startNode
@@ -47,16 +84,6 @@ export function removeNodesBetween(startNode, endNode) {
         node.parentNode.removeChild(node);
         node = next;
     }
-}
-
-/**
-* @param {Node} targetElement
-* @param {string} text
-*/
-export function insertTextAfter(targetElement, text) {
-    const textNode = document.createTextNode(text);
-    const parent = targetElement.parentNode;
-    if (parent) parent.insertBefore(textNode, targetElement.nextSibling);
 }
 
 let commentCounter = 1;
@@ -86,52 +113,5 @@ export function evaluate(expr, ctx) {
     } catch (e) {
         console.error(`Evaluation error: ${expr}`, e, ctx);
         return {};
-    }
-}
-
-export class EvalContext {
-
-    /**
-     * @type {any}
-     */
-    #ctx;
-
-    /**
-    * @type {string[]}
-    */
-    #evals = [];
-
-    /**
-    * @type {Function[]}
-    */
-    #callbacks = [];
-
-    constructor(ctx) {
-        this.#ctx = ctx;
-    }
-
-    /**
-    * @param {string} expr
-    * @param {(data:any) => void} callback
-    */
-    push = (expr, callback) => {
-        this.#evals.push(expr);
-        this.#callbacks.push(callback);
-    }
-
-    run = () => {
-        try {
-            const evaluatedExpr = Function(...Object.keys(this.#ctx), `return [${this.#evals.join(",")}]`)(...Object.values(this.#ctx));
-            for (const i in evaluatedExpr) callbacks[i](evaluatedExpr[i]);
-        } catch (error) {
-            console.error(`Batch evaluation error:`, error, this.#ctx);
-        }
-    }
-
-    /**
-    * @param {any} additional_ctx
-    */
-    createChildContext = (additional_ctx) => {
-        return new EvalContext({ ...ctx, ...additional_ctx });
     }
 }

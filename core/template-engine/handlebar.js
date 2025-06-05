@@ -1,4 +1,4 @@
-import { createStartEndNode, makeId, evaluate, removeNodesBetween, newSetFunc } from "../helper-functions.js";
+import { createStartEndNode, makeId, evaluate, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../helper-functions.js";
 import { core_context, onMountQueue, onUnmountQueue, pushPopMountUnmountSet } from "../internal-core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
 
@@ -27,124 +27,6 @@ if (window.__corejs__) {
     window.__corejs__.imported_components = imported_components;
     window.__corejs__.childNodesCache = childNodesCache;
     window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
-}
-
-/**
-* Regex alone mismatch nest `{{#directive}}` syntax so to fix that issue, this function was created to properly get the outermost handlebar block
-* @param {string} template
-* @param {string} openTag
-* @param {string} clsoeTag
-*/
-function parseOuterBlocks(template, openTag, closeTag) {
-
-    const blocks = [];
-    let i = 0;
-    let depth = 0;
-    let start = -1;
-
-    while (i < template.length) {
-        if (template.slice(i, i + openTag.length) === openTag) {
-            if (depth === 0) start = i;
-            depth++;
-            i += openTag.length;
-            continue;
-        }
-        if (template.slice(i, i + closeTag.length) === closeTag) {
-            depth--;
-            if (depth === 0 && start !== -1) {
-                const block = template.slice(start, i + closeTag.length);
-                blocks.push(block);
-                start = -1;
-            }
-            i += closeTag.length;
-            continue;
-        }
-        i++;
-    }
-
-    return blocks;
-}
-
-/**
-* Process and store all `{{#..}}` directives to be used later when rendering
-* @param {string} template
-*/
-function preprocessTemplates(template) {
-
-    template = processAllDirectiveBlocks(template, "await", processAwaitBlock);
-    template = processAllDirectiveBlocks(template, "if", processIfBlock);
-    template = processAllDirectiveBlocks(template, "each", processEachBlock);
-
-    return template;
-}
-
-/**
-*
-* @param {string} template
-* @param {string} directive
-* @param {Function} processBlocks
-*/
-function processAllDirectiveBlocks(template, directive, processBlocks) {
-
-    const openTag = `{{#${directive}`;
-    const closeTag = `{{/${directive}}}`;
-    const blocks = parseOuterBlocks(template, openTag, closeTag);
-
-    for (const i in blocks) {
-        const marker_id = `${directive}-${makeId(8)}`;
-
-        template = template.replace(blocks[i], `<template data-directive="${directive}" data-marker-id="${marker_id}"></template>`)
-
-        const start = blocks[i].match(new RegExp(`\\{\\{#${directive}\\s+([^\\}]+)\\}\\}`))[0];
-        const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
-        const block = blocks[i].slice(0, end).replace(start, "");
-
-        blocks[i] = start + preprocessTemplates(block) + `{{/${directive}}}`;
-
-        processedBlocks.set(marker_id, processBlocks(blocks[i]));
-    }
-
-    return template;
-}
-
-/**
-* @param {string} template
-* @param {number} imported_components_id
-* @param {Function} processComponent
-*/
-function processAllComponents(template, imported_components_id, processComponent) {
-    const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
-    const directive = "component";
-
-    template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
-        if (match.startsWith("<Core:slot")) return `<template data-directive="slot"></template>`;
-        if (match.startsWith("<Core:component")) return `<template data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</template>`;
-
-        const marker_id = `${directive}-${makeId(8)}`;
-        const component = { import_id: imported_components_id, tag, attrStr, slot_content };
-        processedBlocks.set(marker_id, processComponent(component));
-        return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
-    })
-
-    return template;
-}
-
-/**
-* @param {string} attrString
-* @param {any} ctx
-* @returns {{ [key:string] : any }}
-*/
-function parseAttributes(attrString, ctx) {
-    const attrs = {};
-    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-    let match;
-
-    while ((match = regex.exec(attrString)) !== null) {
-        const [, key, value] = match;
-        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
-    }
-
-    return attrs;
 }
 
 // ============================= //
@@ -948,4 +830,87 @@ function processComponent(component) {
 
         endNode.parentNode.insertBefore(componentBlock, endNode);
     }
+}
+
+// ====================================================
+
+/**
+* Process and store all `{{#..}}` directives to be used later when rendering
+* @param {string} template
+*/
+function preprocessTemplates(template) {
+
+    template = processAllDirectiveBlocks(template, "await", processAwaitBlock);
+    template = processAllDirectiveBlocks(template, "if", processIfBlock);
+    template = processAllDirectiveBlocks(template, "each", processEachBlock);
+
+    return template;
+}
+
+/**
+* @param {string} template
+* @param {string} directive
+* @param {Function} processBlocks
+*/
+function processAllDirectiveBlocks(template, directive, processBlocks) {
+
+    const openTag = `{{#${directive}`;
+    const closeTag = `{{/${directive}}}`;
+    const blocks = parseOuterBlocks(template, openTag, closeTag);
+
+    for (const i in blocks) {
+        const marker_id = `${directive}-${makeId(8)}`;
+
+        template = template.replace(blocks[i], `<template data-directive="${directive}" data-marker-id="${marker_id}"></template>`)
+
+        const start = blocks[i].match(new RegExp(`\\{\\{#${directive}\\s+([^\\}]+)\\}\\}`))[0];
+        const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
+        const block = blocks[i].slice(0, end).replace(start, "");
+
+        blocks[i] = start + preprocessTemplates(block) + `{{/${directive}}}`;
+
+        processedBlocks.set(marker_id, processBlocks(blocks[i]));
+    }
+
+    return template;
+}
+
+/**
+* @param {string} template
+* @param {number} imported_components_id
+* @param {Function} processComponent
+*/
+function processAllComponents(template, imported_components_id, processComponent) {
+    const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
+    const directive = "component";
+
+    template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
+        if (match.startsWith("<Core:slot")) return `<template data-directive="slot"></template>`;
+        if (match.startsWith("<Core:component")) return `<template data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</template>`;
+
+        const marker_id = `${directive}-${makeId(8)}`;
+        const component = { import_id: imported_components_id, tag, attrStr, slot_content };
+        processedBlocks.set(marker_id, processComponent(component));
+        return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
+    })
+
+    return template;
+}
+
+/**
+* @param {string} attrString
+* @param {any} ctx
+* @returns {{ [key:string] : any }}
+*/
+function parseAttributes(attrString, ctx) {
+    const attrs = {};
+    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
+    let match;
+
+    while ((match = regex.exec(attrString)) !== null) {
+        const [, key, value] = match;
+        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
+    }
+
+    return attrs;
 }

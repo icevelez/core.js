@@ -61,11 +61,20 @@ export class State {
     set value(new_value) {
         if (new_value === this.#value) return true;
 
-        // Preserve subscriber map of this.#value by transferring it to unwrapped_value
+        // Preserve subscriber map of this.#value by transferring it to unwrapped_value of proxy new_value
         if (isObject(new_value) && new_value[IS_PROXY] && isObject(this.#value)) {
+            console.log("state transferring subscribers");
             const uwrapped_new_value = new_value[UNWRAPPED_VALUE];
             const old_value = this.#value[UNWRAPPED_VALUE];
             SUBSCRIBERS.transferMap(old_value, uwrapped_new_value);
+        }
+
+        // Preserve subscriber map of this.#value by transferring it to new_value unproxy
+        if (isObject(new_value) && !new_value[IS_PROXY] && isObject(this.#value)) {
+            const wrapped_new_value = createDeepProxy(new_value);
+            const old_value = this.#value[UNWRAPPED_VALUE];
+            SUBSCRIBERS.transferMap(old_value, new_value);
+            new_value = wrapped_new_value;
         }
 
         // Cleanup if replacing this.#value (object) with a non-object new_value
@@ -311,6 +320,11 @@ export function createDeepProxy(target) {
                 if (isObject(new_value) && new_value[IS_PROXY] && isObject(target[key])) {
                     unwrapped_value = new_value[UNWRAPPED_VALUE];
                     SUBSCRIBERS.transferMap(target[key], unwrapped_value);
+                }
+
+                if (isObject(new_value) && !new_value[IS_PROXY] && isObject(oldValue)) {
+                    createDeepProxy(new_value);
+                    SUBSCRIBERS.transferMap(oldValue, new_value);
                 }
 
                 // Cleanup if replacing target[key] (object) with a non-object new_value
