@@ -1,15 +1,4 @@
-import { isObject } from "./helper-functions.js";
-
-const reactivity = {
-    states: new Set(),
-    proxies: new Set(),
-}
-
-const dev_mode_on = Boolean(window.__corejs__);
-
-if (window.__corejs__) {
-    window.__corejs__.reactivity = reactivity;
-}
+import { isObject, makeId } from "./helper-functions.js";
 
 /**
 * @type {Set<Function>}
@@ -53,7 +42,7 @@ export class State {
     * @param {T} initialValue
     */
     constructor(initialValue) {
-        this.value = initialValue && typeof initialValue === "object" ? createProxy(initialValue) : initialValue;
+        this.value = initialValue && typeof initialValue === "object" ? createDeepProxy(initialValue) : initialValue;
     }
 
     get value() {
@@ -64,13 +53,7 @@ export class State {
 
         currentEffect.dependencies.add(() => {
             this.#subscribers.delete(currentEffect.effect);
-
-            if (!dev_mode_on) return;
-            if (this.#subscribers.size > 0) return;
-            reactivity.states.delete(this);
         });
-
-        if (dev_mode_on) reactivity.states.add(this);
 
         return this.#value;
     }
@@ -78,17 +61,22 @@ export class State {
     set value(new_value) {
         if (new_value === this.#value) return true;
 
-        if (isObject(new_value) && !new_value[$proxy]) {
-            new_value = (typeof this.#value === "object" && this.#value[$proxy]) ?
-                createProxy(new_value, this.#value[$proxy].subscriberMap) :
-                createProxy(new_value);
+        // Preserve subscriber map of this.#value by transferring it to unwrapped_value
+        if (isObject(new_value) && new_value[IS_PROXY] && isObject(this.#value)) {
+            const uwrapped_new_value = new_value[UNWRAPPED_VALUE];
+            const old_value = this.#value[UNWRAPPED_VALUE];
+            SUBSCRIBERS.transferMap(old_value, uwrapped_new_value);
+        }
+
+        // Cleanup if replacing this.#value (object) with a non-object new_value
+        if (isObject(this.#value) && (!isObject(new_value) || !new_value[IS_PROXY])) {
+            const old_value = this.#value[UNWRAPPED_VALUE];
+            SUBSCRIBERS.deepDelete(old_value);
         }
 
         this.#value = new_value;
 
-        if (this.#subscribers.size <= 0) return true;
-
-        notifySubscribers(this.#subscribers);
+        if (this.#subscribers.size > 0) notifySubscribers(this.#subscribers);
 
         return true;
     }
@@ -105,18 +93,23 @@ export class Derived {
     #state = new State(undefined);
 
     /**
+     * @type {() => void}
+     */
+    dispose;
+
+    /**
     * @param {() => T | () => Promise<T>} callback
     */
     constructor(callback) {
         if (typeof callback !== "function") throw new TypeError("callback is not a function");
 
-        let promiseid = -1; // used to keep track of the latest promise
+        let promiseid; // used to keep track of the latest promise
 
-        effect(() => {
+        this.dispose = effect(() => {
             const value = callback();
 
             if (value instanceof Promise) {
-                promiseid++;
+                promiseid = makeId(3);
                 const current_promiseid = promiseid;
 
                 value.then((value) => {
@@ -167,8 +160,11 @@ export function effect(callbackfn) {
     const wrappedEffect = () => {
         cleanupfn();
         effectStack.push({ effect: wrappedEffect, dependencies });
-        cleanup = callbackfn();
-        effectStack.pop();
+        try {
+            cleanup = callbackfn();
+        } finally {
+            effectStack.pop();
+        }
     };
 
     wrappedEffect();
@@ -203,131 +199,148 @@ export function untrackedEffect(callbackfn) {
 
 // =======================================================================
 
-const $proxy = Symbol('PROXY');             // unique identify to prevent creating duplicate Proxies
-const setterGetterConst = ["has", "set", "get"];
+class SubscriberMap {
+    map = new WeakMap(); // target -> Map<property, Set<Function>>
 
-let proxy_id = 1;
+    constructor() { }
 
-/**
-* @template {any} T
-* @param {T} object
-* @param {Map<any, Set<Function>>} subscriberMap
-* @returns
-*/
-function createProxy(object, subscriberMap = new Map()) {
-
-    Object.defineProperties(object, {
-        [$proxy]: {
-            value: {
-                proxy_id: proxy_id++,
-                subscriberMap,
-                /**
-                * @param {Map<any, Set<Function>>} new_subscriberMap
-                */
-                setSubscriberMap: (new_subscriberMap) => {
-                    subscriberMap = new_subscriberMap;
-                },
-                clearProxy: () => {
-                    subscriberMap.forEach((subscribers) => subscribers.clear());
-                    subscriberMap.clear();
-                }
-            }
-        }
-    });
-
-    for (const key in object) {
-        if (key == $proxy) continue;
-        if (!isObject(object[key])) continue;
-
-        const objectProperty = Object.getOwnPropertyDescriptor(object, key);
-        if (!objectProperty || !objectProperty.writable) {
-            console.warn(`Warning! property descriptor of "${key}" is undefined or not writable. Unable to create a proxy and using property "${key}" will not be reactive\n`, object)
-            continue;
+    /**
+    * @param {object} target
+    * @returns {Map<any, Set<Function>>}
+    */
+    getMap(target) {
+        let keyMap = this.map.get(target);
+        if (!keyMap) {
+            keyMap = new Map();
+            this.map.set(target, keyMap);
         }
 
-        const is_object_key_proxy = object[key] && object[key][$proxy];
-        if (is_object_key_proxy) continue;
-
-        object[key] = createProxy(object[key]);
+        return keyMap;
     }
 
-    const proxy = new Proxy(object, {
-        get(target, key) {
-            if (key === $proxy) return target[key];
+    /**
+    * @param {object} target
+    * @param {any} key
+    * @returns {Set<Function>}
+    */
+    getSet(target, key) {
+        let keyMap = this.map.get(target);
+        if (!keyMap) {
+            keyMap = new Map();
+            this.map.set(target, keyMap);
+        }
 
-            // console.log("get", key, target[key]);
+        let set = keyMap.get(key);
+        if (!set) {
+            set = new Set();
+            keyMap.set(key, set);
+        }
 
-            const isFunc = !Array.isArray(target) && typeof target[key] === "function";
-            const value = !isFunc ? target[key] : function (...args) {
-                const return_value = target[key](...args);
+        return set;
+    }
 
-                if (args.length <= 0) return return_value;
-                if (setterGetterConst.includes(key) && args.length <= 1) return return_value;
+    transferMap(fromTarget, toTarget) {
+        const keyMap = this.map.get(fromTarget);
+        if (keyMap) this.map.set(toTarget, keyMap);
+    }
 
+    deepDelete(target, visited = new WeakSet()) {
+        if (!isObject(target) || visited.has(target)) return;
 
-                console.warn(`object get ${key} is a function that accepts arguments which is likely to update some state. Looping through all property of this object and notifying all effects`);
+        visited.add(target);
 
-                subscriberMap.forEach((subscribers, key) => {
-                    if (!subscribers) return;
-                    if (subscribers.size <= 0) {
-                        subscriberMap.delete(key);
-                        return;
-                    }
-                    notifySubscribers(subscribers);
-                })
+        const keyMap = this.map.get(target);
+        if (!keyMap) return;
 
-                return return_value;
+        for (const key in target) {
+            const child = target[key];
+            if (!isObject(child)) continue;
+            this.deepDelete(child, visited); // recurse on children
+        }
+
+        this.map.delete(target); // delete after children
+    }
+}
+
+const IS_PROXY = Symbol('is_deep_proxy');
+const UNWRAPPED_VALUE = Symbol('unwrapped_value');
+const SUBSCRIBERS = new SubscriberMap();
+
+export function createDeepProxy(target) {
+    const proxyCache = new WeakMap();
+
+    /**
+    * @param {any} obj
+    */
+    function wrap(obj) {
+        if (typeof obj !== 'object' || obj === null) return obj;
+
+        // Avoid re-wrapping a previously created deep proxy
+        if (obj[IS_PROXY]) return obj;
+
+        // Avoid wrapping same object multiple times
+        if (proxyCache.has(obj)) return proxyCache.get(obj);
+
+        const proxy = new Proxy(obj, {
+            get(target, key) {
+                // console.log('get', target, key);
+
+                if (key === IS_PROXY) return true;
+                if (key === UNWRAPPED_VALUE) return target;
+
+                const value = target[key];
+
+                if (typeof key === 'symbol') return value;
+
+                const currentEffect = effectStack[effectStack.length - 1];
+                if (!currentEffect) return wrap(value);
+
+                const subscribers = SUBSCRIBERS.getSet(target, key);
+                if (subscribers.has(currentEffect.effect)) return wrap(value);
+
+                subscribers.add(currentEffect.effect);
+                currentEffect.dependencies.add(() => subscribers.delete(currentEffect.effect));
+
+                return wrap(value);
+            },
+            set(target, key, new_value) {
+                const oldValue = target[key];
+                let unwrapped_value = new_value;
+
+                // Preserve subscriber map of target[key] by transferring it to unwrapped_value
+                if (isObject(new_value) && new_value[IS_PROXY] && isObject(target[key])) {
+                    unwrapped_value = new_value[UNWRAPPED_VALUE];
+                    SUBSCRIBERS.transferMap(target[key], unwrapped_value);
+                }
+
+                // Cleanup if replacing target[key] (object) with a non-object new_value
+                if (isObject(oldValue) && (!isObject(new_value) || !new_value[IS_PROXY])) {
+                    SUBSCRIBERS.getMap(target).delete(key);
+                    SUBSCRIBERS.deepDelete(oldValue);
+                }
+
+                target[key] = unwrapped_value;
+
+                const subscribers = SUBSCRIBERS.getSet(target, key);
+                if (subscribers.size > 0) notifySubscribers(subscribers);
+
+                return true;
+            },
+            deleteProperty(target, key) {
+                if (isObject(target[key])) {
+                    SUBSCRIBERS.getMap(target).delete(key);
+                    SUBSCRIBERS.deepDelete(target[key]);
+                }
+
+                delete target[key];
+                return true;
             }
+        });
 
-            // source: https://stackoverflow.com/questions/47874488/proxy-on-a-date-object
-            if (effectStack.length <= 0) return value;
+        proxyCache.set(obj, proxy);
 
-            if (!subscriberMap.has(key)) subscriberMap.set(key, new Set());
+        return proxy;
+    }
 
-            const currentEffect = effectStack[effectStack.length - 1];
-            const subscribers = subscriberMap.get(key);
-
-            subscribers.add(currentEffect.effect);
-
-            const unsubscribe = () => {
-                subscribers.delete(currentEffect.effect);
-                if (subscribers.size > 0) return;
-                subscriberMap.delete(key);
-
-                if (!dev_mode_on) return;
-                if (subscriberMap.size > 0) return;
-                reactivity.proxies.delete(proxy);
-            };
-
-            reactivity.proxies.add(proxy);
-
-            currentEffect.dependencies.add(unsubscribe);
-
-            return value;
-        },
-        set(target, key, new_value) {
-            // console.log("set", key, target[key], new_value);
-
-            const checIfArrayMutation = (Array.isArray(target) && typeof key === "number");
-            const checkIfPrimitiveDatatypes = typeof target[key] !== "object" && target[key] === new_value;
-
-            if (checIfArrayMutation && checkIfPrimitiveDatatypes) return true;
-
-            if (isObject(new_value) && !new_value[$proxy]) {
-                target[key] = createProxy(new_value);
-            } else {
-                target[key] = new_value;
-            }
-
-            const subscribers = subscriberMap.get(key);
-            if (!subscribers) return true;
-
-            if (subscribers.size <= 0) return true;
-
-            notifySubscribers(subscribers);
-            return true;
-        },
-    })
-
-    return proxy;
+    return wrap(target);
 }

@@ -425,8 +425,10 @@ function preprocessNode(node) {
 
                 effect(() => {
                     const func = evaluate(rawExpr, ctx);
-                    node.removeEventListener(attrName.slice(2), func);
                     node.addEventListener(attrName.slice(2), func);
+                    return () => {
+                        node.removeEventListener(attrName.slice(2), func);
+                    }
                 })
             })
             continue;
@@ -474,7 +476,7 @@ function processNode(processes, node, childNodes, destinationNode, ctx, render_s
 * @param {string} eachBlock
 * @returns {(startNode:Node, endNode:Node) => void}
 */
-export function processEachBlock(eachBlock) {
+function processEachBlock(eachBlock) {
     const eachRegex = /{{#each\s+(.+?)\s+as\s+(\w+)(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
     let eachConfig = { expression: "", mainContent: "", emptyContent: "", blockVar: "", indexVar: "" }
 
@@ -692,7 +694,7 @@ export function processEachBlock(eachBlock) {
 * @param {string} ifBlock
 * @returns {(startNode:Node, endNode:Node) => void}
 */
-export function processIfBlock(ifBlock) {
+function processIfBlock(ifBlock) {
     const ifRegex = /{{#if\s+(.+?)}}([\s\S]*?){{\/if}}/g;
     const ifElseregex = /{{:else\s+if\s+(.+?)}}|{{:else}}/g;
 
@@ -799,7 +801,7 @@ export function processIfBlock(ifBlock) {
 * @param {string} awaitBlock
 * @returns {(startNode:Node, endNode:Node) => void}
 */
-export function processAwaitBlock(awaitBlock) {
+function processAwaitBlock(awaitBlock) {
     const awaitRegex = /{{#await\s+(.+?)}}([\s\S]*?){{\/await}}/g;
     const thenRegex = /\{\{:then(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
     const catchRegex = /\{\{:catch(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
