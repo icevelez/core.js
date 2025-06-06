@@ -11,7 +11,10 @@ let is_notifying_subscribers = false;
 * @param {Set<Function>} subscribers
 */
 function notifySubscribers(subscribers) {
-    for (let subscriber of subscribers) subscriber_queue.add(subscriber);
+    for (let subscriber of subscribers) {
+        if (subscriber_queue.has(subscriber)) continue;
+        subscriber_queue.add(subscriber);
+    }
 
     if (is_notifying_subscribers) return;
     is_notifying_subscribers = true;
@@ -61,19 +64,9 @@ export class State {
     set value(new_value) {
         if (new_value === this.#value) return true;
 
-        // Preserve subscriber map of this.#value by transferring it to unwrapped_value of proxy new_value
-        if (isObject(new_value) && new_value[IS_PROXY] && isObject(this.#value)) {
-            console.log("state transferring subscribers");
-            const uwrapped_new_value = new_value[UNWRAPPED_VALUE];
-            const old_value = this.#value[UNWRAPPED_VALUE];
-            SUBSCRIBERS.transferMap(old_value, uwrapped_new_value);
-        }
-
         // Preserve subscriber map of this.#value by transferring it to new_value unproxy
-        if (isObject(new_value) && !new_value[IS_PROXY] && isObject(this.#value)) {
+        if (isObject(new_value) && !new_value[IS_PROXY]) {
             const wrapped_new_value = createDeepProxy(new_value);
-            const old_value = this.#value[UNWRAPPED_VALUE];
-            SUBSCRIBERS.transferMap(old_value, new_value);
             new_value = wrapped_new_value;
         }
 
@@ -112,7 +105,7 @@ export class Derived {
     constructor(callback) {
         if (typeof callback !== "function") throw new TypeError("callback is not a function");
 
-        let promiseid; // used to keep track of the latest promise
+        let promiseid = null; // used to keep track of the latest promise
 
         this.dispose = effect(() => {
             const value = callback();
@@ -124,7 +117,9 @@ export class Derived {
                 value.then((value) => {
                     if (current_promiseid !== promiseid) return;
                     this.#state.value = value;
-                    promiseid = -1;
+                    promiseid = null;
+                }).catch((error) => {
+                    console.error("Derived promise error:", error);
                 })
 
                 return;
@@ -274,10 +269,11 @@ class SubscriberMap {
 const IS_PROXY = Symbol('is_deep_proxy');
 const UNWRAPPED_VALUE = Symbol('unwrapped_value');
 const SUBSCRIBERS = new SubscriberMap();
+const SETTERGETTERCONST = ["has", "set", "get"];
+
+const proxyCache = new WeakMap();
 
 export function createDeepProxy(target) {
-    const proxyCache = new WeakMap();
-
     /**
     * @param {any} obj
     */
@@ -288,18 +284,43 @@ export function createDeepProxy(target) {
         if (obj[IS_PROXY]) return obj;
 
         // Avoid wrapping same object multiple times
-        if (proxyCache.has(obj)) return proxyCache.get(obj);
+        if (proxyCache.has(obj)) {
+            return proxyCache.get(obj);
+        }
 
         const proxy = new Proxy(obj, {
+            id: makeId(6),
             get(target, key) {
-                // console.log('get', target, key);
-
                 if (key === IS_PROXY) return true;
                 if (key === UNWRAPPED_VALUE) return target;
 
-                const value = target[key];
+                let value = target[key];
 
                 if (typeof key === 'symbol') return value;
+
+                if (!Array.isArray(target) && typeof value === "function") {
+                    value = function (...args) {
+                        const return_value = target[key](...args);
+
+                        if (args.length <= 0) return return_value;
+                        if (SETTERGETTERCONST.includes(key) && args.length <= 1) return return_value;
+
+                        console.warn(`object property "${key}" is a function, assuming it is to update some state, looping through all property of this object and notifying all effect subscribers`);
+
+                        const subscriberMap = SUBSCRIBERS.getMap(target);
+
+                        subscriberMap.forEach((subscribers, key) => {
+                            if (!subscribers) return;
+                            if (subscribers.size <= 0) {
+                                subscriberMap.delete(key);
+                                return;
+                            }
+                            notifySubscribers(subscribers);
+                        })
+
+                        return return_value;
+                    }
+                }
 
                 const currentEffect = effectStack[effectStack.length - 1];
                 if (!currentEffect) return wrap(value);
@@ -313,18 +334,13 @@ export function createDeepProxy(target) {
                 return wrap(value);
             },
             set(target, key, new_value) {
+                // console.log('set', target, key, new_value);
+
                 const oldValue = target[key];
                 let unwrapped_value = new_value;
 
-                // Preserve subscriber map of target[key] by transferring it to unwrapped_value
-                if (isObject(new_value) && new_value[IS_PROXY] && isObject(target[key])) {
-                    unwrapped_value = new_value[UNWRAPPED_VALUE];
-                    SUBSCRIBERS.transferMap(target[key], unwrapped_value);
-                }
-
                 if (isObject(new_value) && !new_value[IS_PROXY] && isObject(oldValue)) {
                     createDeepProxy(new_value);
-                    SUBSCRIBERS.transferMap(oldValue, new_value);
                 }
 
                 // Cleanup if replacing target[key] (object) with a non-object new_value

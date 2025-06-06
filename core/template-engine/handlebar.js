@@ -371,8 +371,6 @@ function processEachBlock(eachBlock) {
 
         // THIS IS FOR EMPTY BLOCK
 
-        let emptyBlockMounted = false;
-
         const onUnmountSet = newSetFunc();
         const onMountSet = newSetFunc();
 
@@ -818,7 +816,14 @@ function processComponent(component) {
         let componentFunc = components[component.tag];
         if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
-        const attrs = parseAttributes(component.attrStr, ctx);
+        const attrs = {};
+        const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
+
+        let match;
+        while ((match = regex.exec(component.attrStr)) !== null) {
+            const [, key, value] = match;
+            attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
+        }
 
         let componentBlock;
 
@@ -896,22 +901,4 @@ function processAllComponents(template, imported_components_id, processComponent
     })
 
     return template;
-}
-
-/**
-* @param {string} attrString
-* @param {any} ctx
-* @returns {{ [key:string] : any }}
-*/
-function parseAttributes(attrString, ctx) {
-    const attrs = {};
-    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-    let match;
-
-    while ((match = regex.exec(attrString)) !== null) {
-        const [, key, value] = match;
-        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
-    }
-
-    return attrs;
 }

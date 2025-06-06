@@ -2,10 +2,12 @@
     <Benchmark/>
 {{:else}}
     <h1>Greetings {{ user.value }}</h1>
+    <h1>Current Date: {{ date.value }}</h1>
     <div>
         <p>Counter: {{ counter.value }}</p>
         <button onclick="{{ () => counter.value++ }}">Click Me!</button>
         <input type="text" bind:value="user.value">
+        <input type="date" bind:value="date.value">
     </div>
     <br/>
     <input type="text" onkeypress="{{ addName }}">

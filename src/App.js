@@ -22,6 +22,7 @@ export default component({
 
     counter = new State(0);
     user = new State("User!");
+    date = new State();
     names = new State(['ice', 'ian', 'takeru', 'piox']);
 
     constructor() {
