@@ -2,10 +2,7 @@ import { Derived, State } from "../../core/reactivity.js";
 
 class RouterInstance {
 
-    #url = new State({
-        pathname: "",
-        searchParams: {},
-    });
+    #url = new State(new URL(window.location));
 
     /**
      * Used to cache RegEx and ParamNames of a Route to skip doing ".replace" and ".push" inside `matchRoute()`
@@ -16,12 +13,7 @@ class RouterInstance {
     #updateHashFragment = () => {
         let route = window.location.hash.replace("#", "");
         if (route.substring(0, 1) !== "/") route = `/${route}`;
-        const url = new URL(`${window.location.protocol}//${window.location.host}${route}`);
-        this.#url.value.pathname = url.pathname;
-        this.#url.value.searchParams = Array.from(url.searchParams).reduce((obj, i) => {
-            obj[i[0]] = i[1];
-            return obj;
-        }, {});
+        this.#url.value = new URL(`${window.location.protocol}//${window.location.host}${route}`);
     }
 
     queryParams = new Derived(() => this.#url.value.searchParams);

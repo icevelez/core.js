@@ -33,6 +33,20 @@ export default component({
         onUnmount(() => {
             console.log("unmounting App")
         })
+
+        // setTimeout(() => {
+        //     const tmp = this.names.value;
+        //     const name = tmp[0];
+        //     tmp[0] = tmp[3];
+        //     tmp[3] = name;
+        //     this.names.value = tmp;
+
+        //     console.log("SWITCH")
+        // }, 5000)
+
+        // effect(() => {
+        //     console.log(this.Router.queryParams.value.get("test"));
+        // })
     }
 
     addName = (event) => {

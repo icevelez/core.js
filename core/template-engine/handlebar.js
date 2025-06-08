@@ -502,16 +502,6 @@ function processEachBlock(eachBlock) {
                 }
 
                 // CREATE NEW BLOCK IF NOT EXISTS
-                const blockData = {
-                    get value() {
-                        return blockDatas[index]
-                    },
-                    set value(new_value) {
-                        blockDatas[index] = new_value;
-                        return true;
-                    }
-                }
-
                 const onUnmountSet = newSetFunc();
                 const onMountSet = newSetFunc();
                 let cleanupEffect;
@@ -531,6 +521,16 @@ function processEachBlock(eachBlock) {
 
                 currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
                 currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
+
+                const blockData = {
+                    get value() {
+                        return blockDatas[index]
+                    },
+                    set value(new_value) {
+                        blockDatas[index] = new_value;
+                        return true;
+                    }
+                }
 
                 block = { nodeStart, nodeEnd, blockData, index: new State(parseInt(index)), unmount };
                 newRenderedBlocks.push(block);
