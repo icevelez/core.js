@@ -4,11 +4,12 @@ import { component } from "../../core/template-engine/handlebar.js";
 
 export default component({
     template: `
-        <h1>Hello from Example Sub</h1>
+        <h1>Hello from {{ name.value }}</h1>
+        <Core:slot/>
     `
 }, class {
 
-    name = new State("TestComponent");
+    name = new State("EXAMPLE SUB");
 
     constructor() {
         onMount(() => console.log("mount from ExampleSub"))

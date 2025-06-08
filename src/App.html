@@ -14,12 +14,14 @@
     <br/>
     <input type="text" bind:value="names.value[0]">
         {{#each names.value as name, i}}
-            <h1>{{ i.value+1}}. {{name.value.toUpperCase() }}</h1>
-            <button onclick="{{ () => { console.log(i.value); names.value.splice(i.value, 1) } }}">Delete</button>
+            <h1>{{ i+1}}. {{name.toUpperCase() }}</h1>
+            <button onclick="{{ () => { console.log(i); names.value.splice(i, 1) } }}">Delete</button>
         {{:empty}}
             <h1>Empty list</h1>
         {{/each}}
     <br/>
     <TestComponent/>
-    <ExampleSub/>
+    <ExampleSub>
+        Hello {{ names.value[0] }}!
+    </ExampleSub>
 {{/if}}

@@ -1,6 +1,12 @@
+import { onMount } from "../core.js";
 import { createStartEndNode, makeId, evaluate, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../helper-functions.js";
 import { core_context, onMountQueue, onUnmountQueue, pushPopMountUnmountSet } from "../internal-core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
+
+/**
+* @type {Map<string, Node[]>}
+*/
+const slotCache = new Map();
 
 /**
 * @type {Map<string, (startNode:Node, endNode:Node, ctx:any) => void>}
@@ -13,19 +19,14 @@ const processedBlocks = new Map();
 const imported_components = new Map();
 
 /**
- * @type {Map<string, HTMLTemplateElement>}
- */
-const childNodesCache = new Map();
-
-/**
 * @type {WeakMap<Node, ((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]>}
 */
 const cacheNodeProcesses = new WeakMap();
 
 if (window.__corejs__) {
     window.__corejs__.processedBlocks = processedBlocks;
+    window.__corejs__.slotCache = slotCache;
     window.__corejs__.imported_components = imported_components;
-    window.__corejs__.childNodesCache = childNodesCache;
     window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
 }
 
@@ -48,35 +49,41 @@ export function component(options, Context = class { }) {
 
     template = preprocessTemplates(template);
 
+    const nodes = processTemplateToChildNodes(template)
+
     return function (attrs, render_slot_callbackfn) {
         if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
         const ctx = !Context ? {} : new Context(attrs);
-        return processTemplate(template, ctx, options.components, render_slot_callbackfn);
+        return processNodes(nodes, ctx, render_slot_callbackfn);
     }
 }
 
 /**
 * @param {string} template
+*/
+function processTemplateToChildNodes(template) {
+    const templateElement = document.createElement("template");
+    templateElement.innerHTML = template;
+
+    const childNodes = Array.from(templateElement.content.childNodes);
+
+    for (const childNode of childNodes) {
+        preprocessNode(childNode);
+    }
+
+    return childNodes;
+}
+
+/**
+* @param {Node[]} nodes
 * @param {Record<string, any>} ctx
 * @param {Function} render_slot_callbackfn
 */
-function processTemplate(template, ctx, render_slot_callbackfn) {
-
-    let childNodes = childNodesCache.get(template);
-
-    if (!childNodes) {
-        const templateElement = document.createElement("template");
-        templateElement.innerHTML = template;
-        childNodes = Array.from(templateElement.content.childNodes);
-        for (const childNode of childNodes) {
-            preprocessNode(childNode);
-        }
-        childNodesCache.set(template, childNodes);
-    }
+function processNodes(nodes, ctx, render_slot_callbackfn) {
 
     const fragment = document.createDocumentFragment();
 
-    for (const childNode of childNodes) {
+    for (const childNode of nodes) {
         const processes = cacheNodeProcesses.get(childNode) || [];
         processNode(processes, childNode.cloneNode(), Array.from(childNode.childNodes), fragment, ctx, render_slot_callbackfn);
     }
@@ -105,13 +112,7 @@ function preprocessNode(node) {
         const parts = expression.split(/({{[^}]+}})/g);
         const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
 
-        if (!has_handlebars) {
-            processes.push((node, destinationNode, _, _2) => {
-                destinationNode.appendChild(node)
-            });
-            cacheNodeProcesses.set(node, processes);
-            return;
-        }
+        if (!has_handlebars) return;
 
         if (parts.length <= 1) {
 
@@ -138,20 +139,16 @@ function preprocessNode(node) {
                 destinationNode.append(textNode)
             };
 
-            node.remove();
+            onMount(() => {
+                node.remove();
+            })
         });
 
         cacheNodeProcesses.set(node, processes);
         return;
     }
 
-    if (node.nodeType === Node.COMMENT_NODE) {
-        processes.push((node, destinationNode, _, _2) => {
-            destinationNode.appendChild(node);
-        });
-        cacheNodeProcesses.set(node, processes);
-        return;
-    }
+    if (node.nodeType === Node.COMMENT_NODE) return;
 
     const isSlotNode = (node) => Boolean(node.dataset.directive === "slot");
     const isCoreComponentNode = (node) => Boolean(node.dataset.directive === "core-component");
@@ -159,7 +156,9 @@ function preprocessNode(node) {
 
     if (isSlotNode(node)) {
         processes.push((node, destinationNode, _, render_slot_callbackfn) => {
-            node.remove();
+            onMount(() => {
+                node.remove();
+            })
             if (!render_slot_callbackfn) return;
             destinationNode.append(render_slot_callbackfn());
         });
@@ -169,11 +168,17 @@ function preprocessNode(node) {
 
     if (isCoreComponentNode(node)) {
         processes.push((node, destinationNode, ctx, _) => {
-            node.remove();
+            onMount(() => {
+                node.remove();
+            })
             const componentName = node.getAttribute("default");
             const component = ctx[componentName]?.default;
             node.removeAttribute("default");
             node.removeAttribute("data-directive");
+            node.removeAttribute("data-slot-id");
+
+            const slot_id = node.dataset.slotId;
+            const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
 
             if (!component) {
                 console.error(`Core component "${componentName}" is undefined. Kindly check if the component has a default export`);
@@ -188,10 +193,8 @@ function preprocessNode(node) {
                 attrs[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
             }
 
-            const content = node.innerHTML;
-
-            if (content) {
-                const renderSlotCallbackfn = () => processTemplate(content, ctx);
+            if (slot_nodes) {
+                const renderSlotCallbackfn = () => processNodes(slot_nodes, ctx);
                 destinationNode.append(component(attrs, renderSlotCallbackfn));
             } else {
                 destinationNode.append(component(attrs));
@@ -216,7 +219,10 @@ function preprocessNode(node) {
             fragment.append(nodeEnd);
 
             destinationNode.append(fragment);
-            node.remove();
+
+            onMount(() => {
+                node.remove();
+            })
 
             func(nodeStart, nodeEnd, ctx);
         })
@@ -328,9 +334,7 @@ function preprocessNode(node) {
         preprocessNode(childNode);
     }
 
-    processes.push((node, destinationNode, _, _2) => {
-        destinationNode.append(node);
-    })
+    if (processes.length <= 0) return;
 
     cacheNodeProcesses.set(node, processes);
 }
@@ -347,6 +351,8 @@ function processNode(processes, node, childNodes, destinationNode, ctx, render_s
     for (const process of processes) {
         process(node, destinationNode, ctx, render_slot_callbackfn)
     }
+
+    destinationNode.append(node);
 
     for (const childNode of childNodes) {
         const processes = cacheNodeProcesses.get(childNode) || [];
@@ -366,6 +372,9 @@ function processEachBlock(eachBlock) {
         const [mainContent, emptyContent] = content.split(/{{:empty}}/);
         eachConfig = { expression, blockVar, indexVar, mainContent, emptyContent };
     });
+
+    const mainNodes = processTemplateToChildNodes(eachConfig.mainContent);
+    const emptyNodes = eachConfig.emptyContent ? processTemplateToChildNodes(eachConfig.emptyContent) : [];
 
     function createEachBlock(blockDatas, index, ctx, currentNode) {
         const onUnmountSet = newSetFunc();
@@ -428,8 +437,8 @@ function processEachBlock(eachBlock) {
             removeNodesBetween(nodeStart, nodeEnd);
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const mainBlock = processTemplate(eachConfig.mainContent, childCtx);
-                nodeEnd.before(...mainBlock.childNodes);
+                const mainBlock = processNodes(mainNodes, childCtx);
+                nodeEnd.before(mainBlock);
             });
 
             if (core_context.is_mounted_to_the_DOM) return mount();
@@ -520,8 +529,8 @@ function processEachBlock(eachBlock) {
                 })
 
                 pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                    const eamptyBlock = processTemplate(eachConfig.emptyContent, ctx);
-                    nodeEnd.before(...eamptyBlock.childNodes);
+                    const eamptyBlock = processNodes(emptyNodes, ctx);
+                    nodeEnd.before(eamptyBlock);
                 });
 
                 if (core_context.is_mounted_to_the_DOM) return mount();
@@ -621,7 +630,7 @@ function processIfBlock(ifBlock) {
             if (match.index > lastIndex) {
                 segments.push({
                     condition: firstCondition,
-                    block: firstBlock.substring(lastIndex, match.index)
+                    block: processTemplateToChildNodes(firstBlock.substring(lastIndex, match.index))
                 });
             }
 
@@ -631,7 +640,7 @@ function processIfBlock(ifBlock) {
             } else if (match[0] === '{{:else}}') {
                 segments.push({
                     condition: 'true', // Always true for else
-                    block: firstBlock.substring(match.index + match[0].length)
+                    block: processTemplateToChildNodes(firstBlock.substring(match.index + match[0].length))
                 });
                 lastIndex = firstBlock.length; // Done
             }
@@ -640,7 +649,7 @@ function processIfBlock(ifBlock) {
         if (lastIndex < firstBlock.length) {
             segments.push({
                 condition: firstCondition,
-                block: firstBlock.substring(lastIndex)
+                block: processTemplateToChildNodes(firstBlock.substring(lastIndex))
             });
         }
     });
@@ -691,7 +700,7 @@ function processIfBlock(ifBlock) {
 
                 pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
                     const fragment = document.createDocumentFragment();
-                    const segmentBlock = processTemplate(condition.block, ctx);
+                    const segmentBlock = processNodes(condition.block, ctx);
                     fragment.appendChild(segmentBlock);
                     endNode.parentNode.insertBefore(fragment, endNode);
                 })
@@ -743,6 +752,10 @@ function processAwaitBlock(awaitBlock) {
         awaitConfig.pendingContent = pendingContent;
     });
 
+    const pendingNodes = processTemplateToChildNodes(awaitConfig.pendingContent)
+    const thenNodes = awaitConfig.then.match ? processTemplateToChildNodes(awaitConfig.then.content) : [];
+    const catchNodes = awaitConfig.catch.match ? processTemplateToChildNodes(awaitConfig.catch.content) : [];
+
     return function (startNode, endNode, ctx) {
         const onUnmountSet = newSetFunc();
         const onMountSet = newSetFunc();
@@ -775,8 +788,8 @@ function processAwaitBlock(awaitBlock) {
             removeNodesBetween(startNode, endNode);
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const pendingNodes = processTemplate(awaitConfig.pendingContent, ctx);
-                endNode.before(...pendingNodes.childNodes);
+                const nodes = processNodes(pendingNodes, ctx);
+                endNode.before(nodes);
             })
 
             mountInit();
@@ -790,8 +803,8 @@ function processAwaitBlock(awaitBlock) {
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
                 const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
-                const thenNodes = processTemplate(awaitConfig.then.content, childCtx);
-                endNode.before(...thenNodes.childNodes);
+                const nodes = processNodes(thenNodes, childCtx);
+                endNode.before(nodes);
             })
 
             mountInit();
@@ -807,8 +820,8 @@ function processAwaitBlock(awaitBlock) {
 
             pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
                 const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
-                const catchNodes = processTemplate(awaitConfig.catch.content, childCtx);
-                endNode.before(...catchNodes.childNodes);
+                const nodes = processNodes(catchNodes, childCtx);
+                endNode.before(nodes);
             })
 
             mountInit();
@@ -833,9 +846,12 @@ function processAwaitBlock(awaitBlock) {
 }
 
 /**
-* @param {{ import_id:number, tag : string, attrStr : string, slot_content : string | null }} component
+* @param {{ import_id:number, tag : string, attrStr : string, slot_id : number }} component
 */
 function processComponent(component) {
+
+    const slotNodes = component.slot_id ? slotCache.get(component.slot_id) : null;
+
     return function (startNode, endNode, ctx) {
         removeNodesBetween(startNode, endNode);
 
@@ -856,8 +872,8 @@ function processComponent(component) {
 
         let componentBlock;
 
-        if (component.slot_content) {
-            const renderSlotCallbackfn = () => processTemplate(component.slot_content, ctx);
+        if (slotNodes) {
+            const renderSlotCallbackfn = () => processNodes(slotNodes, ctx);
             componentBlock = componentFunc(attrs, renderSlotCallbackfn)
         } else {
             componentBlock = componentFunc(attrs);
@@ -921,10 +937,24 @@ function processAllComponents(template, imported_components_id, processComponent
 
     template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
         if (match.startsWith("<Core:slot")) return `<template data-directive="slot"></template>`;
-        if (match.startsWith("<Core:component")) return `<template data-directive="core-component" ${attrStr.slice(10)}>${slot_content}</template>`;
+        if (match.startsWith("<Core:component")) {
+            if (slot_content) {
+                const slot_id = `slot-${makeId(6)}`;
+                slotCache.set(slot_id, processTemplateToChildNodes(slot_content))
+                return `<template data-directive="core-component" data-slot-id="${slot_id}" ${attrStr.slice(10)}></template>`;
+            }
 
+            return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
+        }
         const marker_id = `${directive}-${makeId(8)}`;
-        const component = { import_id: imported_components_id, tag, attrStr, slot_content };
+        const component = { import_id: imported_components_id, tag, attrStr, slot_id: -1 };
+
+        if (slot_content) {
+            const slot_id = `slot-${makeId(6)}`;
+            slotCache.set(slot_id, processTemplateToChildNodes(slot_content));
+            component.slot_id = slot_id;
+        }
+
         processedBlocks.set(marker_id, processComponent(component));
         return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
     })
