@@ -367,7 +367,81 @@ function processEachBlock(eachBlock) {
         eachConfig = { expression, blockVar, indexVar, mainContent, emptyContent };
     });
 
-    return function (startNode, _, ctx) {
+    function createEachBlock(blockDatas, index, ctx, currentNode) {
+        const onUnmountSet = newSetFunc();
+        const onMountSet = newSetFunc();
+        let cleanupEffect;
+
+        const unmount = () => {
+            if (typeof cleanupEffect === "function") cleanupEffect();
+            for (const unmount of onUnmountSet) unmount();
+            onUnmountSet.clear();
+        };
+
+        const mount = () => {
+            for (const mount of onMountSet) mount();
+            onMountSet.clear();
+        }
+
+        const [nodeStart, nodeEnd] = createStartEndNode('each-block');
+
+        currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
+        currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
+
+        const block = {
+            nodeStart,
+            nodeEnd,
+            unmount,
+            index: new State(index),
+            get value() {
+                return blockDatas[index]
+            },
+            set value(new_value) {
+                blockDatas[index] = new_value;
+                return true;
+            }
+        };
+
+        let childCtx = (eachConfig.indexVar) ? {
+            get [eachConfig.indexVar]() {
+                return block.index.value
+            }
+        } : {};
+
+        childCtx = {
+            ...ctx,
+            ...childCtx,
+            get [eachConfig.blockVar]() {
+                return blockDatas[index]
+            },
+            /**
+             * @param {any} new_value
+             */
+            set [eachConfig.blockVar](new_value) {
+                blockDatas[index] = new_value;
+                return true;
+            },
+        }
+
+        cleanupEffect = untrackedEffect(() => {
+            unmount();
+            removeNodesBetween(nodeStart, nodeEnd);
+
+            pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
+                const mainBlock = processTemplate(eachConfig.mainContent, childCtx);
+                nodeEnd.before(...mainBlock.childNodes);
+            });
+
+            if (core_context.is_mounted_to_the_DOM) return mount();
+
+            core_context.onMountSet.add(mount)
+            core_context.onUnmountSet.add(unmount)
+        });
+
+        return block;
+    }
+
+    return function (startNode, endNode, ctx) {
 
         // THIS IS FOR EMPTY BLOCK
 
@@ -399,31 +473,9 @@ function processEachBlock(eachBlock) {
             parentOnUnmountSet.add(unmountEachBlock);
 
         /**
-        * @type {{ nodeStart:Node, nodeEnd:Node, blockData:{ value : any }, index : State<number>, unmount:Function }}
+        * @type {{ nodeStart:Node, nodeEnd:Node, value:any, index : State<number>, unmount:Function }[]}
         */
         let renderedBlocks = [];
-
-        const discardUnusedBlocks = (newRenderedBlocks) => {
-            for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
-                const renderBlock = renderedBlocks[i];
-
-                let node = renderBlock.nodeStart;
-                let nodeEnd = renderBlock.nodeEnd;
-
-                while (node && node !== nodeEnd) {
-                    const next = node.nextSibling;
-                    node.remove();
-                    node = next;
-                }
-
-                nodeEnd.remove();
-                renderBlock.unmount();
-                renderBlock.index = null;
-            }
-
-            renderedBlocks = newRenderedBlocks;
-        }
-
         let isEmptyBlockMounted = false;
 
         effect(() => {
@@ -436,7 +488,17 @@ function processEachBlock(eachBlock) {
             if (blockDatas.length <= 0 && !isEmptyBlockMounted) {
                 isEmptyBlockMounted = true;
 
-                discardUnusedBlocks([]);
+                if (renderedBlocks.length <= 0 && !eachConfig.emptyContent) return;
+
+                removeNodesBetween(startNode, endNode);
+
+                for (let i = 0; i < renderedBlocks.length; i++) {
+                    const block = renderedBlocks[i];
+                    block.unmount();
+                    block.index = null;
+                }
+
+                renderedBlocks = [];
 
                 if (!eachConfig.emptyContent) return;
 
@@ -462,39 +524,44 @@ function processEachBlock(eachBlock) {
                     nodeEnd.before(...eamptyBlock.childNodes);
                 });
 
-                if (core_context.is_mounted_to_the_DOM) {
-                    mount();
-                } else {
-                    core_context.onMountSet.add(mount)
-                    core_context.onUnmountSet.add(unmount)
-                }
+                if (core_context.is_mounted_to_the_DOM) return mount();
 
-                currentNode = nodeEnd;
+                core_context.onMountSet.add(mount)
+                core_context.onUnmountSet.add(unmount)
                 return;
             }
 
             isEmptyBlockMounted = false;
             unmount();
 
-            for (const index in blockDatas) {
+            if (renderedBlocks.length <= 0) {
+                console.time('cold run');
+                for (let index = 0; index < blockDatas.length; index++) {
+                    const block = createEachBlock(blockDatas, index, ctx, currentNode);
+                    renderedBlocks.push(block);
+                    currentNode = block.nodeEnd;
+                }
+                console.timeEnd('cold run');
+                return;
+            }
 
-                /**
-                * @type {{ nodeStart:Node, nodeEnd:Node, blockData:{ value : any }, index : State<number>, unmount:Function }}
-                */
+            console.time('warm run');
+            for (let index = 0; index < blockDatas.length; index++) {
+
                 let block = renderedBlocks[index];
 
-                // SKIP EXISTING BLOCK
-                if (block && block.blockData.value === blockDatas[index]) {
-                    currentNode = block.nodeEnd;
-                    newRenderedBlocks.push(block);
-                    continue;
-                }
-
-                // UPDATE EXISTING BLOCK IF NOT THE SAME
+                // USE EXISTING BLOCK
                 if (block) {
-                    if (block.blockData.value !== blockDatas[index]) block.blockData.value = blockDatas[index];
-                    const i = parseInt(index);
-                    if (block.index.value !== i) block.index.value = i;
+                    // IF THE SAME, RE-USE
+                    if (block.value === blockDatas[index]) {
+                        currentNode = block.nodeEnd;
+                        newRenderedBlocks.push(block);
+                        continue;
+                    }
+
+                    // IF NOT, UPDATE VALUE AND RE-USE
+                    if (block.value !== blockDatas[index]) block.value = blockDatas[index];
+                    if (block.index.value !== index) block.index.value = index;
 
                     currentNode = block.nodeEnd;
                     newRenderedBlocks.push(block);
@@ -502,70 +569,32 @@ function processEachBlock(eachBlock) {
                 }
 
                 // CREATE NEW BLOCK IF NOT EXISTS
-                const onUnmountSet = newSetFunc();
-                const onMountSet = newSetFunc();
-                let cleanupEffect;
-
-                const unmount = () => {
-                    if (typeof cleanupEffect === "function") cleanupEffect();
-                    for (const unmount of onUnmountSet) unmount();
-                    onUnmountSet.clear();
-                };
-
-                const mount = () => {
-                    for (const mount of onMountSet) mount();
-                    onMountSet.clear();
-                }
-
-                const [nodeStart, nodeEnd] = createStartEndNode('each-block');
-
-                currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
-                currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
-
-                const blockData = {
-                    get value() {
-                        return blockDatas[index]
-                    },
-                    set value(new_value) {
-                        blockDatas[index] = new_value;
-                        return true;
-                    }
-                }
-
-                block = { nodeStart, nodeEnd, blockData, index: new State(parseInt(index)), unmount };
+                block = createEachBlock(blockDatas, index, ctx, currentNode);
                 newRenderedBlocks.push(block);
-
-                const childCtx = {
-                    ...ctx,
-                    [eachConfig.blockVar]: blockData,
-                }
-
-                if (eachConfig.indexVar) {
-                    childCtx[eachConfig.indexVar] = { get value() { return block.index.value } };
-                }
-
-                cleanupEffect = untrackedEffect(() => {
-                    unmount();
-                    removeNodesBetween(nodeStart, nodeEnd);
-
-                    pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                        const mainBlock = processTemplate(eachConfig.mainContent, childCtx);
-                        nodeEnd.before(...mainBlock.childNodes);
-                    });
-
-                    if (core_context.is_mounted_to_the_DOM) {
-                        mount();
-                    } else {
-                        core_context.onMountSet.add(mount)
-                        core_context.onUnmountSet.add(unmount)
-                    }
-                });
-
                 currentNode = block.nodeEnd;
             }
 
             // REMOVE UNUSED EACH BLOCKS
-            discardUnusedBlocks(newRenderedBlocks);
+            for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
+                const renderBlock = renderedBlocks[i];
+
+                let node = renderBlock.nodeStart;
+                let nodeEnd = renderBlock.nodeEnd;
+
+                while (node && node !== nodeEnd) {
+                    const next = node.nextSibling;
+                    node.remove();
+                    node = next;
+                }
+
+                nodeEnd.remove();
+                renderBlock.unmount();
+                renderBlock.index = null;
+            }
+            renderedBlocks = newRenderedBlocks;
+
+            console.timeEnd('warm run');
+
             return;
         })
     }

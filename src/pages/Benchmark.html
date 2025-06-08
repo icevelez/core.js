@@ -51,14 +51,14 @@
 	</div>
 	<table class="table table-hover table-striped test-data">
 		<tbody>
-			{{#each data.value as row}}
-				<tr class="{{selected.value === row.value.id ? 'danger' : ''}}">
-				    <td class="col-md-1">{{row.value.id}}</td>
+			{{#each data.value as row, i}}
+				<tr class="{{selected.value === row.id ? 'danger' : ''}}">
+				    <td class="col-md-1">{{row.id}}</td>
 					<td class="col-md-4">
-						<a onclick="{{ () => selected.value = row.value.id }}">{{row.value.label}}</a>
+						<a onclick="{{ () => selected.value = row.id }}">{{ i+1 }} {{row.label}}</a>
 					</td>
 					<td class="col-md-1">
-					    <a onclick="{{() => remove(row.value)}}">
+					    <a onclick="{{() => remove(row)}}">
 						    Delete
 						</a>
 					</td>
