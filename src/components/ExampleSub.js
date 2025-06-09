@@ -1,5 +1,5 @@
 import { onMount, onUnmount } from "../../core/core.js";
-import { effect, State } from "../../core/reactivity.js";
+import { State } from "../../core/reactivity.js";
 import { component } from "../../core/template-engine/handlebar.js";
 
 export default component({

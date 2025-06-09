@@ -1,27 +1,26 @@
 {{#if Router.matchRoute("/benchmark").match}}
-    <Benchmark/>
+    {{#await import("/src/pages/Benchmark.js")}}
+        <h1>Loading Benchmark component</h1>
+    {{:then Benchmark}}
+        <Core:component default="Benchmark"/>
+    {{/await}}
+{{:else if Router.matchRoute("/playground").match}}
+    {{#await import("/src/pages/Playground.js")}}
+        <h1>Loading Playground component</h1>
+    {{:then Playground}}
+        <Core:component default="Playground"/>
+    {{/await}}
 {{:else}}
-    <h1>Greetings {{ user.value }}</h1>
-    <h1>Current Date: {{ date.value }}</h1>
+    <h1>Hello {{ name.value }}!</h1>
     <div>
-        <p>Counter: {{ counter.value }}</p>
-        <button onclick="{{ () => counter.value++ }}">Click Me!</button>
-        <input type="text" bind:value="user.value">
-        <input type="date" bind:value="date.value">
+        <label>Type new name</label>
+        <input type="text" bind:value="name.value" />
     </div>
-    <br/>
-    <input type="text" onkeypress="{{ addName }}">
-    <br/>
-    <input type="text" bind:value="names.value[0]">
-        {{#each names.value as name, i}}
-            <h1>{{ i+1}}. {{name.toUpperCase() }}</h1>
-            <button onclick="{{ () => { console.log(i); names.value.splice(i, 1) } }}">Delete</button>
-        {{:empty}}
-            <h1>Empty list</h1>
-        {{/each}}
-    <br/>
-    <TestComponent/>
-    <ExampleSub>
-        Hello {{ names.value[0] }}!
-    </ExampleSub>
+    <p>Counter: {{ counter.value }}</p>
+    <button onclick="{{ () => counter.value++ }}">Click Me!</button>
+    <br><br>
+    <div>
+        <a href="#/benchmark">Go to benchmark page</a>
+        <a href="#/playground">Go to playground page</a>
+    </div>
 {{/if}}

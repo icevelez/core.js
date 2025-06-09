@@ -1,0 +1,22 @@
+<div>
+    <label>Add Name</label>
+    <input type="text" onkeypress="{{ addName }}">
+</div>
+<br/>
+<div>
+    <label>Change name of no.1</label>
+    <input type="text" bind:value="names.value[0]">
+</div>
+<div>
+    {{#each names.value as name, i}}
+        <h1>{{ i+1}}. {{name.toUpperCase() }}</h1>
+        <button onclick="{{ () => { names.value.splice(i, 1) } }}">Delete</button>
+    {{:empty}}
+        <h1>Empty list</h1>
+    {{/each}}
+</div>
+<br/>
+<TestComponent/>
+<ExampleSub>
+    Hello {{ names.value[0] }}!
+</ExampleSub>

@@ -1,58 +1,20 @@
-import { load, onMount, onUnmount } from "../core/core.js";
+import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { effect, State } from "../core/reactivity.js";
+import { State } from "../core/reactivity.js";
 
 import { Router } from "./common/router.js";
 
-import TestComponent from "./components/TestComponent.js";
-import ExampleSub from "./components/ExampleSub.js";
-import Benchmark from "./pages/Benchmark.js";
-
 export default component({
     template: await load("src/App.html"),
-    components: {
-        TestComponent,
-        ExampleSub,
-        Benchmark,
-    }
+    components: {},
 }, class {
 
     Router = Router;
-    use_benchmark = new State(false);
 
     counter = new State(0);
-    user = new State("User!");
-    date = new State();
-    names = new State(['ice', 'ian', 'takeru', 'piox']);
+    name = new State('User');
 
     constructor() {
-        onMount(() => {
-            console.log("mounting App")
-        })
 
-        onUnmount(() => {
-            console.log("unmounting App")
-        })
-
-        // setTimeout(() => {
-        //     const tmp = this.names.value;
-        //     const name = tmp[0];
-        //     tmp[0] = tmp[3];
-        //     tmp[3] = name;
-        //     this.names.value = tmp;
-
-        //     console.log("SWITCH")
-        // }, 5000)
-
-        // effect(() => {
-        //     console.log(this.Router.queryParams.value.get("test"));
-        // })
-    }
-
-    addName = (event) => {
-        if (event.key !== "Enter") return;
-
-        this.names.value.push(event.target.value)
-        event.target.value = "";
     }
 });
