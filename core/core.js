@@ -1,6 +1,6 @@
-import { newSetFunc } from "./helper-functions.js";
-import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } from "./internal-core.js"
+import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } from "./internal-core.js";
 import { effect } from "./reactivity.js";
+import { newSetFunc } from "./helper-functions.js";
 
 /**
 * @param {string} template_url

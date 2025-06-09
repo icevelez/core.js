@@ -1,4 +1,4 @@
-import { evaluate } from "../helper-functions.js";
+import { evaluate } from "../../helper-functions.js";
 
 const processDirectives = {
     each: null,

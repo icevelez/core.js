@@ -1,11 +1,3 @@
-const use_comment = Boolean(window.__corejs__);                     // used to debug anchor points for "if", "each", "await"
-
-const evaluationCache = new Map();
-
-if (window.__corejs__) {
-    window.__corejs__.evaluationCache = evaluationCache;
-}
-
 /**
 * @param {any} object
 * @returns {boolean}
@@ -88,30 +80,11 @@ export function removeNodesBetween(startNode, endNode) {
 
 let commentCounter = 1;
 
+const use_comment = true;
+
 export function createStartEndNode(name = 'item') {
     const rand = commentCounter++;
     const blockStart = use_comment ? document.createComment(`${name}-start-${rand}`) : document.createTextNode("");
     const blockEnd = use_comment ? document.createComment(`${name}-end-${rand}`) : document.createTextNode("");
     return [blockStart, blockEnd];
-}
-
-/**
-* @param {string} expr
-* @param {any} ctx
-* @returns {any}
-*/
-export function evaluate(expr, ctx) {
-    const key = `${Object.keys(ctx).join(",")} ${expr}`;
-    let evalFunc = evaluationCache.get(key)
-    if (!evalFunc) {
-        evalFunc = Function(...Object.keys(ctx), `return (${expr});`);
-        evaluationCache.set(key, evalFunc);
-    }
-
-    try {
-        return evalFunc(...Object.values(ctx));
-    } catch (e) {
-        console.error(`Evaluation error: ${expr}`, e, ctx);
-        return {};
-    }
 }
