@@ -2,7 +2,6 @@ import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } fr
 import { effect } from "./reactivity.js";
 import { isObject, newSetFunc } from "./helper-functions.js";
 
-const modules = {};
 let isMounted = false;
 
 /**
@@ -15,7 +14,7 @@ export async function load(template_url) {
 
 /**
 * @param {() => DocumentFragment} component
-* @param {{ target : HTMLElement, modules : Record<string, any> }} options
+* @param {{ target : HTMLElement }} options
 * @returns {() => void} unmount function
 */
 export function mount(component, options) {
@@ -23,12 +22,6 @@ export function mount(component, options) {
     if (!isObject(options)) throw new TypeError("options is not an object");
     if (!(options.target instanceof HTMLElement)) throw new TypeError("options.target is not an HTMLElement");
     if (typeof component !== "function") throw new Error("component is not a function");
-
-    if (isObject(options.modules)) {
-        for (const key in options.modules) {
-            modules[key] = options.modules[key];
-        }
-    }
 
     const onMountSet = newSetFunc();
     const onUnmountSet = newSetFunc();
@@ -76,14 +69,4 @@ export function onUnmount(callback) {
     const onUnmount = onUnmountQueue[onUnmountQueue.length - 1];
     if (!onUnmount) throw new Error("no unmount set has been created");
     onUnmount.add(callback);
-}
-
-/**
-* @param {any} context
-*/
-export function importModules(context) {
-    for (const key in modules) {
-        if (context[key]) throw new Error(`property "${key}" already exist, cannot import module with the same name.`);
-        context[key] = modules[key];
-    }
 }
