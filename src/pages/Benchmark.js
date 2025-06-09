@@ -92,29 +92,60 @@ export default component({
     data = new State([]);
     selected = new State(null);
 
-    add = () => this.data.value.push(...buildData(1000))
+    add = () => {
+        console.time();
+        this.data.value.push(...buildData(1000))
+        requestAnimationFrame(() => {
+            console.timeEnd();
+        });
+    }
 
     clear = () => {
+        console.time();
         this.data.value = [];
+        requestAnimationFrame(() => {
+            console.timeEnd();
+        });
     };
 
     partialUpdate = () => {
+        console.time();
         for (let i = 0; i < this.data.value.length; i += 10) {
             const row = this.data.value[i];
             row.label = row.label + ' !!!';
         }
+        requestAnimationFrame(() => {
+            console.timeEnd();
+        });
     };
 
     remove = (row) => {
+        console.time();
         this.data.value.splice(this.data.value.indexOf(row), 1);
+        requestAnimationFrame(() => {
+            console.timeEnd();
+        });
     };
 
     run = () => {
+        console.time();
         this.data.value = buildData(1000);
+        requestAnimationFrame(() => {
+            console.timeEnd();
+        });
     };
 
     runLots = () => {
+        // const n = (new Date()).getTime()
+
+        console.time();
         this.data.value = buildData(10000);
+
+        requestAnimationFrame(() => {
+            console.timeEnd();
+            // const e = (new Date()).getTime()
+            // alert(`${e - n}ms`);
+        })
     };
 
     swapRows = () => {

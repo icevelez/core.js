@@ -39,7 +39,7 @@ class RouterInstance {
     /**
      * @param {string} route_pattern
      */
-    matchRoute = (route_pattern) => {
+    match = (route_pattern) => {
         let route = { regex: new RegExp(""), paramNames: [] };
 
         if (this.#cachePatterns.has(route_pattern)) {
@@ -60,9 +60,9 @@ class RouterInstance {
         const match = this.pathname.value.match(route.regex);
 
         /**
-         * @type {{ match : boolean, params : Record<string, string> }}
+         * @type {{ is_match : boolean, params : Record<string, string> }}
          */
-        const result = { match: false, params: {} };
+        const result = { is_match: false, params: {} };
         if (!match) return result;
 
         for (let i = 0; i < route.paramNames.length; i++) {
@@ -70,7 +70,7 @@ class RouterInstance {
             result.params[key] = match[i];
         }
 
-        result.match = true;
+        result.is_match = true;
         return result;
     }
 }

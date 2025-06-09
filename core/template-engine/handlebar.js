@@ -19,6 +19,11 @@ const processedBlocks = new Map();
 const imported_components = new Map();
 
 /**
+* @type {WeakMap<Node, Node[]>}
+*/
+const nodeChildren = new WeakMap();
+
+/**
 * @type {WeakMap<Node, ((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]>}
 */
 const cacheNodeProcesses = new WeakMap();
@@ -26,6 +31,7 @@ const cacheNodeProcesses = new WeakMap();
 if (window.__corejs__) {
     window.__corejs__.processedBlocks = processedBlocks;
     window.__corejs__.slotCache = slotCache;
+    window.__corejs__.nodeChildren = nodeChildren;
     window.__corejs__.imported_components = imported_components;
     window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
 }
@@ -81,9 +87,10 @@ function createFragment(nodes, ctx, render_slot_callbackfn) {
 
     const fragment = document.createDocumentFragment();
 
-    for (const childNode of nodes) {
-        const processes = cacheNodeProcesses.get(childNode) || [];
-        processNode(processes, childNode.cloneNode(), Array.from(childNode.childNodes), fragment, ctx, render_slot_callbackfn);
+    for (const node of nodes) {
+        const processes = cacheNodeProcesses.get(node) || [];
+        const childNodes = nodeChildren.get(node) || [];
+        processNode(processes, node.cloneNode(), childNodes, fragment, ctx, render_slot_callbackfn);
     }
 
     return fragment;
@@ -106,7 +113,8 @@ function processNode(processes, node, childNodes, destinationNode, ctx, render_s
 
     for (const childNode of childNodes) {
         const processes = cacheNodeProcesses.get(childNode) || [];
-        processNode(processes, childNode.cloneNode(), Array.from(childNode.childNodes), node, ctx, render_slot_callbackfn);
+        const nodes = nodeChildren.get(childNode) || [];
+        processNode(processes, childNode.cloneNode(), nodes, node, ctx, render_slot_callbackfn);
     }
 }
 
@@ -294,17 +302,14 @@ function processEachBlock(eachBlock) {
             unmount();
 
             if (renderedBlocks.length <= 0) {
-                console.time('cold run');
                 for (let index = 0; index < blockDatas.length; index++) {
                     const block = createEachBlock(blockDatas, index, ctx, currentNode);
                     renderedBlocks.push(block);
                     currentNode = block.nodeEnd;
                 }
-                console.timeEnd('cold run');
                 return;
             }
 
-            console.time('warm run');
             for (let index = 0; index < blockDatas.length; index++) {
 
                 let block = renderedBlocks[index];
@@ -351,8 +356,6 @@ function processEachBlock(eachBlock) {
                 renderBlock.index = null;
             }
             renderedBlocks = newRenderedBlocks;
-
-            console.timeEnd('warm run');
 
             return;
         })
@@ -449,18 +452,14 @@ function processIfBlock(ifBlock) {
                 removeNodesBetween(startNode, endNode);
 
                 pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                    const fragment = document.createDocumentFragment();
                     const segmentBlock = createFragment(condition.block, ctx);
-                    fragment.appendChild(segmentBlock);
-                    endNode.parentNode.insertBefore(fragment, endNode);
+                    endNode.parentNode.insertBefore(segmentBlock, endNode);
                 })
 
-                if (core_context.is_mounted_to_the_DOM) {
-                    mount();
-                } else {
-                    core_context.onMountSet.add(mount)
-                    core_context.onUnmountSet.add(unmount)
-                }
+                if (core_context.is_mounted_to_the_DOM) return mount();
+
+                core_context.onMountSet.add(mount)
+                core_context.onUnmountSet.add(unmount)
             })
         })
     }
@@ -951,8 +950,15 @@ function preprocessNode(node) {
         })
     };
 
-    for (const childNode of Array.from(node.childNodes)) {
-        preprocessNode(childNode);
+    const childNodes = Array.from(node.childNodes);
+
+    if (childNodes.length > 0) {
+
+        nodeChildren.set(node, childNodes);
+
+        for (const childNode of childNodes) {
+            preprocessNode(childNode);
+        }
     }
 
     if (processes.length <= 0) return;

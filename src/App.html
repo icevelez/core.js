@@ -1,10 +1,10 @@
-{{#if Router.matchRoute("/benchmark").match}}
+{{#if Router.match("/benchmark").is_match}}
     {{#await import("/src/pages/Benchmark.js")}}
         <h1>Loading Benchmark component</h1>
     {{:then Benchmark}}
         <Core:component default="Benchmark"/>
     {{/await}}
-{{:else if Router.matchRoute("/playground").match}}
+{{:else if Router.match("/playground").is_match}}
     {{#await import("/src/pages/Playground.js")}}
         <h1>Loading Playground component</h1>
     {{:then Playground}}
