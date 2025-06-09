@@ -1,6 +1,9 @@
 import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } from "./internal-core.js";
 import { effect } from "./reactivity.js";
-import { newSetFunc } from "./helper-functions.js";
+import { isObject, newSetFunc } from "./helper-functions.js";
+
+const modules = {};
+let isMounted = false;
 
 /**
 * @param {string} template_url
@@ -12,21 +15,29 @@ export async function load(template_url) {
 
 /**
 * @param {() => DocumentFragment} component
-* @param {{ target : HTMLElement }} target
+* @param {{ target : HTMLElement, modules : Record<string, any> }} options
 * @returns {() => void} unmount function
 */
 export function mount(component, options) {
-    if (typeof options !== "object") throw new TypeError("options is not an object");
+    if (isMounted) throw new Error("cannot mount twice");
+    if (!isObject(options)) throw new TypeError("options is not an object");
     if (!(options.target instanceof HTMLElement)) throw new TypeError("options.target is not an HTMLElement");
-    if (component instanceof Promise) throw new Error("component should not be an async function");
+    if (typeof component !== "function") throw new Error("component is not a function");
+
+    if (isObject(options.modules)) {
+        for (const key in options.modules) {
+            modules[key] = options.modules[key];
+        }
+    }
 
     const onMountSet = newSetFunc();
     const onUnmountSet = newSetFunc();
 
     const cleanup = effect(() => {
         pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-            options.target.innerHTML = "";
-            options.target.appendChild(component());
+            const fragment = component();
+            if (!(fragment instanceof DocumentFragment)) throw new Error("component is not a DocumentFragment");
+            options.target.appendChild(fragment);
         })
 
         for (const mount of onMountSet) mount();
@@ -35,6 +46,8 @@ export function mount(component, options) {
         for (const mount of core_context.onMountSet) mount();
         core_context.onMountSet.clear();
     })
+
+    isMounted = true;
 
     return () => {
         cleanup();
@@ -63,4 +76,14 @@ export function onUnmount(callback) {
     const onUnmount = onUnmountQueue[onUnmountQueue.length - 1];
     if (!onUnmount) throw new Error("no unmount set has been created");
     onUnmount.add(callback);
+}
+
+/**
+* @param {any} context
+*/
+export function importModules(context) {
+    for (const key in modules) {
+        if (context[key]) throw new Error(`property "${key}" already exist, cannot import module with the same name.`);
+        context[key] = modules[key];
+    }
 }
