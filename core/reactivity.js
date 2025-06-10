@@ -341,10 +341,9 @@ export function createDeepProxy(target) {
 
                 if (isObject(new_value)) {
                     if (!new_value[IS_PROXY]) {
-                        createDeepProxy(new_value);
-                    } else {
-                        unwrapped_value = new_value[UNWRAPPED_VALUE];
+                        new_value = createDeepProxy(new_value);
                     }
+                    unwrapped_value = new_value[UNWRAPPED_VALUE];
                 }
 
                 // Cleanup if replacing target[key] (object) with a non-object new_value
