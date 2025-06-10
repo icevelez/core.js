@@ -1,4 +1,4 @@
-import { core_context, onMountQueue, onUnmountQueue, pushPopMountUnmountSet, evaluate } from "../internal-core.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate } from "../internal-core.js";
 import { onMount } from "../core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../helper-functions.js";
@@ -194,10 +194,14 @@ function processEachBlock(eachBlock) {
             unmount();
             removeNodesBetween(nodeStart, nodeEnd);
 
-            pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const mainBlock = createFragment(mainNodes, childCtx);
-                nodeEnd.before(mainBlock);
-            });
+            onUnmountQueue.push(onUnmountSet);
+            onMountQueue.push(onMountSet);
+
+            const mainBlock = createFragment(mainNodes, childCtx);
+            nodeEnd.before(mainBlock);
+
+            onMountQueue.pop()
+            onUnmountQueue.pop()
 
             if (core_context.is_mounted_to_the_DOM) return mount();
 
@@ -286,10 +290,14 @@ function processEachBlock(eachBlock) {
                     nodeEnd.remove();
                 })
 
-                pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                    const eamptyBlock = createFragment(emptyNodes, ctx);
-                    nodeEnd.before(eamptyBlock);
-                });
+                onUnmountQueue.push(onUnmountSet);
+                onMountQueue.push(onMountSet);
+
+                const eamptyBlock = createFragment(emptyNodes, ctx);
+                nodeEnd.before(eamptyBlock);
+
+                onMountQueue.pop();
+                onUnmountQueue.pop();
 
                 if (core_context.is_mounted_to_the_DOM) return mount();
 
@@ -451,10 +459,14 @@ function processIfBlock(ifBlock) {
                 unmount();
                 removeNodesBetween(startNode, endNode);
 
-                pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                    const segmentBlock = createFragment(condition.block, ctx);
-                    endNode.parentNode.insertBefore(segmentBlock, endNode);
-                })
+                onUnmountQueue.push(onUnmountSet);
+                onMountQueue.push(onMountSet);
+
+                const segmentBlock = createFragment(condition.block, ctx);
+                endNode.parentNode.insertBefore(segmentBlock, endNode);
+
+                onMountQueue.pop();
+                onUnmountQueue.pop();
 
                 if (core_context.is_mounted_to_the_DOM) return mount();
 
@@ -536,10 +548,14 @@ function processAwaitBlock(awaitBlock) {
             unmount();
             removeNodesBetween(startNode, endNode);
 
-            pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const nodes = createFragment(pendingNodes, ctx);
-                endNode.before(nodes);
-            })
+            onUnmountQueue.push(onUnmountSet);
+            onMountQueue.push(onMountSet);
+
+            const nodes = createFragment(pendingNodes, ctx);
+            endNode.before(nodes);
+
+            onMountQueue.pop();
+            onUnmountQueue.pop();
 
             mountInit();
         };
@@ -550,11 +566,15 @@ function processAwaitBlock(awaitBlock) {
 
             if (!awaitConfig.then.match) return;
 
-            pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
-                const nodes = createFragment(thenNodes, childCtx);
-                endNode.before(nodes);
-            })
+            onUnmountQueue.push(onUnmountSet);
+            onMountQueue.push(onMountSet);
+
+            const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
+            const nodes = createFragment(thenNodes, childCtx);
+            endNode.before(nodes);
+
+            onMountQueue.pop();
+            onUnmountQueue.pop();
 
             mountInit();
         };
@@ -567,11 +587,15 @@ function processAwaitBlock(awaitBlock) {
 
             if (!awaitConfig.catch.match) return;
 
-            pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-                const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
-                const nodes = createFragment(catchNodes, childCtx);
-                endNode.before(nodes);
-            })
+            onUnmountQueue.push(onUnmountSet);
+            onMountQueue.push(onMountSet);
+
+            const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
+            const nodes = createFragment(catchNodes, childCtx);
+            endNode.before(nodes);
+
+            onMountQueue.pop();
+            onUnmountQueue.pop();
 
             mountInit();
         };

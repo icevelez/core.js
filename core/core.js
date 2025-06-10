@@ -1,4 +1,4 @@
-import { onMountQueue, onUnmountQueue, core_context, pushPopMountUnmountSet } from "./internal-core.js";
+import { onMountQueue, onUnmountQueue, core_context } from "./internal-core.js";
 import { effect } from "./reactivity.js";
 import { isObject, newSetFunc } from "./helper-functions.js";
 
@@ -27,11 +27,16 @@ export function mount(component, options) {
     const onUnmountSet = newSetFunc();
 
     const cleanup = effect(() => {
-        pushPopMountUnmountSet(onMountSet, onUnmountSet, () => {
-            const fragment = component();
-            if (!(fragment instanceof DocumentFragment)) throw new Error("component is not a DocumentFragment");
-            options.target.appendChild(fragment);
-        })
+
+        onUnmountQueue.push(onUnmountSet);
+        onMountQueue.push(onMountSet);
+
+        const fragment = component();
+        if (!(fragment instanceof DocumentFragment)) throw new Error("component is not a DocumentFragment");
+        options.target.appendChild(fragment);
+
+        onMountQueue.pop();
+        onUnmountQueue.pop();
 
         for (const mount of onMountSet) mount();
 

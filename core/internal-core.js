@@ -24,22 +24,6 @@ export const onMountQueue = [];
 export const onUnmountQueue = [];
 
 /**
-* @param {Set<Function>} onMountSet
-* @param {Set<Function>} onUnmountSet
-* @param {Function} callbackfn
-*/
-export function pushPopMountUnmountSet(onMountSet, onUnmountSet, callbackfn) {
-    if (typeof callbackfn !== "function") throw new Error("callbackfn is not a function");
-
-    onUnmountQueue.push(onUnmountSet);
-    onMountQueue.push(onMountSet);
-
-    callbackfn();
-
-    return [onMountQueue.pop(), onUnmountQueue.pop()]
-}
-
-/**
 * @param {string} expr
 * @param {any} ctx
 * @returns {any}
