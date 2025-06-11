@@ -881,8 +881,10 @@ function preprocessNode(node) {
         if (attrName.startsWith('use:')) {
             processes.push((node, _, ctx, _2) => {
                 const attr = attrName.slice(4);
-                const func = evaluate(`${attr}`, ctx);
-                const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+                const func = ctx[attrName.slice(4)];
+                const rawExpr = !attrValue ? "" : attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+
+                if (!func) throw new Error(`use: directive "${attrName.slice(4)}" not found.`);
 
                 const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
                 const onMountSet = onMountQueue[onMountQueue.length - 1];
