@@ -100,31 +100,12 @@ export class Derived {
     dispose;
 
     /**
-    * @param {() => T | () => Promise<T>} callback
+    * @param {() => T} callback
     */
     constructor(callback) {
         if (typeof callback !== "function") throw new TypeError("callback is not a function");
-
-        let promiseid = null; // used to keep track of the latest promise
-
         this.dispose = effect(() => {
             const value = callback();
-
-            if (value instanceof Promise) {
-                promiseid = makeId(3);
-                const current_promiseid = promiseid;
-
-                value.then((value) => {
-                    if (current_promiseid !== promiseid) return;
-                    this.#state.value = value;
-                    promiseid = null;
-                }).catch((error) => {
-                    console.error("Derived promise error:", error);
-                })
-
-                return;
-            }
-
             this.#state.value = value;
         });
     }
