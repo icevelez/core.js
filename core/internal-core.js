@@ -32,7 +32,7 @@ export function evaluate(expr, ctx) {
     const key = `${Object.keys(ctx).join(",")} ${expr}`;
     let evalFunc = evaluationCache.get(key)
     if (!evalFunc) {
-        evalFunc = Function(...Object.keys(ctx), `return (${expr});`);
+        evalFunc = Function(...Object.keys(ctx), `return ${expr};`);
         evaluationCache.set(key, evalFunc);
     }
 
