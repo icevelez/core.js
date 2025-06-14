@@ -55,7 +55,7 @@ export function component(options, Context = class { }) {
 
     template = preprocessTemplateString(template);
 
-    const nodes = createNodes(template)
+    const nodes = createNodes(template);
 
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
@@ -112,14 +112,12 @@ function processCloneNode(processes, clone_node, original_node, ctx, render_slot
         process(clone_node, ctx, render_slot_callbackfn)
     }
 
-    const childNodes = nodeChildren.get(original_node) || [];
-    if (childNodes.length <= 0) return;
+    const childNodes = nodeChildren.get(original_node);
+    if (!childNodes) return;
 
-    const childClones = Array.from(clone_node.childNodes);
-
-    for (let i = 0; i < childClones.length; i++) {
+    for (let i = 0; i < childNodes.length; i++) {
         const original_childNode = childNodes[i];
-        const clone_childNode = childClones[i];
+        const clone_childNode = clone_node.childNodes[i];
 
         const processes = cacheNodeProcesses.get(original_childNode) || [];
         processCloneNode(processes, clone_childNode, original_childNode, ctx, render_slot_callbackfn);

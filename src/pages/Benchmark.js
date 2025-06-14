@@ -93,56 +93,56 @@ export default component({
     selected = new State(null);
 
     add = () => {
-        console.time();
+        console.time('add');
         this.data.value.push(...buildData(1000))
         requestAnimationFrame(() => {
-            console.timeEnd();
+            console.timeEnd('add');
         });
     }
 
     clear = () => {
-        console.time();
+        console.time('clear');
         this.data.value = [];
         requestAnimationFrame(() => {
-            console.timeEnd();
+            console.timeEnd('clear');
         });
     };
 
     partialUpdate = () => {
-        console.time();
+        console.time('partial update');
         for (let i = 0; i < this.data.value.length; i += 10) {
             const row = this.data.value[i];
             row.label = row.label + ' !!!';
         }
         requestAnimationFrame(() => {
-            console.timeEnd();
+            console.timeEnd('partial update');
         });
     };
 
     remove = (row) => {
-        console.time();
+        console.time('remove');
         this.data.value.splice(this.data.value.indexOf(row), 1);
         requestAnimationFrame(() => {
-            console.timeEnd();
+            console.timeEnd('remove');
         });
     };
 
     run = () => {
-        console.time();
+        console.time('run');
         this.data.value = buildData(1000);
         requestAnimationFrame(() => {
-            console.timeEnd();
+            console.timeEnd('run');
         });
     };
 
     runLots = () => {
         // const n = (new Date()).getTime()
 
-        console.time();
+        console.time('runLots');
         this.data.value = buildData(10000);
 
         requestAnimationFrame(() => {
-            console.timeEnd();
+            console.timeEnd('runLots');
             // const e = (new Date()).getTime()
             // alert(`${e - n}ms`);
         })

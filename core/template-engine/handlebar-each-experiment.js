@@ -24,7 +24,7 @@ const imported_components = new Map();
 const nodeChildren = new WeakMap();
 
 /**
-* @type {WeakMap<Node, ((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]>}
+* @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]>}
 */
 const cacheNodeProcesses = new WeakMap();
 
@@ -57,8 +57,9 @@ export function component(options, Context = class { }) {
 
     const nodes = createNodes(template)
 
+    if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
+
     return function (attrs, render_slot_callbackfn) {
-        if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
         const ctx = !Context ? {} : new Context(attrs);
         return createFragment(nodes, ctx, render_slot_callbackfn);
     }
@@ -88,9 +89,11 @@ function createFragment(nodes, ctx, render_slot_callbackfn) {
     const fragment = document.createDocumentFragment();
 
     for (const node of nodes) {
+        const clone_node = node.cloneNode(true);
+        fragment.append(clone_node);
+
         const processes = cacheNodeProcesses.get(node) || [];
-        const childNodes = nodeChildren.get(node) || [];
-        processNode(processes, node.cloneNode(), childNodes, fragment, ctx, render_slot_callbackfn);
+        processCloneNode(processes, clone_node, node, ctx, render_slot_callbackfn);
     }
 
     return fragment;
@@ -98,23 +101,28 @@ function createFragment(nodes, ctx, render_slot_callbackfn) {
 
 /**
 *
-* @param {((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]} processes
-* @param {Node} node
-* @param {DocumentFragment} destinationNode
+* @param {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]} processes
+* @param {Node} clone_node
+* @param {Node} original_node
 * @param {Record<string, any>} ctx
 * @param {Function} render_slot_callbackfn
 */
-function processNode(processes, node, childNodes, destinationNode, ctx, render_slot_callbackfn) {
+function processCloneNode(processes, clone_node, original_node, ctx, render_slot_callbackfn) {
     for (const process of processes) {
-        process(node, destinationNode, ctx, render_slot_callbackfn)
+        process(clone_node, ctx, render_slot_callbackfn)
     }
 
-    destinationNode.append(node);
+    const childNodes = nodeChildren.get(original_node) || [];
+    if (childNodes.length <= 0) return;
 
-    for (const childNode of childNodes) {
-        const processes = cacheNodeProcesses.get(childNode) || [];
-        const nodes = nodeChildren.get(childNode) || [];
-        processNode(processes, childNode.cloneNode(), nodes, node, ctx, render_slot_callbackfn);
+    const childClones = Array.from(clone_node.childNodes);
+
+    for (let i = 0; i < childClones.length; i++) {
+        const original_childNode = childNodes[i];
+        const clone_childNode = childClones[i];
+
+        const processes = cacheNodeProcesses.get(original_childNode) || [];
+        processCloneNode(processes, clone_childNode, original_childNode, ctx, render_slot_callbackfn);
     }
 }
 
@@ -159,15 +167,14 @@ function processEachBlock(eachBlock) {
             nodeStart,
             nodeEnd,
             unmount,
-            index: new State(index),
             i: index,
-            blockDatas,
-            dom_value: blockDatas[index],
+            index: new State(index),
+            blockDatas: blockDatas,
             get value() {
-                return this.blockDatas[this.i]
+                return block.blockDatas[block.i]
             },
             set value(new_value) {
-                this.blockDatas[this.i] = new_value;
+                block.blockDatas[block.i] = new_value;
                 return true;
             }
         };
@@ -343,6 +350,7 @@ function processEachBlock(eachBlock) {
 
                     // UPDATE EXISTING BLOCK IF NONE FOUND
                 } else if (renderedBlock) {
+                    renderedBlock.i = index;
                     renderedBlock.value = blockDatas[index];
                     renderedBlock.dom_value = blockDatas[index];
                     renderedBlock.blockDatas = blockDatas;
@@ -383,6 +391,39 @@ function processEachBlock(eachBlock) {
             blockWeakMap.clear();
             blockWeakMap = hasBlocks;
             renderedBlocks = newRenderedBlocks;
+
+            let anchor = startNode.nextSibling;
+
+            for (let i = 0; i < newRenderedBlocks.length; i++) {
+                const block = newRenderedBlocks[i];
+
+                // If nodeStart is already at anchor, just move anchor to block.nodeEnd.nextSibling
+                if (block.nodeStart === anchor) {
+                    anchor = block.nodeEnd.nextSibling;
+                    continue;
+                }
+
+                block.i = i;
+                block.index.value = i;
+
+                // Otherwise, move block before anchor
+                let node = block.nodeStart;
+                const nodeEnd = block.nodeEnd;
+
+                const fragment = document.createDocumentFragment();
+
+                while (node && node !== nodeEnd) {
+                    const next = node.nextSibling;
+                    fragment.appendChild(node);
+                    node = next;
+                }
+                fragment.appendChild(nodeEnd);
+
+                startNode.parentNode.insertBefore(fragment, anchor);
+
+                // Update anchor to the next node after the moved block
+                anchor = block.nodeEnd.nextSibling;
+            }
 
             return;
         })
@@ -757,7 +798,6 @@ function preprocessComponents(template, imported_components_id, processComponent
 /**
 *
 * @param {Node} node
-* @param {DocumentFragment} destinationNode
 * @param {Record<string, any>} ctx
 * @param {Function} render_slot_callbackfn
 */
@@ -765,7 +805,7 @@ function preprocessNode(node) {
     const isText = node.nodeType === Node.TEXT_NODE;
 
     /**
-    * @type {((node:Node, destinationNode:DocumentFragment, ctx:any, render_slot_callbackfn:Function) => void)[]}
+    * @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]}
     */
     const processes = [];
 
@@ -778,29 +818,59 @@ function preprocessNode(node) {
         if (!has_handlebars) return;
 
         if (parts.length <= 1) {
+            let match, expr;
 
-            processes.push((node, destinationNode, ctx, _) => {
+            expression.replace(regex, (m, e) => {
+                match = m;
+                expr = e;
+            });
+
+            processes.push((node, ctx, _) => {
                 effect(() => {
-                    node.textContent = expression.replace(regex, (_, expr) => evaluate(expr, ctx));
+                    node.textContent = expression.replace(match, evaluate(expr, ctx));
                 })
-                destinationNode.appendChild(node)
             });
 
             cacheNodeProcesses.set(node, processes);
             return;
         }
 
-        processes.push((node, destinationNode, ctx, _) => {
+        let matches_and_exprs = [];
+
+        for (const part of parts) {
+            let match, expr;
+
+            part.replace(regex, (m, e) => {
+                match = m;
+                expr = e;
+            });
+
+            matches_and_exprs.push({ has_match: match !== undefined, part, match, expr });
+        };
+
+        processes.push((node, ctx, _) => {
+
             node.textContent = "";
 
-            for (const part of parts) {
+            const fragment = document.createDocumentFragment();
 
+            for (const obj of matches_and_exprs) {
                 const textNode = document.createTextNode("");
+
+                if (!obj.has_match) {
+                    textNode.textContent = obj.part;
+                    fragment.append(textNode)
+                    continue;
+                }
+
                 effect(() => {
-                    textNode.textContent = part.replace(regex, (_, expr) => evaluate(expr, ctx));
+                    textNode.textContent = obj.part.replace(obj.match, evaluate(obj.expr, ctx));
                 })
-                destinationNode.append(textNode)
+
+                fragment.append(textNode)
             };
+
+            node.before(fragment);
 
             onMount(() => {
                 node.remove();
@@ -818,30 +888,29 @@ function preprocessNode(node) {
     const isMarkedNode = (node) => Boolean(node.dataset.directive && node.dataset.markerId)
 
     if (isSlotNode(node)) {
-        processes.push((node, destinationNode, _, render_slot_callbackfn) => {
+        processes.push((node, _, render_slot_callbackfn) => {
             onMount(() => {
                 node.remove();
             })
             if (!render_slot_callbackfn) return;
-            destinationNode.append(render_slot_callbackfn());
+            node.before(render_slot_callbackfn());
         });
         cacheNodeProcesses.set(node, processes);
         return;
     }
 
     if (isCoreComponentNode(node)) {
-        processes.push((node, destinationNode, ctx, _) => {
-            onMount(() => {
-                node.remove();
-            })
-            const componentName = node.getAttribute("default");
-            const component = ctx[componentName]?.default;
-            node.removeAttribute("default");
-            node.removeAttribute("data-directive");
-            node.removeAttribute("data-slot-id");
+        const componentName = node.getAttribute("default");
 
-            const slot_id = node.dataset.slotId;
-            const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
+        node.removeAttribute("default");
+        node.removeAttribute("data-directive");
+        node.removeAttribute("data-slot-id");
+
+        const slot_id = node.dataset.slotId;
+        const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
+
+        processes.push((node, ctx, _) => {
+            const component = ctx[componentName]?.default;
 
             if (!component) {
                 console.error(`Core component "${componentName}" is undefined. Kindly check if the component has a default export`);
@@ -858,21 +927,25 @@ function preprocessNode(node) {
 
             if (slot_nodes) {
                 const renderSlotCallbackfn = () => createFragment(slot_nodes, ctx);
-                destinationNode.append(component(attrs, renderSlotCallbackfn));
+                node.before(component(attrs, renderSlotCallbackfn));
             } else {
-                destinationNode.append(component(attrs));
+                node.before(component(attrs));
             }
+
+            onMount(() => {
+                node.remove();
+            })
         })
         cacheNodeProcesses.set(node, processes);
         return;
     }
 
     if (isMarkedNode(node)) {
-        processes.push((node, destinationNode, ctx, _) => {
-            const process_type = node.dataset.directive;
-            const marker_id = node.dataset.markerId;
+        const process_type = node.dataset.directive;
+        const marker_id = node.dataset.markerId;
+        const func = processedBlocks.get(marker_id);
 
-            const func = processedBlocks.get(marker_id);
+        processes.push((node, ctx, _) => {
             if (!func) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
 
             const [nodeStart, nodeEnd] = createStartEndNode(process_type);
@@ -881,7 +954,7 @@ function preprocessNode(node) {
             fragment.append(nodeStart);
             fragment.append(nodeEnd);
 
-            destinationNode.append(fragment);
+            node.before(fragment);
 
             onMount(() => {
                 node.remove();
@@ -889,6 +962,7 @@ function preprocessNode(node) {
 
             func(nodeStart, nodeEnd, ctx);
         })
+
         cacheNodeProcesses.set(node, processes);
         return;
     }
@@ -898,12 +972,13 @@ function preprocessNode(node) {
         const attrValue = attr.value;
 
         if (attrName.startsWith('use:')) {
-            processes.push((node, _, ctx, _2) => {
-                const attr = attrName.slice(4);
-                const func = ctx[attrName.slice(4)];
-                const rawExpr = !attrValue ? "" : attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            const match = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            const attr_name = attrName.slice(4);
+            const rawExpr = !match ? "" : match;
 
-                if (!func) throw new Error(`use: directive "${attrName.slice(4)}" not found.`);
+            processes.push((node, ctx, _) => {
+                const func = ctx[attr_name];
+                if (!func) throw new Error(`use: directive "${attr_name}" not found.`);
 
                 const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
                 const onMountSet = onMountQueue[onMountQueue.length - 1];
@@ -913,21 +988,24 @@ function preprocessNode(node) {
                     if (typeof cleanup === "function") onUnmountSet.add(cleanup);
                 });
 
-                node.removeAttribute(attr.name); // Clean up raw attribute
+                node.removeAttribute(attrName); // Clean up raw attribute
             })
+
             continue;
         }
 
         if (attrName.startsWith('bind:')) {
-            processes.push((node, _, ctx, _2) => {
-                const attr = attrName.slice(5);
-                const type = node.type;
-                const tagname = node.tagName;
-                const eventDic = {
-                    "checked": type === "date" ? "change" : "click",
-                    "value": tagname === "select" ? "change" : "input",
-                };
+            const attr = attrName.slice(5);
+            const type = node.type;
+            const tagname = node.tagName;
+            const eventDic = {
+                "checked": type === "date" ? "change" : "click",
+                "value": tagname === "select" ? "change" : "input",
+            };
 
+            const event = eventDic[attr] ? eventDic[attr] : attr;
+
+            processes.push((node, ctx, _) => {
                 const binding = evaluate(`(value) => ${attrValue} = value`, ctx);
                 const eventListener = (event) => {
                     const type = event.target.type;
@@ -939,8 +1017,6 @@ function preprocessNode(node) {
 
                     binding(event.target[attr])
                 };
-
-                const event = eventDic[attr] ? eventDic[attr] : attr;
 
                 node.addEventListener(event, eventListener);
 
@@ -965,32 +1041,40 @@ function preprocessNode(node) {
 
                 node.removeAttribute(attrName); // Clean up raw attribute
             })
+
             continue;
         }
 
-        if (!attrValue.includes('{{')) continue;
-
         if (attrName.startsWith('on')) {
-            processes.push((node, _, ctx, _2) => {
-                const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            node.removeAttribute(attr.name); // Clean up raw attribute
+            const event_name = attrName.slice(2);
 
-                node.removeAttribute(attr.name); // Clean up raw attribute
-
+            processes.push((node, ctx, _) => {
                 effect(() => {
                     const func = evaluate(rawExpr, ctx);
-                    node.addEventListener(attrName.slice(2), func);
+                    node.addEventListener(event_name, func);
                     return () => {
-                        node.removeEventListener(attrName.slice(2), func);
+                        node.removeEventListener(event_name, func);
                     }
                 })
             })
             continue;
         }
 
-        processes.push((node, _, ctx, _2) => {
+        if (!attrValue.includes('{{')) continue;
+
+        processes.push((node, ctx, _) => {
+            let match, expr;
+
+            attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => {
+                match = m;
+                expr = e;
+            })
+
             effect(() => {
-                const newValue = attrValue.replace(/{{\s*(.+?)\s*}}/g, (_, expr) => evaluate(expr, ctx));
-                node.setAttribute(attr.name, newValue);
+                const newValue = attrValue.replace(match, evaluate(expr, ctx));
+                node.setAttribute(attrName, newValue);
             })
         })
     };
