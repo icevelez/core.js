@@ -336,37 +336,12 @@ function processEachBlock(eachBlock) {
                     block.i = index;
                     block.blockDatas = blockDatas;
 
-                    // SWAP NODES WHEN LENGTH ARE THE SAME
-                    // if (currentNode !== block.nodeStart.previousSibling) {
-                    //     const nodeEndNextSibling = renderedBlock.nodeEnd.nextSibling;
-
-                    //     const pointer = new Comment("Pointer");
-
-                    //     block.nodeEnd.nextSibling.before(pointer);
-
-                    //     const range = document.createRange();
-                    //     range.setStartBefore(block.nodeStart);
-                    //     range.setEndAfter(block.nodeEnd);
-
-                    //     const fragment = range.extractContents();
-                    //     nodeEndNextSibling.before(fragment);
-
-                    //     const rangeOld = document.createRange();
-                    //     rangeOld.setStartBefore(renderedBlock.nodeStart);
-                    //     rangeOld.setEndAfter(renderedBlock.nodeEnd);
-
-                    //     const fragmentOld = rangeOld.extractContents();
-
-                    //     pointer.before(fragmentOld);
-
-                    //     debugger;
-                    //     pointer.remove();
-                    // }
-
                     currentNode = block.nodeEnd;
                     newRenderedBlocks.push(block);
                     hasBlocks.set(block.value, block);
                     continue;
+
+                    // UPDATE EXISTING BLOCK IF NONE FOUND
                 } else if (renderedBlock) {
                     renderedBlock.value = blockDatas[index];
                     renderedBlock.dom_value = blockDatas[index];

@@ -113,13 +113,13 @@ function processCloneNode(processes, clone_node, original_node, ctx, render_slot
     }
 
     const childNodes = nodeChildren.get(original_node) || [];
+    if (childNodes.length <= 0) return;
+
     const childClones = Array.from(clone_node.childNodes);
 
     for (let i = 0; i < childClones.length; i++) {
         const original_childNode = childNodes[i];
         const clone_childNode = childClones[i];
-
-        if (!clone_childNode) continue;
 
         const processes = cacheNodeProcesses.get(original_childNode) || [];
         processCloneNode(processes, clone_childNode, original_childNode, ctx, render_slot_callbackfn);
