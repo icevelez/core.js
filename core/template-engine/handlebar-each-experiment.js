@@ -329,6 +329,7 @@ function processEachBlock(eachBlock) {
             for (let index = 0; index < blockDatas.length; index++) {
 
                 let block = blockWeakMap.get(blockDatas[index]);
+                let renderedBlock = renderedBlocks[index];
 
                 // USE EXISTING BLOCK
                 if (block && block.dom_value === blockDatas[index]) {
@@ -336,34 +337,44 @@ function processEachBlock(eachBlock) {
                     block.blockDatas = blockDatas;
 
                     // SWAP NODES WHEN LENGTH ARE THE SAME
-                    if (currentNode !== block.nodeStart.previousSibling && blockDatas.length === renderedBlocks.length) {
-                        const renderedBlock = renderedBlocks[index];
-                        const nodeEnd = renderedBlock.nodeEnd.nextSibling;
+                    // if (currentNode !== block.nodeStart.previousSibling) {
+                    //     const nodeEndNextSibling = renderedBlock.nodeEnd.nextSibling;
 
-                        const pointer = new Text();
+                    //     const pointer = new Comment("Pointer");
 
-                        block.nodeEnd.parentNode.insertBefore(pointer, block.nodeEnd.nextSibling);
+                    //     block.nodeEnd.nextSibling.before(pointer);
 
-                        const range = document.createRange();
-                        range.setStartBefore(block.nodeStart);
-                        range.setEndAfter(block.nodeEnd);
+                    //     const range = document.createRange();
+                    //     range.setStartBefore(block.nodeStart);
+                    //     range.setEndAfter(block.nodeEnd);
 
-                        const fragment = range.extractContents();
-                        nodeEnd.parentNode.insertBefore(fragment, nodeEnd);
+                    //     const fragment = range.extractContents();
+                    //     nodeEndNextSibling.before(fragment);
 
-                        const rangeOld = document.createRange();
-                        rangeOld.setStartBefore(renderedBlock.nodeStart);
-                        rangeOld.setEndAfter(renderedBlock.nodeEnd);
+                    //     const rangeOld = document.createRange();
+                    //     rangeOld.setStartBefore(renderedBlock.nodeStart);
+                    //     rangeOld.setEndAfter(renderedBlock.nodeEnd);
 
-                        const fragmentOld = rangeOld.extractContents();
+                    //     const fragmentOld = rangeOld.extractContents();
 
-                        pointer.parentNode.insertBefore(fragmentOld, pointer);
-                        pointer.remove();
-                    }
+                    //     pointer.before(fragmentOld);
+
+                    //     debugger;
+                    //     pointer.remove();
+                    // }
 
                     currentNode = block.nodeEnd;
                     newRenderedBlocks.push(block);
                     hasBlocks.set(block.value, block);
+                    continue;
+                } else if (renderedBlock) {
+                    renderedBlock.value = blockDatas[index];
+                    renderedBlock.dom_value = blockDatas[index];
+                    renderedBlock.blockDatas = blockDatas;
+
+                    currentNode = renderedBlock.nodeEnd;
+                    newRenderedBlocks.push(renderedBlock);
+                    hasBlocks.set(renderedBlock.value, renderedBlock);
                     continue;
                 }
 
