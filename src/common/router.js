@@ -1,4 +1,4 @@
-import { Derived, State } from "../../core/reactivity.js";
+import { State } from "../../core/reactivity.js";
 
 class RouterInstance {
 
@@ -16,24 +16,17 @@ class RouterInstance {
         this.#url.value = new URL(`${window.location.protocol}//${window.location.host}${route}`);
     }
 
-    queryParams = new Derived(() => this.#url.value.searchParams);
-    pathname = new Derived(() => this.#url.value.pathname);
+    get queryParams() {
+        return this.#url.value.searchParams;
+    };
+
+    get pathname() {
+        return this.#url.value.pathname;
+    }
 
     constructor() {
         this.#updateHashFragment();
         window.addEventListener('hashchange', this.#updateHashFragment);
-
-        this.queryParams.get = (key) => {
-            return this.queryParams.value[key];
-        }
-
-        this.queryParams.set = (key, value) => {
-            this.queryParams.value[key] = value;
-        }
-
-        this.queryParams.toString = () => {
-            return Object.entries(this.queryParams.value).map(([k, v]) => `${k}=${v}`).join("&");
-        }
     }
 
     /**
@@ -57,7 +50,7 @@ class RouterInstance {
             this.#cachePatterns.set(route_pattern, route);
         }
 
-        const match = this.pathname.value.match(route.regex);
+        const match = this.pathname.match(route.regex);
 
         /**
          * @type {{ is_match : boolean, params : Record<string, string> }}

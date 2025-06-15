@@ -29,17 +29,21 @@ export const onUnmountQueue = [];
 * @returns {any}
 */
 export function evaluate(expr, ctx) {
-    const key = `${Object.keys(ctx).join(",")} ${expr}`;
-    let evalFunc = evaluationCache.get(key)
+    if (!expr || typeof expr !== "string") return undefined;
+
+    const ctx_keys = Object.keys(ctx);
+    const key = `${expr}::${ctx_keys.join(',')}`;
+
+    let evalFunc = evaluationCache.get(key);
     if (!evalFunc) {
-        evalFunc = Function(...Object.keys(ctx), `return ${expr};`);
+        evalFunc = Function(...ctx_keys, `return ${expr};`);
         evaluationCache.set(key, evalFunc);
     }
 
     try {
-        return evalFunc(...Object.values(ctx));
+        return evalFunc(...ctx_keys.map(k => ctx[k]));
     } catch (e) {
-        console.error(`Evaluation error: ${expr}`, e, ctx);
+        console.error(`Evaluation run-time error: ${expr}`, e, ctx);
         return {};
     }
 }

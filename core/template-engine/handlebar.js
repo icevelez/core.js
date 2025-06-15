@@ -91,23 +91,25 @@ function createFragment(nodes, ctx, render_slot_callbackfn) {
     for (const node of nodes) {
         const clone_node = node.cloneNode(true);
         fragment.append(clone_node);
-
-        const processes = cacheNodeProcesses.get(node) || [];
-        processCloneNode(processes, clone_node, node, ctx, render_slot_callbackfn);
+        processCloneNode(clone_node, node, ctx, render_slot_callbackfn);
     }
 
     return fragment;
 }
 
 /**
-*
-* @param {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]} processes
 * @param {Node} clone_node
 * @param {Node} original_node
 * @param {Record<string, any>} ctx
 * @param {Function} render_slot_callbackfn
 */
-function processCloneNode(processes, clone_node, original_node, ctx, render_slot_callbackfn) {
+function processCloneNode(clone_node, original_node, ctx, render_slot_callbackfn) {
+
+    /**
+     * @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]}
+     */
+    const processes = cacheNodeProcesses.get(original_node) || [];
+
     for (const process of processes) {
         process(clone_node, ctx, render_slot_callbackfn)
     }
@@ -118,9 +120,7 @@ function processCloneNode(processes, clone_node, original_node, ctx, render_slot
     for (let i = 0; i < childNodes.length; i++) {
         const original_childNode = childNodes[i];
         const clone_childNode = clone_node.childNodes[i];
-
-        const processes = cacheNodeProcesses.get(original_childNode) || [];
-        processCloneNode(processes, clone_childNode, original_childNode, ctx, render_slot_callbackfn);
+        processCloneNode(clone_childNode, original_childNode, ctx, render_slot_callbackfn);
     }
 }
 
@@ -265,17 +265,17 @@ function processEachBlock(eachBlock) {
             if (blockDatas.length <= 0 && !isEmptyBlockMounted) {
                 isEmptyBlockMounted = true;
 
-                if (renderedBlocks.length <= 0 && !eachConfig.emptyContent) return;
+                if (renderedBlocks.length > 0) {
+                    removeNodesBetween(startNode, endNode);
 
-                removeNodesBetween(startNode, endNode);
+                    for (let i = 0; i < renderedBlocks.length; i++) {
+                        const block = renderedBlocks[i];
+                        block.unmount();
+                        block.index = null;
+                    }
 
-                for (let i = 0; i < renderedBlocks.length; i++) {
-                    const block = renderedBlocks[i];
-                    block.unmount();
-                    block.index = null;
+                    renderedBlocks = [];
                 }
-
-                renderedBlocks = [];
 
                 if (!eachConfig.emptyContent) return;
 
@@ -609,7 +609,6 @@ function processAwaitBlock(awaitBlock) {
         effect(() => {
             try {
                 const promise = evaluate(awaitConfig.promiseExpr, ctx);
-                if (promise === undefined) return;
 
                 if (promise instanceof Promise) {
                     showLoading();
@@ -1010,14 +1009,14 @@ function preprocessNode(node) {
 
         if (!attrValue.includes('{{')) continue;
 
+        let match, expr;
+
+        attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => {
+            match = m;
+            expr = e;
+        })
+
         processes.push((node, ctx, _) => {
-            let match, expr;
-
-            attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => {
-                match = m;
-                expr = e;
-            })
-
             effect(() => {
                 const newValue = attrValue.replace(match, evaluate(expr, ctx));
                 node.setAttribute(attrName, newValue);
@@ -1026,17 +1025,11 @@ function preprocessNode(node) {
     };
 
     const childNodes = Array.from(node.childNodes);
-
     if (childNodes.length > 0) {
-
         nodeChildren.set(node, childNodes);
-
-        for (const childNode of childNodes) {
-            preprocessNode(childNode);
-        }
+        for (const childNode of childNodes) preprocessNode(childNode);
     }
 
     if (processes.length <= 0) return;
-
     cacheNodeProcesses.set(node, processes);
 }
