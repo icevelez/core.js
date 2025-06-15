@@ -265,12 +265,9 @@ export function createDeepProxy(target) {
         if (obj[IS_PROXY]) return obj;
 
         // Avoid wrapping same object multiple times
-        if (proxyCache.has(obj)) {
-            return proxyCache.get(obj);
-        }
+        if (proxyCache.has(obj)) return proxyCache.get(obj);
 
         const proxy = new Proxy(obj, {
-            id: makeId(6),
             get(target, key) {
                 if (key === IS_PROXY) return true;
                 if (key === UNWRAPPED_VALUE) return target;
