@@ -24,7 +24,7 @@ const imported_components = new Map();
 const nodeChildren = new WeakMap();
 
 /**
-* @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]>}
+* @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:(() => DocumentFragment)) => void)>}
 */
 const cacheNodeProcesses = new WeakMap();
 
@@ -69,12 +69,20 @@ export function component(options, Context = class { }) {
 * @param {string} template
 */
 function createNodes(template) {
+    if (template == "" || typeof template !== "string") return [];
+
     const templateElement = document.createElement("template");
     templateElement.innerHTML = template;
 
     const childNodes = Array.from(templateElement.content.childNodes);
 
-    for (const childNode of childNodes) preprocessNode(childNode);
+    for (const childNode of childNodes) {
+        const processes = preprocessNode(childNode);
+        if (processes.length <= 0) continue;
+        cacheNodeProcesses.set(childNode, (node, ctx, render_slot_callbackfn) => {
+            for (const process of processes) process(node, ctx, render_slot_callbackfn);
+        })
+    }
 
     return childNodes;
 }
@@ -91,37 +99,11 @@ function createFragment(nodes, ctx, render_slot_callbackfn) {
     for (const node of nodes) {
         const clone_node = node.cloneNode(true);
         fragment.append(clone_node);
-        processCloneNode(clone_node, node, ctx, render_slot_callbackfn);
+        const processfn = cacheNodeProcesses.get(node);
+        if (processfn) processfn(clone_node, ctx, render_slot_callbackfn);
     }
 
     return fragment;
-}
-
-/**
-* @param {Node} clone_node
-* @param {Node} original_node
-* @param {Record<string, any>} ctx
-* @param {Function} render_slot_callbackfn
-*/
-function processCloneNode(clone_node, original_node, ctx, render_slot_callbackfn) {
-
-    /**
-     * @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]}
-     */
-    const processes = cacheNodeProcesses.get(original_node) || [];
-
-    for (const process of processes) {
-        process(clone_node, ctx, render_slot_callbackfn)
-    }
-
-    const childNodes = nodeChildren.get(original_node);
-    if (!childNodes) return;
-
-    for (let i = 0; i < childNodes.length; i++) {
-        const original_childNode = childNodes[i];
-        const clone_childNode = clone_node.childNodes[i];
-        processCloneNode(clone_childNode, original_childNode, ctx, render_slot_callbackfn);
-    }
 }
 
 /**
@@ -760,7 +742,7 @@ function preprocessNode(node) {
         const parts = expression.split(/({{[^}]+}})/g);
         const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
 
-        if (!has_handlebars) return;
+        if (!has_handlebars) return processes;
 
         if (parts.length <= 1) {
             let match, expr;
@@ -776,8 +758,7 @@ function preprocessNode(node) {
                 })
             });
 
-            cacheNodeProcesses.set(node, processes);
-            return;
+            return processes;
         }
 
         let matches_and_exprs = [];
@@ -822,11 +803,10 @@ function preprocessNode(node) {
             })
         });
 
-        cacheNodeProcesses.set(node, processes);
-        return;
+        return processes;
     }
 
-    if (node.nodeType === Node.COMMENT_NODE) return;
+    if (node.nodeType === Node.COMMENT_NODE) return processes;
 
     const isSlotNode = (node) => Boolean(node.dataset.directive === "slot");
     const isCoreComponentNode = (node) => Boolean(node.dataset.directive === "core-component");
@@ -840,8 +820,8 @@ function preprocessNode(node) {
             if (!render_slot_callbackfn) return;
             node.before(render_slot_callbackfn());
         });
-        cacheNodeProcesses.set(node, processes);
-        return;
+
+        return processes;
     }
 
     if (isCoreComponentNode(node)) {
@@ -881,8 +861,8 @@ function preprocessNode(node) {
                 node.remove();
             })
         })
-        cacheNodeProcesses.set(node, processes);
-        return;
+
+        return processes;
     }
 
     if (isMarkedNode(node)) {
@@ -908,8 +888,7 @@ function preprocessNode(node) {
             func(nodeStart, nodeEnd, ctx);
         })
 
-        cacheNodeProcesses.set(node, processes);
-        return;
+        return processes;
     }
 
     for (const attr of node.attributes) {
@@ -1026,10 +1005,16 @@ function preprocessNode(node) {
 
     const childNodes = Array.from(node.childNodes);
     if (childNodes.length > 0) {
-        nodeChildren.set(node, childNodes);
-        for (const childNode of childNodes) preprocessNode(childNode);
+        for (let i = 0; i < childNodes.length; i++) {
+            const sub_processes = preprocessNode(childNodes[i]);
+            if (sub_processes.length <= 0) continue;
+            processes.push((node, ctx, render_slot_callbackfn) => {
+                for (const sub_process of sub_processes) {
+                    sub_process(node.childNodes[i], ctx, render_slot_callbackfn);
+                }
+            })
+        }
     }
 
-    if (processes.length <= 0) return;
-    cacheNodeProcesses.set(node, processes);
+    return processes;
 }
