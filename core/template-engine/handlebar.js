@@ -53,9 +53,7 @@ export function component(options, Context = class { }) {
     let template = preprocessComponents(options.template, imported_components_id, processComponent);
     if (options.components && Object.keys(options.components).length > 0) imported_components.set(imported_components_id, options.components);
 
-    template = preprocessTemplateString(template);
-
-    const nodes = createNodes(template);
+    const nodes = createNodes(preprocessTemplateString(template));
 
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
@@ -157,15 +155,8 @@ function processEachBlock(eachBlock) {
             }
         };
 
-        let childCtx = (eachConfig.indexVar) ? {
-            get [eachConfig.indexVar]() {
-                return block.index.value
-            }
-        } : {};
-
-        childCtx = {
+        const childCtx = Object.assign({
             ...ctx,
-            ...childCtx,
             get [eachConfig.blockVar]() {
                 return blockDatas[index]
             },
@@ -176,12 +167,13 @@ function processEachBlock(eachBlock) {
                 blockDatas[index] = new_value;
                 return true;
             },
-        }
+        }, (eachConfig.indexVar) ? {
+            get [eachConfig.indexVar]() {
+                return block.index.value
+            }
+        } : {});
 
         cleanupEffect = untrackedEffect(() => {
-            unmount();
-            removeNodesBetween(nodeStart, nodeEnd);
-
             onUnmountQueue.push(onUnmountSet);
             onMountQueue.push(onMountSet);
 
@@ -191,7 +183,10 @@ function processEachBlock(eachBlock) {
             onMountQueue.pop()
             onUnmountQueue.pop()
 
-            if (core_context.is_mounted_to_the_DOM) return mount();
+            if (core_context.is_mounted_to_the_DOM) {
+                mount();
+                return;
+            }
 
             core_context.onMountSet.add(mount)
             core_context.onUnmountSet.add(unmount)
@@ -1009,8 +1004,9 @@ function preprocessNode(node) {
             const sub_processes = preprocessNode(childNodes[i]);
             if (sub_processes.length <= 0) continue;
             processes.push((node, ctx, render_slot_callbackfn) => {
+                const child_node = node.childNodes[i];
                 for (const sub_process of sub_processes) {
-                    sub_process(node.childNodes[i], ctx, render_slot_callbackfn);
+                    sub_process(child_node, ctx, render_slot_callbackfn);
                 }
             })
         }
