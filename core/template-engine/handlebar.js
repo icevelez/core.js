@@ -1,4 +1,4 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate } from "../internal-core.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate, event_delegation } from "../internal-core.js";
 import { onMount } from "../core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../helper-functions.js";
@@ -141,37 +141,42 @@ function processEachBlock(eachBlock) {
         currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
         currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
 
+        const blockIndex = new State(index);
+
         const block = {
             nodeStart,
             nodeEnd,
             unmount,
-            index: new State(index),
-            get value() {
-                return blockDatas[index]
-            },
-            set value(new_value) {
-                blockDatas[index] = new_value;
-                return true;
-            }
+            index: blockIndex,
         };
 
-        const childCtx = Object.assign({
-            ...ctx,
-            get [eachConfig.blockVar]() {
-                return blockDatas[index]
+        const property = {
+            get() {
+                return blockDatas[index];
             },
-            /**
-             * @param {any} new_value
-             */
-            set [eachConfig.blockVar](new_value) {
-                blockDatas[index] = new_value;
+            set(newValue) {
+                blockDatas[index] = newValue;
                 return true;
             },
-        }, (eachConfig.indexVar) ? {
-            get [eachConfig.indexVar]() {
-                return block.index.value
-            }
-        } : {});
+            configurable: true,
+            enumerable: true,
+        };
+
+        Object.defineProperty(block, "value", property);
+
+        const childCtx = Object.assign({}, ctx);
+
+        Object.defineProperty(childCtx, eachConfig.blockVar, property);
+
+        if (eachConfig.indexVar) {
+            Object.defineProperty(childCtx, eachConfig.indexVar, {
+                get() {
+                    return blockIndex.value;
+                },
+                configurable: true,
+                enumerable: true,
+            });
+        }
 
         cleanupEffect = untrackedEffect(() => {
             onUnmountQueue.push(onUnmountSet);
@@ -552,7 +557,7 @@ function processAwaitBlock(awaitBlock) {
             onUnmountQueue.push(onUnmountSet);
             onMountQueue.push(onMountSet);
 
-            const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
+            const childCtx = awaitConfig.then.var ? Object.assign({ [awaitConfig.then.var]: result }, ctx) : ctx;
             const nodes = createFragment(thenNodes, childCtx);
             endNode.before(nodes);
 
@@ -573,7 +578,7 @@ function processAwaitBlock(awaitBlock) {
             onUnmountQueue.push(onUnmountSet);
             onMountQueue.push(onMountSet);
 
-            const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
+            const childCtx = awaitConfig.catch.var ? Object.assign({ [awaitConfig.catch.var]: result }, ctx) : ctx;
             const nodes = createFragment(catchNodes, childCtx);
             endNode.before(nodes);
 
@@ -937,7 +942,7 @@ function preprocessNode(node) {
                     binding(event.target[attr])
                 };
 
-                node.addEventListener(event, eventListener);
+                event_delegation.addListener(event, node, eventListener);
 
                 effect(() => {
                     const type = node.type;
@@ -955,7 +960,7 @@ function preprocessNode(node) {
                 const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
 
                 unmountSet.add(() => {
-                    node.removeEventListener('click', eventListener)
+                    event_delegation.removeListener(event, node, eventListener);
                 });
 
                 node.removeAttribute(attrName); // Clean up raw attribute
@@ -972,9 +977,9 @@ function preprocessNode(node) {
             processes.push((node, ctx, _) => {
                 effect(() => {
                     const func = evaluate(rawExpr, ctx);
-                    node.addEventListener(event_name, func);
+                    event_delegation.addListener(event_name, node, func);
                     return () => {
-                        node.removeEventListener(event_name, func);
+                        event_delegation.removeListener(event_name, node, func);
                     }
                 })
             })

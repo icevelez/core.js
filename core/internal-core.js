@@ -47,3 +47,72 @@ export function evaluate(expr, ctx) {
         return {};
     }
 }
+
+/**
+ * @type {Map<string, WeakMap<Node, Set<Function>>>}
+ */
+const delegated_events = new Map();
+
+export const event_delegation = Object.freeze({
+    /**
+     * @param {string} event_name
+     * @param {Node} node
+     * @param {Function} func
+     */
+    addListener: function (event_name, node, func) {
+        let event_node_weakmap = delegated_events.get(event_name);
+
+        if (!event_node_weakmap) {
+            event_node_weakmap = new WeakMap();
+            const funcs = new Set();
+            funcs.add(func);
+
+            event_node_weakmap.set(node, funcs);
+            delegated_events.set(event_name, event_node_weakmap);
+
+            window.addEventListener(event_name, (e) => {
+                match_delegated_node(event_node_weakmap, e, e.target);
+            });
+
+            return;
+        }
+
+        let funcs = event_node_weakmap.get(node);
+        if (!funcs) {
+            funcs = new Set();
+            event_node_weakmap.set(node, funcs);
+        }
+        funcs.add(func);
+    },
+    /**
+     *
+     * @param {string} event_name
+     * @param {node} node
+     * @param {Function} func
+     */
+    removeListener: function remove_delegated_node(event_name, node, func = null) {
+        const event = delegated_events.get(event_name);
+        if (!event) return;
+        const funcs = event.get(node);
+        if (!funcs) return;
+        funcs.delete(func);
+    }
+})
+
+/**
+ * Traverse event.target to event.target.parentNode recursively until a WeakMap<Node> matches, if not, return void, if has, run functions
+ * @param {WeakMap<Node, Set<Function>>} event_node_weakmap
+ * @param {Event} event
+ * @param {Node} target
+ */
+function match_delegated_node(event_node_weakmap, event, target) {
+    const funcs = event_node_weakmap.get(target);
+    if (!funcs) {
+        if (!target.parentNode) return;
+        return match_delegated_node(event_node_weakmap, event, target.parentNode);
+    }
+
+    for (const func of funcs) {
+        func(event);
+    }
+}

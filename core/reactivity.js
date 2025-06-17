@@ -314,7 +314,6 @@ export function createDeepProxy(target) {
             set(target, key, new_value) {
                 // console.log('set', target, key, new_value);
 
-                const oldValue = target[key];
                 let unwrapped_value = new_value;
 
                 if (isObject(new_value)) {
@@ -324,10 +323,12 @@ export function createDeepProxy(target) {
                     unwrapped_value = new_value[UNWRAPPED_VALUE];
                 }
 
+                if (target[key] === unwrapped_value) return true;
+
                 // Cleanup if replacing target[key] (object) with a non-object new_value
-                if (isObject(oldValue) && (!isObject(new_value) || !new_value[IS_PROXY])) {
+                if (isObject(target[key]) && (!isObject(new_value) || !new_value[IS_PROXY])) {
                     SUBSCRIBERS.getMap(target).delete(key);
-                    SUBSCRIBERS.deepDelete(oldValue);
+                    SUBSCRIBERS.deepDelete(target[key]);
                 }
 
                 target[key] = unwrapped_value;

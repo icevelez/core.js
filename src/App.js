@@ -14,8 +14,6 @@ export default component({
     counter = new State(0);
     name = new State('User');
 
-    constructor() {
-
-    }
+    constructor() { }
 
 });
