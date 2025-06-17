@@ -778,14 +778,12 @@ function preprocessNode(node) {
 
             node.textContent = "";
 
-            const fragment = document.createDocumentFragment();
-
             for (const obj of matches_and_exprs) {
                 const textNode = document.createTextNode("");
 
                 if (!obj.has_match) {
                     textNode.textContent = obj.part;
-                    fragment.append(textNode)
+                    node.before(textNode);
                     continue;
                 }
 
@@ -793,10 +791,8 @@ function preprocessNode(node) {
                     textNode.textContent = obj.part.replace(obj.match, evaluate(obj.expr, ctx));
                 })
 
-                fragment.append(textNode)
+                node.before(textNode);
             };
-
-            node.before(fragment);
 
             onMount(() => {
                 node.remove();
@@ -826,11 +822,6 @@ function preprocessNode(node) {
 
     if (isCoreComponentNode(node)) {
         const componentName = node.getAttribute("default");
-
-        node.removeAttribute("default");
-        node.removeAttribute("data-directive");
-        node.removeAttribute("data-slot-id");
-
         const slot_id = node.dataset.slotId;
         const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
 
