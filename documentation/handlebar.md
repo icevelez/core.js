@@ -271,20 +271,22 @@ The `<Core:slot />` directive allows a **custom component** to display child con
 
 ## 8. `use:` Directive (Action Support)
 
+> NOTE: Due to the HTML spec, HTML attributes are case insensitive so function names cannot be Pascal Case
+
 ### ✅ Basic usage
 ```html
-<input use:myAction />
+<input use:myaction />
 ```
 
 ### ✅ With parameters
 ```html
-<input use:myAction="{{ 'Enter your name' }}" />
+<input use:myaction="{{ 'Enter your name' }}" />
 ```
 
 ### ✅ Action Function Signature
 Each action should be a function with the signature:
 ```js
-function myAction(node, parameter) {
+function myaction(node, parameter) {
   // Setup logic
 
   return () => {

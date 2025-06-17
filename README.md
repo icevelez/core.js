@@ -4,7 +4,7 @@ A Framework without a bundler
 
 ---
 
-Version: 0.1.4
+Version: 0.1.7
 
 License: MIT
 

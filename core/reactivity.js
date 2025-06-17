@@ -1,4 +1,4 @@
-import { isObject, makeId } from "./helper-functions.js";
+import { isObject } from "./helper-functions.js";
 
 /**
 * @type {Set<Function>}
