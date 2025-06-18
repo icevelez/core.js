@@ -72,14 +72,15 @@ function createNodes(template) {
     const templateElement = document.createElement("template");
     templateElement.innerHTML = template;
 
+    const preprocessed_childNodes = Array.from(templateElement.content.childNodes);
+    for (const childNode of preprocessed_childNodes) preprocessTextNodes(childNode);
+
     const childNodes = Array.from(templateElement.content.childNodes);
 
     for (const childNode of childNodes) {
         const processes = preprocessNode(childNode);
         if (processes.length <= 0) continue;
-        cacheNodeProcesses.set(childNode, (node, ctx, render_slot_callbackfn) => {
-            for (const process of processes) process(node, ctx, render_slot_callbackfn);
-        })
+        cacheNodeProcesses.set(childNode, processes);
     }
 
     return childNodes;
@@ -97,8 +98,8 @@ function createFragment(nodes, ctx, render_slot_callbackfn) {
     for (const node of nodes) {
         const clone_node = node.cloneNode(true);
         fragment.append(clone_node);
-        const processfn = cacheNodeProcesses.get(node);
-        if (processfn) processfn(clone_node, ctx, render_slot_callbackfn);
+        const processes = cacheNodeProcesses.get(node);
+        if (processes) applyProcess(clone_node, processes, ctx, render_slot_callbackfn);
     }
 
     return fragment;
@@ -142,6 +143,7 @@ function processEachBlock(eachBlock) {
         currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
 
         const blockIndex = new State(index);
+        const blockData = new State(blockDatas[index]);
 
         const block = {
             nodeStart,
@@ -152,10 +154,10 @@ function processEachBlock(eachBlock) {
 
         const property = {
             get() {
-                return blockDatas[index];
+                return blockData.value;
             },
             set(newValue) {
-                blockDatas[index] = newValue;
+                blockData.value = newValue;
                 return true;
             },
             configurable: true,
@@ -349,8 +351,8 @@ function processEachBlock(eachBlock) {
 
                 nodeEnd.remove();
                 renderBlock.unmount();
-                renderBlock.index = null;
             }
+
             renderedBlocks = newRenderedBlocks;
 
             return;
@@ -723,10 +725,53 @@ function preprocessComponents(template, imported_components_id, processComponent
 }
 
 /**
-*
+* The purpose of this function is to search for text and split them into individual text nodes to for a finer text interpolation
 * @param {Node} node
-* @param {Record<string, any>} ctx
-* @param {Function} render_slot_callbackfn
+*/
+function preprocessTextNodes(node) {
+    const isText = node.nodeType === Node.TEXT_NODE;
+
+    if (!isText) {
+        const childNodes = Array.from(node.childNodes);
+        for (const child_node of childNodes) preprocessTextNodes(child_node);
+        return node;
+    }
+
+    const expression = node.textContent;
+    const parts = expression.split(/({{[^}]+}})/g);
+
+    const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
+    if (!has_handlebars) return;
+
+    if (parts.length <= 1) return node;
+
+    node.textContent = "";
+
+    for (const part of parts) {
+        const textNode = document.createTextNode("");
+        textNode.textContent = part;
+        node.before(textNode);
+    };
+
+    node.remove();
+}
+
+const process_type_enum = {
+    "textInterpolation": 1,
+    "attributeInterpolation": 2,
+    "slotInjection": 3,
+    "coreComponent": 4,
+    "markedBlocks": 5,
+    "directiveBind": 6,
+    "directiveUse": 7,
+    "eventListener": 8,
+    "children": 9,
+};
+
+/**
+* The purpose of this function is to search and store the dynamic binding of a node and its children recursively
+* so that static nodes are not included when processing a node's dynamic bindings
+* @param {Node} node
 */
 function preprocessNode(node) {
     const isText = node.nodeType === Node.TEXT_NODE;
@@ -740,65 +785,13 @@ function preprocessNode(node) {
         const expression = node.textContent;
         const regex = /{{\s*([^#\/][^}]*)\s*}}/g;
         const parts = expression.split(/({{[^}]+}})/g);
-        const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
 
+        const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
         if (!has_handlebars) return processes;
 
-        if (parts.length <= 1) {
-            let match, expr;
-
-            expression.replace(regex, (m, e) => {
-                match = m;
-                expr = e;
-            });
-
-            processes.push((node, ctx, _) => {
-                effect(() => {
-                    node.textContent = expression.replace(match, evaluate(expr, ctx));
-                })
-            });
-
-            return processes;
-        }
-
-        let matches_and_exprs = [];
-
-        for (const part of parts) {
-            let match, expr;
-
-            part.replace(regex, (m, e) => {
-                match = m;
-                expr = e;
-            });
-
-            matches_and_exprs.push({ has_match: match !== undefined, part, match, expr });
-        };
-
-        processes.push((node, ctx, _) => {
-
-            node.textContent = "";
-
-            for (const obj of matches_and_exprs) {
-                const textNode = document.createTextNode("");
-
-                if (!obj.has_match) {
-                    textNode.textContent = obj.part;
-                    node.before(textNode);
-                    continue;
-                }
-
-                effect(() => {
-                    textNode.textContent = obj.part.replace(obj.match, evaluate(obj.expr, ctx));
-                })
-
-                node.before(textNode);
-            };
-
-            onMount(() => {
-                node.remove();
-            })
-        });
-
+        let match, expr;
+        expression.replace(regex, (m, e) => { match = m; expr = e; });
+        processes.push({ type: process_type_enum.textInterpolation, match, expr, full_expr: expression });
         return processes;
     }
 
@@ -809,76 +802,24 @@ function preprocessNode(node) {
     const isMarkedNode = (node) => Boolean(node.dataset.directive && node.dataset.markerId)
 
     if (isSlotNode(node)) {
-        processes.push((node, _, render_slot_callbackfn) => {
-            onMount(() => {
-                node.remove();
-            })
-            if (!render_slot_callbackfn) return;
-            node.before(render_slot_callbackfn());
-        });
-
+        processes.push({ type: process_type_enum.slotInjection });
         return processes;
     }
 
     if (isCoreComponentNode(node)) {
-        const componentName = node.getAttribute("default");
+        const component_name = node.getAttribute("default");
         const slot_id = node.dataset.slotId;
         const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
-
-        processes.push((node, ctx, _) => {
-            const component = ctx[componentName]?.default;
-
-            if (!component) {
-                console.error(`Core component "${componentName}" is undefined. Kindly check if the component has a default export`);
-                return;
-            }
-
-            const attrs = {};
-
-            for (const attr of node.attributes) {
-                const attrName = attr.name;
-                const attrValue = attr.value;
-                attrs[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
-            }
-
-            if (slot_nodes) {
-                const renderSlotCallbackfn = () => createFragment(slot_nodes, ctx);
-                node.before(component(attrs, renderSlotCallbackfn));
-            } else {
-                node.before(component(attrs));
-            }
-
-            onMount(() => {
-                node.remove();
-            })
-        })
-
+        processes.push({ type: process_type_enum.coreComponent, slot_id, slot_nodes, component_name })
         return processes;
     }
 
     if (isMarkedNode(node)) {
-        const process_type = node.dataset.directive;
+        const marker_type = node.dataset.directive;
         const marker_id = node.dataset.markerId;
-        const func = processedBlocks.get(marker_id);
-
-        processes.push((node, ctx, _) => {
-            if (!func) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
-
-            const [nodeStart, nodeEnd] = createStartEndNode(process_type);
-            const fragment = document.createDocumentFragment();
-
-            fragment.append(nodeStart);
-            fragment.append(nodeEnd);
-
-            node.before(fragment);
-
-            onMount(() => {
-                node.remove();
-            })
-
-            func(nodeStart, nodeEnd, ctx);
-        })
-
+        const render_func = processedBlocks.get(marker_id);
+        if (!render_func) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
+        processes.push({ type: process_type_enum.markedBlocks, marker_type, render_func });
         return processes;
     }
 
@@ -888,40 +829,99 @@ function preprocessNode(node) {
 
         if (attrName.startsWith('use:')) {
             const match = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
-            const attr_name = attrName.slice(4);
-            const rawExpr = !match ? "" : match;
+            const func_name = attrName.slice(4);
+            const func_attr = !match ? "" : match;
 
-            processes.push((node, ctx, _) => {
-                const func = ctx[attr_name];
-                if (!func) throw new Error(`use: directive "${attr_name}" not found.`);
+            processes.push({ type: process_type_enum.directiveUse, func_name, func_attr });
+            node.removeAttribute(attrName);
+
+        } else if (attrName.startsWith('bind:')) {
+
+            const input_type = attrName.slice(5);
+            const event_type_dic = {
+                "checked": node.type === "date" ? "change" : "click",
+                "value": node.tagName === "select" ? "change" : "input",
+            };
+            const matched_event_type = event_type_dic[input_type] ? event_type_dic[input_type] : input_type;
+
+            processes.push({ type: process_type_enum.directiveBind, event_type: matched_event_type, input_type, value: attrValue });
+            node.removeAttribute(attrName);
+        } else if (attrName.startsWith('on')) {
+
+            const expr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            const event_type = attrName.slice(2);
+
+            processes.push({ type: process_type_enum.eventListener, event_type, expr });
+            node.removeAttribute(attrName);
+
+        } else if (attrValue.includes('{{')) {
+            let match, expr;
+            attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { match = m; expr = e; })
+            processes.push({ type: process_type_enum.attributeInterpolation, match, expr, attr_name: attrName, attr: attrValue });
+        }
+    };
+
+    const childNodes = Array.from(node.childNodes);
+    if (childNodes.length <= 0) return processes;
+
+    for (let i = 0; i < childNodes.length; i++) {
+        const sub_process = preprocessNode(childNodes[i]);
+        if (sub_process.length <= 0) continue;
+        processes.push({ type: process_type_enum.children, processes: sub_process, child_node_index: i });
+    }
+
+    return processes;
+}
+
+/**
+ * The purpose of this function is to avoid recursive function closures which having too many can slow down performance
+ * @param {Node} node
+ * @param {Record<string, any>[]} processes
+ * @param {any} ctx
+ * @param {() => DocumentFragment} render_slot_callbackfn
+ */
+function applyProcess(node, processes, ctx, render_slot_callbackfn) {
+    for (const process of processes) {
+        switch (process.type) {
+            case process_type_enum.textInterpolation: {
+                effect(() => {
+                    node.textContent = process.full_expr.replace(process.match, () => evaluate(process.expr, ctx));
+                })
+                break;
+            }
+
+            case process_type_enum.attributeInterpolation: {
+                effect(() => {
+                    node.setAttribute(process.attr_name, process.attr.replace(process.match, () => evaluate(process.expr, ctx)));
+                })
+                break;
+            }
+
+            case process_type_enum.eventListener: {
+                effect(() => {
+                    const func = evaluate(process.expr, ctx);
+                    event_delegation.addListener(process.event_type, node, func);
+                    return () => event_delegation.removeListener(process.event_type, node, func);
+                })
+                break;
+            }
+
+            case process_type_enum.directiveUse: {
+                const func = ctx[process.func_name];
+                if (!func) throw new Error(`use: directive "${process.func_name}" not found.`);
 
                 const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
                 const onMountSet = onMountQueue[onMountQueue.length - 1];
 
                 onMountSet.add(() => {
-                    const cleanup = func(node, evaluate(rawExpr, ctx));
+                    const cleanup = func(node, process.func_attr ? evaluate(process.func_attr, ctx) : undefined);
                     if (typeof cleanup === "function") onUnmountSet.add(cleanup);
                 });
+                break;
+            }
 
-                node.removeAttribute(attrName); // Clean up raw attribute
-            })
-
-            continue;
-        }
-
-        if (attrName.startsWith('bind:')) {
-            const attr = attrName.slice(5);
-            const type = node.type;
-            const tagname = node.tagName;
-            const eventDic = {
-                "checked": type === "date" ? "change" : "click",
-                "value": tagname === "select" ? "change" : "input",
-            };
-
-            const event = eventDic[attr] ? eventDic[attr] : attr;
-
-            processes.push((node, ctx, _) => {
-                const binding = evaluate(`(value) => ${attrValue} = value`, ctx);
+            case process_type_enum.directiveBind: {
+                const binding = evaluate(`(value) => ${process.value} = value`, ctx);
                 const eventListener = (event) => {
                     const type = event.target.type;
 
@@ -933,80 +933,76 @@ function preprocessNode(node) {
                     binding(event.target[attr])
                 };
 
-                event_delegation.addListener(event, node, eventListener);
+                event_delegation.addListener(process.event_type, node, eventListener);
 
                 effect(() => {
                     const type = node.type;
-
                     if (type === "date") {
-                        const date = evaluate(attrValue, ctx);
+                        const date = evaluate(process.value, ctx);
                         if (!(date instanceof Date)) return;
                         node.value = date.toISOString().split('T')[0];
                         return;
                     }
-
-                    node[attr] = evaluate(attrValue, ctx);
+                    node[process.input_type] = evaluate(process.value, ctx);
                 })
 
                 const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+                unmountSet.add(() => event_delegation.removeListener(process.matched_event_type, node, eventListener));
+                break;
+            }
 
-                unmountSet.add(() => {
-                    event_delegation.removeListener(event, node, eventListener);
-                });
+            case process_type_enum.slotInjection: {
+                onMount(() => node.remove());
+                if (!render_slot_callbackfn) return;
+                node.before(render_slot_callbackfn());
+                break;
+            }
 
-                node.removeAttribute(attrName); // Clean up raw attribute
-            })
+            case process_type_enum.coreComponent: {
+                const component = ctx[process.component_name]?.default;
 
-            continue;
-        }
-
-        if (attrName.startsWith('on')) {
-            const rawExpr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
-            node.removeAttribute(attr.name); // Clean up raw attribute
-            const event_name = attrName.slice(2);
-
-            processes.push((node, ctx, _) => {
-                effect(() => {
-                    const func = evaluate(rawExpr, ctx);
-                    event_delegation.addListener(event_name, node, func);
-                    return () => {
-                        event_delegation.removeListener(event_name, node, func);
-                    }
-                })
-            })
-            continue;
-        }
-
-        if (!attrValue.includes('{{')) continue;
-
-        let match, expr;
-
-        attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => {
-            match = m;
-            expr = e;
-        })
-
-        processes.push((node, ctx, _) => {
-            effect(() => {
-                const newValue = attrValue.replace(match, evaluate(expr, ctx));
-                node.setAttribute(attrName, newValue);
-            })
-        })
-    };
-
-    const childNodes = Array.from(node.childNodes);
-    if (childNodes.length > 0) {
-        for (let i = 0; i < childNodes.length; i++) {
-            const sub_processes = preprocessNode(childNodes[i]);
-            if (sub_processes.length <= 0) continue;
-            processes.push((node, ctx, render_slot_callbackfn) => {
-                const child_node = node.childNodes[i];
-                for (const sub_process of sub_processes) {
-                    sub_process(child_node, ctx, render_slot_callbackfn);
+                if (!component) {
+                    console.error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
+                    return;
                 }
-            })
+
+                const attrs = {};
+
+                for (const attr of node.attributes) {
+                    const attrName = attr.name;
+                    const attrValue = attr.value;
+                    attrs[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
+                }
+
+                if (process.slot_nodes) {
+                    const renderSlotCallbackfn = () => createFragment(process.slot_nodes, ctx);
+                    node.before(component(attrs, renderSlotCallbackfn));
+                } else {
+                    node.before(component(attrs));
+                }
+                break;
+            }
+
+            case process_type_enum.markedBlocks: {
+                const [nodeStart, nodeEnd] = createStartEndNode(process.marker_type);
+                const fragment = document.createDocumentFragment();
+
+                fragment.append(nodeStart);
+                fragment.append(nodeEnd);
+
+                node.before(fragment);
+
+                onMount(() => node.remove())
+
+                process.render_func(nodeStart, nodeEnd, ctx);
+                break;
+            }
+
+            case process_type_enum.children: {
+                const child_node = node.childNodes[process.child_node_index];
+                applyProcess(child_node, process.processes, ctx, render_slot_callbackfn)
+                break;
+            }
         }
     }
-
-    return processes;
 }
