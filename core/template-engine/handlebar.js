@@ -50,7 +50,7 @@ export function component(options, Context = class { }) {
     const imported_components_id = imported_components_id_counter;
     imported_components_id_counter++;
 
-    let template = preprocessComponents(options.template, imported_components_id, processComponent);
+    let template = preprocessComponents(options.template, imported_components_id);
     if (options.components && Object.keys(options.components).length > 0) imported_components.set(imported_components_id, options.components);
 
     const nodes = createNodes(preprocessTemplateString(template));
@@ -92,7 +92,6 @@ function createNodes(template) {
 * @param {Function} render_slot_callbackfn
 */
 function createFragment(nodes, ctx, render_slot_callbackfn) {
-
     const fragment = document.createDocumentFragment();
 
     for (const node of nodes) {
@@ -205,42 +204,32 @@ function processAwaitBlock(awaitBlock) {
     return awaitConfig;
 }
 
-/**
-* @param {{ import_id:number, tag : string, attrStr : string, slot_id : number }} component
-*/
-function processComponent(component) {
+function applyComponents(component, startNode, endNode, ctx) {
+    const components = imported_components.get(component.import_id);
+    if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
-    const slotNodes = component.slot_id ? slotCache.get(component.slot_id) : null;
+    let componentFunc = components[component.tag];
+    if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
-    return function (startNode, endNode, ctx) {
-        removeNodesBetween(startNode, endNode);
+    const attrs = {};
+    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
 
-        const components = imported_components.get(component.import_id);
-        if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
-
-        let componentFunc = components[component.tag];
-        if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
-
-        const attrs = {};
-        const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-
-        let match;
-        while ((match = regex.exec(component.attrStr)) !== null) {
-            const [, key, value] = match;
-            attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
-        }
-
-        let componentBlock;
-
-        if (slotNodes) {
-            const renderSlotCallbackfn = () => createFragment(slotNodes, ctx);
-            componentBlock = componentFunc(attrs, renderSlotCallbackfn)
-        } else {
-            componentBlock = componentFunc(attrs);
-        }
-
-        endNode.parentNode.insertBefore(componentBlock, endNode);
+    let match;
+    while ((match = regex.exec(component.attrStr)) !== null) {
+        const [, key, value] = match;
+        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
     }
+
+    let componentBlock;
+
+    if (component.slot_node) {
+        const renderSlotCallbackfn = () => createFragment(component.slot_node, ctx);
+        componentBlock = componentFunc(attrs, renderSlotCallbackfn)
+    } else {
+        componentBlock = componentFunc(attrs);
+    }
+
+    endNode.parentNode.insertBefore(componentBlock, endNode);
 }
 
 // ====================================================
@@ -287,9 +276,8 @@ function processDirectiveBlocks(template, directive, processBlocks) {
 /**
 * @param {string} template
 * @param {number} imported_components_id
-* @param {Function} processComponent
 */
-function preprocessComponents(template, imported_components_id, processComponent) {
+function preprocessComponents(template, imported_components_id) {
     const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
     const directive = "component";
 
@@ -305,15 +293,9 @@ function preprocessComponents(template, imported_components_id, processComponent
             return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
         }
         const marker_id = `${directive}-${makeId(8)}`;
-        const component = { import_id: imported_components_id, tag, attrStr, slot_id: -1 };
+        const component = { import_id: imported_components_id, tag, attrStr, slot_node: createNodes(slot_content) || [] };
+        processedBlocks.set(marker_id, component);
 
-        if (slot_content) {
-            const slot_id = `slot-${makeId(6)}`;
-            slotCache.set(slot_id, createNodes(slot_content));
-            component.slot_id = slot_id;
-        }
-
-        processedBlocks.set(marker_id, processComponent(component));
         return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
     })
 
@@ -424,13 +406,12 @@ function preprocessNode(node) {
         const attrValue = attr.value;
 
         if (attrName.startsWith('use:')) {
-            const match = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
+            const match = attrValue.match(/^{{\s*(.+?)\s*}}$/);
             const func_name = attrName.slice(4);
-            const func_attr = !match ? "" : match;
+            const func_attr = !match ? "" : match[1];
 
             processes.push({ type: process_type_enum.directiveUse, func_name, func_attr });
             node.removeAttribute(attrName);
-
         } else if (attrName.startsWith('bind:')) {
 
             const input_type = attrName.slice(5);
@@ -451,9 +432,10 @@ function preprocessNode(node) {
             node.removeAttribute(attrName);
 
         } else if (attrValue.includes('{{')) {
-            let match, expr;
-            attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { match = m; expr = e; })
-            processes.push({ type: process_type_enum.attributeInterpolation, match, expr, attr_name: attrName, attr: attrValue });
+            let matches = [];
+            let exprs = [];
+            attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
+            processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attrValue });
         }
     };
 
@@ -531,12 +513,9 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
             case process_type_enum.markedBlocks: {
                 const [nodeStart, nodeEnd] = createStartEndNode(process.marker_type);
-                const fragment = document.createDocumentFragment();
 
-                fragment.append(nodeStart);
-                fragment.append(nodeEnd);
-
-                node.before(fragment);
+                node.before(nodeStart);
+                node.before(nodeEnd);
 
                 onMount(() => node.remove())
 
@@ -546,7 +525,10 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     applyIfBlock(process.payload, nodeStart, nodeEnd, ctx);
                 } else if (process.marker_type === "each") {
                     applyEachBlock(process.payload, nodeStart, nodeEnd, ctx)
+                } else if (process.marker_type === "component") {
+                    applyComponents(process.payload, nodeStart, nodeEnd, ctx);
                 }
+
                 break;
             }
             case process_type_enum.children: {
@@ -950,7 +932,9 @@ function effectTextInterpolation(node, process, ctx) {
 
 function effectAttributeInterpolation(node, process, ctx) {
     effect(() => {
-        node.setAttribute(process.attr_name, process.attr.replace(process.match, () => evaluate(process.expr, ctx)));
+        let new_attr = process.value;
+        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], () => evaluate(process.exprs[i], ctx));
+        node.setAttribute(process.attr_name, new_attr);
     })
 }
 
@@ -979,8 +963,8 @@ function effectDirectiveBind(node, process, ctx) {
     const binding = evaluate(`(value) => ${process.value} = value`, ctx);
     const eventListener = (event) => {
         const type = event.target.type;
-        if (type === "date") return binding(new Date(event.target.value))
-        binding(event.target[attr])
+        if (type === "date") return binding(new Date(event.target[process.input_type]))
+        binding(event.target[process.input_type])
     };
 
     event_delegation.addListener(process.event_type, node, eventListener);
