@@ -115,7 +115,7 @@ You can read the full documentation of how to use this framework by opening the 
 
 ## 🐛 Known Bugs
 
-- Infinite recursion via components
+- Circular dependency via components
 
 > `<ComponentA>` uses `<ComponentB>` and `<ComponentB>` uses `<ComponentA>`
 
@@ -124,14 +124,12 @@ You can read the full documentation of how to use this framework by opening the 
 *"Nothing is free. There is always a trade off"* - Hussein Nasser
 
 - No bundler means. Lack of code minification leading to bigger bundle sizes and optimization by removing comments and unused code
-- Runtime processing and parsing template strings has performance overhead
+- Runtime processing and parsing template strings at runtime has performance overhead
 - Missing IntelliSense support in VSCode, Zed, etc...
 
 ## 📝 P.S
 
-I'm not God, I make mistakes, I have not benchmarked this code in any way so it may have poor performance or memory leak somewhere that I am not aware of.
-
-I have tested this to the best of my ability but if you find any bugs or issues, kindly email me about it and if you have a fix/patch, feel free to include that in your email.
+I'm not God, I make mistakes, I have tested this to the best of my ability but if you find any bugs or issues, kindly email me about it and if you have a fix/patch, feel free to include that in your email.
 
 ---
 

@@ -271,7 +271,7 @@ The `<Core:slot />` directive allows a **custom component** to display child con
 
 ## 8. `use:` Directive (Action Support)
 
-> NOTE: Due to the HTML spec, HTML attributes are case insensitive so function names cannot be Pascal Case
+> NOTE: Due to HTML specification, HTML attributes are case insensitive so function names used in this directive cannot be Pascal Case
 
 ### ✅ Basic usage
 ```html
