@@ -979,12 +979,7 @@ function effectDirectiveBind(node, process, ctx) {
     const binding = evaluate(`(value) => ${process.value} = value`, ctx);
     const eventListener = (event) => {
         const type = event.target.type;
-
-        if (type === "date") {
-            binding(new Date(event.target.value))
-            return;
-        }
-
+        if (type === "date") return binding(new Date(event.target.value))
         binding(event.target[attr])
     };
 
@@ -992,13 +987,13 @@ function effectDirectiveBind(node, process, ctx) {
 
     effect(() => {
         const type = node.type;
+        const value = evaluate(process.value, ctx);
         if (type === "date") {
-            const date = evaluate(process.value, ctx);
-            if (!(date instanceof Date)) return;
-            node.value = date.toISOString().split('T')[0];
+            if (!(value instanceof Date)) throw new Error("input value is not a valid Date");
+            node[process.input_type] = value.toISOString().split('T')[0];
             return;
         }
-        node[process.input_type] = evaluate(process.value, ctx);
+        node[process.input_type] = value;
     })
 
     const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
