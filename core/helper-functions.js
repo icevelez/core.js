@@ -7,14 +7,6 @@ export function isObject(object) {
 }
 
 /**
-* To make it easier for myself to have a "typed" Set instead of adding type for each declaration
-* @returns {Set<Function>}
-*/
-export function newSetFunc() {
-    return new Set();
-}
-
-/**
 * @param {number} length
 */
 export function makeId(length) {
@@ -26,7 +18,6 @@ export function makeId(length) {
     }
     return result;
 }
-
 
 /**
 * Regex alone mismatch nested `{{#directive}}` control flow so to fix that issue, this function was created to properly get the outermost handlebar block
@@ -70,6 +61,7 @@ export function parseOuterBlocks(template, openTag, closeTag) {
 * @param {Node} endNode
 */
 export function removeNodesBetween(startNode, endNode) {
+    if (startNode.nextSibling === endNode) return;
     let node = startNode.nextSibling;
     while (node && node !== endNode) {
         const next = node.nextSibling;

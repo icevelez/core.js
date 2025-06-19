@@ -1,6 +1,6 @@
 import { onMountQueue, onUnmountQueue, core_context } from "./internal-core.js";
 import { effect } from "./reactivity.js";
-import { isObject, newSetFunc } from "./helper-functions.js";
+import { isObject } from "./helper-functions.js";
 
 let isMounted = false;
 
@@ -23,8 +23,8 @@ export function mount(component, options) {
     if (!(options.target instanceof HTMLElement)) throw new TypeError("options.target is not an HTMLElement");
     if (typeof component !== "function") throw new Error("component is not a function");
 
-    const onMountSet = newSetFunc();
-    const onUnmountSet = newSetFunc();
+    const onMountSet = new Set();
+    const onUnmountSet = new Set();
 
     const cleanup = effect(() => {
 

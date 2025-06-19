@@ -1,7 +1,7 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate, event_delegation } from "../internal-core.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate, event_delegation, scopedMountUnmountRun } from "../internal-core.js";
 import { onMount } from "../core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
-import { createStartEndNode, makeId, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../helper-functions.js";
+import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 
 /**
 * @type {Map<string, Node[]>}
@@ -483,34 +483,28 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 effectTextInterpolation(node, process, ctx);
                 break;
             }
-
             case process_type_enum.attributeInterpolation: {
                 effectAttributeInterpolation(node, process, ctx)
                 break;
             }
-
             case process_type_enum.eventListener: {
                 effectEventListener(node, process, ctx);
                 break;
             }
-
             case process_type_enum.directiveUse: {
                 effectDirectiveUse(node, process, ctx);
                 break;
             }
-
             case process_type_enum.directiveBind: {
                 effectDirectiveBind(node, process, ctx);
                 break;
             }
-
             case process_type_enum.slotInjection: {
                 onMount(() => node.remove());
                 if (!render_slot_callbackfn) return;
                 node.before(render_slot_callbackfn());
                 break;
             }
-
             case process_type_enum.coreComponent: {
                 const component = ctx[process.component_name]?.default;
 
@@ -535,7 +529,6 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 }
                 break;
             }
-
             case process_type_enum.markedBlocks: {
                 const [nodeStart, nodeEnd] = createStartEndNode(process.marker_type);
                 const fragment = document.createDocumentFragment();
@@ -556,7 +549,6 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 }
                 break;
             }
-
             case process_type_enum.children: {
                 const child_node = node.childNodes[process.child_node_index];
                 applyProcess(child_node, process.processes, ctx, render_slot_callbackfn)
@@ -573,15 +565,15 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
  * @param {any} ctx
  */
 function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
+    const onUnmountSet = new Set();
+    const onMountSet = new Set();
 
-    const unmount = () => {
+    function unmount() {
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
     };
 
-    const mount = () => {
+    function mount() {
         for (const mount of onMountSet) mount();
         onMountSet.clear();
     }
@@ -589,7 +581,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount)) parentOnUnmountSet.add(unmount);
 
-    const mountInit = () => {
+    function mountInit() {
         if (core_context.is_mounted_to_the_DOM) {
             mount();
             return;
@@ -599,18 +591,14 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         core_context.onUnmountSet.add(unmount);
     }
 
-    const showLoading = () => {
+    function showLoading() {
         unmount();
         removeNodesBetween(startNode, endNode);
 
-        onUnmountQueue.push(onUnmountSet);
-        onMountQueue.push(onMountSet);
-
-        const nodes = createFragment(awaitConfig.pendingContent, ctx);
-        endNode.before(nodes);
-
-        onMountQueue.pop();
-        onUnmountQueue.pop();
+        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const nodes = createFragment(awaitConfig.pendingContent, ctx);
+            endNode.before(nodes);
+        })
 
         mountInit();
     };
@@ -621,15 +609,11 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
         if (!awaitConfig.then.match) return;
 
-        onUnmountQueue.push(onUnmountSet);
-        onMountQueue.push(onMountSet);
-
-        const childCtx = awaitConfig.then.var ? Object.assign(Object.assign({}, ctx), { [awaitConfig.then.var]: result }) : ctx;
-        const nodes = createFragment(awaitConfig.then.content, childCtx);
-        endNode.before(nodes);
-
-        onMountQueue.pop();
-        onUnmountQueue.pop();
+        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
+            const nodes = createFragment(awaitConfig.then.content, childCtx);
+            endNode.before(nodes);
+        })
 
         mountInit();
     };
@@ -642,15 +626,11 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
         if (!awaitConfig.catch.match) return;
 
-        onUnmountQueue.push(onUnmountSet);
-        onMountQueue.push(onMountSet);
-
-        const childCtx = awaitConfig.catch.var ? Object.assign(Object.assign({}, ctx), { [awaitConfig.catch.var]: result }) : ctx;
-        const nodes = createFragment(awaitConfig.catch.content, childCtx);
-        endNode.before(nodes);
-
-        onMountQueue.pop();
-        onUnmountQueue.pop();
+        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
+            const nodes = createFragment(awaitConfig.catch.content, childCtx);
+            endNode.before(nodes);
+        })
 
         mountInit();
     };
@@ -678,17 +658,17 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
  * @param {any} ctx
  */
 function applyIfBlock(segments, startNode, endNode, ctx) {
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
+    const onUnmountSet = new Set();
+    const onMountSet = new Set();
     let cleanup;
 
-    const unmount = () => {
+    function unmount() {
         if (cleanup) cleanup();
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
     };
 
-    const mount = () => {
+    function mount() {
         for (const mount of onMountSet) mount();
         onMountSet.clear();
     }
@@ -721,14 +701,10 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
             unmount();
             removeNodesBetween(startNode, endNode);
 
-            onUnmountQueue.push(onUnmountSet);
-            onMountQueue.push(onMountSet);
-
-            const segmentBlock = createFragment(condition.block, ctx);
-            endNode.parentNode.insertBefore(segmentBlock, endNode);
-
-            onMountQueue.pop();
-            onUnmountQueue.pop();
+            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+                const segmentBlock = createFragment(condition.block, ctx);
+                endNode.parentNode.insertBefore(segmentBlock, endNode);
+            })
 
             if (core_context.is_mounted_to_the_DOM) return mount();
 
@@ -746,17 +722,17 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
  * @param {Node} currentNode
  */
 function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
+    const onUnmountSet = new Set();
+    const onMountSet = new Set();
     let cleanupEffect;
 
-    const unmount = () => {
+    function unmount() {
         if (typeof cleanupEffect === "function") cleanupEffect();
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
     };
 
-    const mount = () => {
+    function mount() {
         for (const mount of onMountSet) mount();
         onMountSet.clear();
     }
@@ -774,53 +750,34 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
         nodeEnd,
         unmount,
         index: blockIndex,
+        data: blockData,
     };
 
-    const property = {
-        get() {
+    const childCtx = {
+        ...ctx,
+        get [eachConfig.blockVar]() {
             return blockData.value;
         },
-        set(newValue) {
+        /** @param {any} newValue */
+        set [eachConfig.blockVar](newValue) {
             blockData.value = newValue;
             return true;
         },
-        configurable: true,
-        enumerable: true,
+        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return blockIndex.value } } : {})
     };
 
-    Object.defineProperty(block, "value", property);
-
-    const childCtx = Object.assign({}, ctx);
-
-    Object.defineProperty(childCtx, eachConfig.blockVar, property);
-
-    if (eachConfig.indexVar) {
-        Object.defineProperty(childCtx, eachConfig.indexVar, {
-            get() {
-                return blockIndex.value;
-            },
-            configurable: true,
-            enumerable: true,
-        });
-    }
-
     cleanupEffect = untrackedEffect(() => {
-        onUnmountQueue.push(onUnmountSet);
-        onMountQueue.push(onMountSet);
-
-        const mainBlock = createFragment(eachConfig.mainContent, childCtx);
-        nodeEnd.before(mainBlock);
-
-        onMountQueue.pop()
-        onUnmountQueue.pop()
+        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const mainBlock = createFragment(eachConfig.mainContent, childCtx);
+            nodeEnd.before(mainBlock);
+        })
 
         if (core_context.is_mounted_to_the_DOM) {
             mount();
-            return;
+        } else {
+            core_context.onMountSet.add(mount)
+            core_context.onUnmountSet.add(unmount)
         }
-
-        core_context.onMountSet.add(mount)
-        core_context.onUnmountSet.add(unmount)
     });
 
     return block;
@@ -836,23 +793,23 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
     // THIS SECTION IS FOR EMPTY BLOCK MOUNT/UNMOUNT
 
-    const onUnmountSet = newSetFunc();
-    const onMountSet = newSetFunc();
+    const onUnmountSet = new Set();
+    const onMountSet = new Set();
 
-    const unmount = () => {
+    function unmount() {
         if (typeof cleanupEffect === "function") cleanupEffect();
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
     };
 
-    const mount = () => {
+    function mount() {
         for (const mount of onMountSet) mount();
         onMountSet.clear();
     }
 
     // END OF EMPTY BLOCK
 
-    const unmountEachBlock = () => {
+    function unmountEachBlock() {
         for (const renderBlock of renderedBlocks) {
             renderBlock.unmount();
         };
@@ -910,14 +867,10 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 nodeEnd.remove();
             })
 
-            onUnmountQueue.push(onUnmountSet);
-            onMountQueue.push(onMountSet);
-
-            const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
-            nodeEnd.before(eamptyBlock);
-
-            onMountQueue.pop();
-            onUnmountQueue.pop();
+            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+                const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
+                nodeEnd.before(eamptyBlock);
+            })
 
             if (core_context.is_mounted_to_the_DOM) return mount();
 
@@ -945,14 +898,14 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             // USE EXISTING BLOCK
             if (block) {
                 // IF THE SAME, RE-USE
-                if (block.value === blockDatas[index]) {
+                if (block.data.value === blockDatas[index]) {
                     currentNode = block.nodeEnd;
                     newRenderedBlocks.push(block);
                     continue;
                 }
 
                 // IF NOT, UPDATE VALUE AND RE-USE
-                if (block.value !== blockDatas[index]) block.value = blockDatas[index];
+                if (block.data.value !== blockDatas[index]) block.data.value = blockDatas[index];
                 if (block.index.value !== index) block.index.value = index;
 
                 currentNode = block.nodeEnd;
