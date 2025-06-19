@@ -94,7 +94,7 @@ export default component({
 
     add = () => {
         console.time('add');
-        this.data.value.push(...buildData(1000))
+        this.data.value = [...this.data.value, ...buildData(1000)]
         requestAnimationFrame(() => {
             console.timeEnd('add');
         });
