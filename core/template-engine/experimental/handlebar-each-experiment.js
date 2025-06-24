@@ -1,7 +1,7 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate } from "../internal-core.js";
-import { onMount } from "../core.js";
-import { effect, untrackedEffect, State } from "../reactivity.js";
-import { createStartEndNode, makeId, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../helper-functions.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate } from "../../internal-core.js";
+import { onMount } from "../../core.js";
+import { effect, untrackedEffect, State } from "../../reactivity.js";
+import { createStartEndNode, makeId, removeNodesBetween, newSetFunc, parseOuterBlocks } from "../../helper-functions.js";
 
 /**
 * @type {Map<string, Node[]>}

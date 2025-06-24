@@ -1,5 +1,4 @@
 import { core_context, onMountQueue, onUnmountQueue, evaluate, event_delegation, scopedMountUnmountRun } from "../internal-core.js";
-import { onMount } from "../core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 
@@ -439,25 +438,14 @@ function preprocessNode(node) {
     const childNodes = Array.from(node.childNodes);
     if (childNodes.length <= 0) return processes;
 
-    const defer = [];
-
     for (let i = 0; i < childNodes.length; i++) {
         const sub_process = preprocessNode(childNodes[i]);
         if (sub_process.length <= 0) continue;
-
-        // this block of code is to defer replacing <template> blocks to keep the node index in sync
-        const isBlockReplace = sub_process.filter((process) => process.type === process_type_enum.markedBlocks || process.type === process_type_enum.slotInjection || process.type === process_type_enum.coreComponent).length > 0;
-        if (isBlockReplace) {
-            defer.push({ type: process_type_enum.children, processes: sub_process, child_node_index: i });
-            continue;
-        }
-
         processes.push({ type: process_type_enum.children, processes: sub_process, child_node_index: i });
     }
 
-    processes.push(...defer);
-
-    return processes;
+    // the `.reverse()` is important to keep node index in sync when applying the processes
+    return processes.reverse();
 }
 
 /**
