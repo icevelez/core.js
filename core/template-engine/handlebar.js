@@ -53,13 +53,13 @@ export function component(options, Context = class { }) {
     let template = preprocessComponents(options.template, imported_components_id);
     if (options.components && Object.keys(options.components).length > 0) imported_components.set(imported_components_id, options.components);
 
-    const nodes = createNodes(preprocessTemplateString(template));
+    const fragment = createNodes(preprocessTemplateString(template));
 
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (attrs, render_slot_callbackfn) {
         const ctx = !Context ? {} : new Context(attrs);
-        return createFragment(nodes, ctx, render_slot_callbackfn);
+        return createFragment(fragment, ctx, render_slot_callbackfn);
     }
 }
 
@@ -76,32 +76,27 @@ function createNodes(template) {
     for (const childNode of preprocessed_childNodes) preprocessTextNodes(childNode);
 
     const childNodes = Array.from(templateElement.content.childNodes);
+    const fragment = document.createDocumentFragment();
 
-    for (const childNode of childNodes) {
-        const processes = preprocessNode(childNode);
-        if (processes.length <= 0) continue;
-        cacheNodeProcesses.set(childNode, processes);
-    }
+    for (const childNode of childNodes) fragment.append(childNode);
 
-    return childNodes;
+    cacheNodeProcesses.set(fragment, preprocessNode(fragment));
+
+    return fragment;
 }
 
 /**
-* @param {Node[]} nodes
+* @param {DocumentFragment} fragment
 * @param {Record<string, any>} ctx
 * @param {Function} render_slot_callbackfn
 */
-function createFragment(nodes, ctx, render_slot_callbackfn) {
-    const fragment = document.createDocumentFragment();
+function createFragment(fragment, ctx, render_slot_callbackfn) {
+    const clone_fragment = fragment.cloneNode(true);
 
-    for (const node of nodes) {
-        const clone_node = node.cloneNode(true);
-        fragment.append(clone_node);
-        const processes = cacheNodeProcesses.get(node);
-        if (processes) applyProcess(clone_node, processes, ctx, render_slot_callbackfn);
-    }
+    const processes = cacheNodeProcesses.get(fragment);
+    if (processes) applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
 
-    return fragment;
+    return clone_fragment;
 }
 
 /**
@@ -375,9 +370,9 @@ function preprocessNode(node) {
 
     if (node.nodeType === Node.COMMENT_NODE) return processes;
 
-    const isSlotNode = (node) => Boolean(node.dataset.directive === "slot");
-    const isCoreComponentNode = (node) => Boolean(node.dataset.directive === "core-component");
-    const isMarkedNode = (node) => Boolean(node.dataset.directive && node.dataset.markerId)
+    const isSlotNode = (node) => Boolean(node.dataset && node.dataset.directive === "slot");
+    const isCoreComponentNode = (node) => Boolean(node.dataset && node.dataset.directive === "core-component");
+    const isMarkedNode = (node) => Boolean(node.dataset && node.dataset.directive && node.dataset.markerId)
 
     if (isSlotNode(node)) {
         processes.push({ type: process_type_enum.slotInjection });
@@ -401,52 +396,66 @@ function preprocessNode(node) {
         return processes;
     }
 
-    for (const attr of node.attributes) {
-        const attrName = attr.name.toLowerCase();
-        const attrValue = attr.value;
+    if (node.attributes) {
+        for (const attr of node.attributes) {
+            const attrName = attr.name.toLowerCase();
+            const attrValue = attr.value;
 
-        if (attrName.startsWith('use:')) {
-            const match = attrValue.match(/^{{\s*(.+?)\s*}}$/);
-            const func_name = attrName.slice(4);
-            const func_attr = !match ? "" : match[1];
+            if (attrName.startsWith('use:')) {
+                const match = attrValue.match(/^{{\s*(.+?)\s*}}$/);
+                const func_name = attrName.slice(4);
+                const func_attr = !match ? "" : match[1];
 
-            processes.push({ type: process_type_enum.directiveUse, func_name, func_attr });
-            node.removeAttribute(attrName);
-        } else if (attrName.startsWith('bind:')) {
+                processes.push({ type: process_type_enum.directiveUse, func_name, func_attr });
+                node.removeAttribute(attrName);
+            } else if (attrName.startsWith('bind:')) {
 
-            const input_type = attrName.slice(5);
-            const event_type_dic = {
-                "checked": node.type === "date" ? "change" : "click",
-                "value": node.tagName === "select" ? "change" : "input",
-            };
-            const matched_event_type = event_type_dic[input_type] ? event_type_dic[input_type] : input_type;
+                const input_type = attrName.slice(5);
+                const event_type_dic = {
+                    "checked": node.type === "date" ? "change" : "click",
+                    "value": node.tagName === "select" ? "change" : "input",
+                };
+                const matched_event_type = event_type_dic[input_type] ? event_type_dic[input_type] : input_type;
 
-            processes.push({ type: process_type_enum.directiveBind, event_type: matched_event_type, input_type, value: attrValue });
-            node.removeAttribute(attrName);
-        } else if (attrName.startsWith('on')) {
+                processes.push({ type: process_type_enum.directiveBind, event_type: matched_event_type, input_type, value: attrValue });
+                node.removeAttribute(attrName);
+            } else if (attrName.startsWith('on')) {
+                const match = attrValue.match(/^{{\s*(.+?)\s*}}$/);
+                const expr = !match ? "" : match[1];
+                const event_type = attrName.slice(2);
 
-            const expr = attrValue.match(/^{{\s*(.+?)\s*}}$/)[1];
-            const event_type = attrName.slice(2);
+                processes.push({ type: process_type_enum.eventListener, event_type, expr });
+                node.removeAttribute(attrName);
 
-            processes.push({ type: process_type_enum.eventListener, event_type, expr });
-            node.removeAttribute(attrName);
-
-        } else if (attrValue.includes('{{')) {
-            let matches = [];
-            let exprs = [];
-            attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
-            processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attrValue });
-        }
-    };
+            } else if (attrValue.includes('{{')) {
+                let matches = [];
+                let exprs = [];
+                attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
+                processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attrValue });
+            }
+        };
+    }
 
     const childNodes = Array.from(node.childNodes);
     if (childNodes.length <= 0) return processes;
 
+    const defer = [];
+
     for (let i = 0; i < childNodes.length; i++) {
         const sub_process = preprocessNode(childNodes[i]);
         if (sub_process.length <= 0) continue;
+
+        // this block of code is to defer replacing <template> blocks to keep the node index in sync
+        const isBlockReplace = sub_process.filter((process) => process.type === process_type_enum.markedBlocks || process.type === process_type_enum.slotInjection || process.type === process_type_enum.coreComponent).length > 0;
+        if (isBlockReplace) {
+            defer.push({ type: process_type_enum.children, processes: sub_process, child_node_index: i });
+            continue;
+        }
+
         processes.push({ type: process_type_enum.children, processes: sub_process, child_node_index: i });
     }
+
+    processes.push(...defer);
 
     return processes;
 }
@@ -517,7 +526,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 node.before(nodeStart);
                 node.before(nodeEnd);
 
-                onMount(() => node.remove())
+                node.remove();
 
                 if (process.marker_type === "await") {
                     applyAwaitBlock(process.payload, nodeStart, nodeEnd, ctx);
