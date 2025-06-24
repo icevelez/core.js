@@ -67,7 +67,7 @@ export function component(options, Context = class { }) {
 * @param {string} template
 */
 function createNodes(template) {
-    if (template == "" || typeof template !== "string") throw new Error("empty template");
+    if (template == "" || typeof template !== "string") return document.createDocumentFragment();
 
     const templateElement = document.createElement("template");
     templateElement.innerHTML = template;
