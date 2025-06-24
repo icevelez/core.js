@@ -506,15 +506,14 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 } else {
                     node.before(component(attrs));
                 }
+
+                node.remove();
                 break;
             }
             case process_type_enum.markedBlocks: {
                 const [nodeStart, nodeEnd] = createStartEndNode(process.marker_type);
-
-                node.before(nodeStart);
-                node.before(nodeEnd);
-
-                node.remove();
+                const fragment = document.createDocumentFragment();
+                fragment.append(nodeStart, nodeEnd);
 
                 if (process.marker_type === "await") {
                     applyAwaitBlock(process.payload, nodeStart, nodeEnd, ctx);
@@ -526,6 +525,8 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     applyComponents(process.payload, nodeStart, nodeEnd, ctx);
                 }
 
+                node.before(fragment);
+                node.remove();
                 break;
             }
             case process_type_enum.children: {
@@ -835,14 +836,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             currentNode.before(nodeEnd);
 
             onUnmountSet.add(() => {
-                let node = nodeStart;
-
-                while (node && node !== nodeEnd) {
-                    const next = node.nextSibling;
-                    node.remove();
-                    node = next;
-                }
-
+                removeNodesBetween(nodeStart, nodeEnd);
+                nodeStart.remove();
                 nodeEnd.remove();
             })
 
