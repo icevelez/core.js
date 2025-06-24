@@ -471,23 +471,23 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
     for (const process of processes) {
         switch (process.type) {
             case process_type_enum.textInterpolation: {
-                effectTextInterpolation(node, process, ctx);
+                applyTextInterpolation(node, process, ctx);
                 break;
             }
             case process_type_enum.attributeInterpolation: {
-                effectAttributeInterpolation(node, process, ctx)
+                applyAttributeInterpolation(node, process, ctx)
                 break;
             }
             case process_type_enum.eventListener: {
-                effectEventListener(node, process, ctx);
+                applyEventListener(node, process, ctx);
                 break;
             }
             case process_type_enum.directiveUse: {
-                effectDirectiveUse(node, process, ctx);
+                applyDirectiveUse(node, process, ctx);
                 break;
             }
             case process_type_enum.directiveBind: {
-                effectDirectiveBind(node, process, ctx);
+                applyDirectiveBind(node, process, ctx);
                 break;
             }
             case process_type_enum.slotInjection: {
@@ -933,13 +933,13 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     })
 }
 
-function effectTextInterpolation(node, process, ctx) {
+function applyTextInterpolation(node, process, ctx) {
     effect(() => {
         node.textContent = evaluate(process.expr, ctx);
     })
 }
 
-function effectAttributeInterpolation(node, process, ctx) {
+function applyAttributeInterpolation(node, process, ctx) {
     effect(() => {
         let new_attr = process.value;
         for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
@@ -947,15 +947,14 @@ function effectAttributeInterpolation(node, process, ctx) {
     })
 }
 
-function effectEventListener(node, process, ctx) {
+function applyEventListener(node, process, ctx) {
     effect(() => {
         const func = evaluate(process.expr, ctx);
-        event_delegation.addListener(process.event_type, node, func);
-        return () => event_delegation.removeListener(process.event_type, node, func);
+        return event_delegation.addListener(process.event_type, node, func);
     })
 }
 
-function effectDirectiveUse(node, process, ctx) {
+function applyDirectiveUse(node, process, ctx) {
     const func = ctx[process.func_name];
     if (!func) throw new Error(`use: directive "${process.func_name}" not found.`);
 
@@ -968,27 +967,25 @@ function effectDirectiveUse(node, process, ctx) {
     });
 }
 
-function effectDirectiveBind(node, process, ctx) {
-    const binding = evaluate(`(value) => ${process.value} = value`, ctx);
+function applyDirectiveBind(node, process, ctx) {
+    const binding = evaluate(`v => ${process.value} = v`, ctx);
     const eventListener = (event) => {
         const type = event.target.type;
         if (type === "date") return binding(new Date(event.target[process.input_type]))
         binding(event.target[process.input_type])
     };
 
-    event_delegation.addListener(process.event_type, node, eventListener);
+    const remove_listener = event_delegation.addListener(process.event_type, node, eventListener);
+    const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+    unmountSet.add(remove_listener);
 
     effect(() => {
-        const type = node.type;
         const value = evaluate(process.value, ctx);
-        if (type === "date") {
+        if (node.type === "date") {
             if (!(value instanceof Date)) throw new Error("input value is not a valid Date");
             node[process.input_type] = value.toISOString().split('T')[0];
             return;
         }
         node[process.input_type] = value;
     })
-
-    const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-    unmountSet.add(() => event_delegation.removeListener(process.matched_event_type, node, eventListener));
 }

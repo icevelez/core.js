@@ -87,7 +87,7 @@ export const event_delegation = Object.freeze({
                 match_delegated_node(event_node_weakmap, e, e.target);
             });
 
-            return;
+            return () => this.removeListener(event_name, node, func);
         }
 
         let funcs = event_node_weakmap.get(node);
@@ -95,7 +95,10 @@ export const event_delegation = Object.freeze({
             funcs = new Set();
             event_node_weakmap.set(node, funcs);
         }
+
         funcs.add(func);
+
+        return () => this.removeListener(event_name, node, func);
     },
     /**
      *
