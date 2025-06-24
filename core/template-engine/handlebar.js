@@ -43,7 +43,7 @@ let imported_components_id_counter = 1;
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
 * @param {Object} Context anonymous class that encapsulate logic
-* @returns {(attrs:Record<string, any>) => DocumentFragment}
+* @returns {(attrs:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Context = class { }) {
 
@@ -67,7 +67,7 @@ export function component(options, Context = class { }) {
 * @param {string} template
 */
 function createNodes(template) {
-    if (template == "" || typeof template !== "string") return [];
+    if (template == "" || typeof template !== "string") throw new Error("empty template");
 
     const templateElement = document.createElement("template");
     templateElement.innerHTML = template;
@@ -491,9 +491,9 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 break;
             }
             case process_type_enum.slotInjection: {
-                onMount(() => node.remove());
                 if (!render_slot_callbackfn) return;
                 node.before(render_slot_callbackfn());
+                node.remove();
                 break;
             }
             case process_type_enum.coreComponent: {
@@ -730,8 +730,8 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
 
     const [nodeStart, nodeEnd] = createStartEndNode('each-block');
 
-    currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
-    currentNode.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
+    currentNode.before(nodeStart);
+    currentNode.before(nodeEnd);
 
     const blockIndex = new State(index);
     const blockData = new State(blockDatas[index]);
@@ -820,7 +820,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     effect(() => {
         const newRenderedBlocks = [];
 
-        let currentNode = startNode;
+        let currentNode = endNode;
 
         const blockDatas = evaluate(eachConfig.expression, ctx) || [];
 
@@ -843,8 +843,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
             const [nodeStart, nodeEnd] = createStartEndNode('each-block');
 
-            currentNode.parentNode.insertBefore(nodeStart, currentNode.nextSibling);
-            nodeStart.parentNode.insertBefore(nodeEnd, nodeStart.nextSibling);
+            currentNode.before(nodeStart);
+            currentNode.before(nodeEnd);
 
             onUnmountSet.add(() => {
                 let node = nodeStart;
@@ -877,7 +877,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             for (let index = 0; index < blockDatas.length; index++) {
                 const block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
                 renderedBlocks.push(block);
-                currentNode = block.nodeEnd;
+                currentNode = block.nodeEnd.nextSibling;
             }
             return;
         }
@@ -890,7 +890,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             if (block) {
                 // IF THE SAME, RE-USE
                 if (block.data.value === blockDatas[index]) {
-                    currentNode = block.nodeEnd;
+                    currentNode = block.nodeEnd.nextSibling;
                     newRenderedBlocks.push(block);
                     continue;
                 }
@@ -899,7 +899,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 if (block.data.value !== blockDatas[index]) block.data.value = blockDatas[index];
                 if (block.index.value !== index) block.index.value = index;
 
-                currentNode = block.nodeEnd;
+                currentNode = block.nodeEnd.nextSibling;
                 newRenderedBlocks.push(block);
                 continue;
             }
@@ -907,7 +907,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             // CREATE NEW BLOCK IF NOT EXISTS
             block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
             newRenderedBlocks.push(block);
-            currentNode = block.nodeEnd;
+            currentNode = block.nodeEnd.nextSibling;
         }
 
         // REMOVE UNUSED EACH BLOCKS
@@ -935,14 +935,14 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
 function effectTextInterpolation(node, process, ctx) {
     effect(() => {
-        node.textContent = process.full_expr.replace(process.match, () => evaluate(process.expr, ctx));
+        node.textContent = evaluate(process.expr, ctx);
     })
 }
 
 function effectAttributeInterpolation(node, process, ctx) {
     effect(() => {
         let new_attr = process.value;
-        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], () => evaluate(process.exprs[i], ctx));
+        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
         node.setAttribute(process.attr_name, new_attr);
     })
 }

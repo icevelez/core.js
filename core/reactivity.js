@@ -52,10 +52,10 @@ export class State {
         if (effectStack.length <= 0) return this.#value;
 
         const currentEffect = effectStack[effectStack.length - 1];
-        this.#subscribers.add(currentEffect.effect);
+        this.#subscribers.add(currentEffect);
 
         currentEffect.dependencies.add(() => {
-            this.#subscribers.delete(currentEffect.effect);
+            this.#subscribers.delete(currentEffect);
         });
 
         return this.#value;
@@ -144,13 +144,14 @@ export function effect(callbackfn) {
 
     const wrappedEffect = () => {
         cleanupfn();
-        effectStack.push({ effect: wrappedEffect, dependencies });
+        effectStack.push(wrappedEffect);
         try {
             cleanup = callbackfn();
         } finally {
             effectStack.pop();
         }
     };
+    wrappedEffect.dependencies = dependencies;
 
     wrappedEffect();
 
@@ -254,103 +255,103 @@ const SETTERGETTERCONST = ["has", "set", "get"];
 
 const proxyCache = new WeakMap();
 
-export function createDeepProxy(target) {
-    /**
-    * @param {any} obj
-    */
-    function wrap(obj) {
-        if (typeof obj !== 'object' || obj === null) return obj;
+/**
+* @param {any} obj
+*/
+function wrap(obj) {
+    if (typeof obj !== 'object' || obj === null) return obj;
 
-        // Avoid re-wrapping a previously created deep proxy
-        if (obj[IS_PROXY]) return obj;
+    // Avoid re-wrapping a previously created deep proxy
+    if (obj[IS_PROXY]) return obj;
 
-        // Avoid wrapping same object multiple times
-        if (proxyCache.has(obj)) return proxyCache.get(obj);
+    // Avoid wrapping same object multiple times
+    if (proxyCache.has(obj)) return proxyCache.get(obj);
 
-        const proxy = new Proxy(obj, {
-            get(target, key) {
-                if (key === IS_PROXY) return true;
-                if (key === UNWRAPPED_VALUE) return target;
+    const proxy = new Proxy(obj, {
+        get(target, key) {
+            if (key === IS_PROXY) return true;
+            if (key === UNWRAPPED_VALUE) return target;
 
-                let value = target[key];
+            let value = target[key];
 
-                if (typeof key === 'symbol') return value;
+            if (typeof key === 'symbol') return value;
 
-                if (!Array.isArray(target) && typeof value === "function") {
-                    value = function (...args) {
-                        const return_value = target[key](...args);
+            if (!Array.isArray(target) && typeof value === "function") {
+                value = function (...args) {
+                    const return_value = target[key](...args);
 
-                        if (args.length <= 0) return return_value;
-                        if (SETTERGETTERCONST.includes(key) && args.length <= 1) return return_value;
+                    if (args.length <= 0) return return_value;
+                    if (SETTERGETTERCONST.includes(key) && args.length <= 1) return return_value;
 
-                        console.warn(`object property "${key}" is a function, assuming it is to update some state, looping through all property of this object and notifying all effect subscribers`);
+                    console.warn(`object property "${key}" is a function, assuming it is to update some state, looping through all property of this object and notifying all effect subscribers`);
 
-                        const subscriberMap = SUBSCRIBERS.getMap(target);
+                    const subscriberMap = SUBSCRIBERS.getMap(target);
 
-                        subscriberMap.forEach((subscribers, key) => {
-                            if (!subscribers) return;
-                            if (subscribers.size <= 0) {
-                                subscriberMap.delete(key);
-                                return;
-                            }
-                            notifySubscribers(subscribers);
-                        })
+                    subscriberMap.forEach((subscribers, key) => {
+                        if (!subscribers) return;
+                        if (subscribers.size <= 0) {
+                            subscriberMap.delete(key);
+                            return;
+                        }
+                        notifySubscribers(subscribers);
+                    })
 
-                        return return_value;
-                    }
+                    return return_value;
                 }
-
-                const currentEffect = effectStack[effectStack.length - 1];
-                if (!currentEffect) return wrap(value);
-
-                const subscribers = SUBSCRIBERS.getSet(target, key);
-                if (subscribers.has(currentEffect.effect)) return wrap(value);
-
-                subscribers.add(currentEffect.effect);
-                currentEffect.dependencies.add(() => subscribers.delete(currentEffect.effect));
-
-                return wrap(value);
-            },
-            set(target, key, new_value) {
-                // console.log('set', target, key, new_value);
-
-                let unwrapped_value = new_value;
-
-                if (isObject(new_value)) {
-                    if (!new_value[IS_PROXY]) {
-                        new_value = createDeepProxy(new_value);
-                    }
-                    unwrapped_value = new_value[UNWRAPPED_VALUE];
-                }
-
-                // Cleanup if replacing target[key] (object) with a non-object new_value
-                if (isObject(target[key]) && (!isObject(new_value) || !new_value[IS_PROXY])) {
-                    SUBSCRIBERS.getMap(target).delete(key);
-                    SUBSCRIBERS.deepDelete(target[key]);
-                }
-
-                target[key] = unwrapped_value;
-
-                const subscribers = SUBSCRIBERS.getSet(target, key);
-                if (subscribers.size > 0) notifySubscribers(subscribers);
-
-                return true;
-            },
-            deleteProperty(target, key) {
-                if (isObject(target[key])) {
-                    SUBSCRIBERS.getMap(target).delete(key);
-                    SUBSCRIBERS.deepDelete(target[key]);
-                }
-
-                delete target[key];
-                return true;
             }
-        });
 
-        proxyCache.set(obj, proxy);
+            const currentEffect = effectStack[effectStack.length - 1];
+            if (!currentEffect) return wrap(value);
 
-        return proxy;
-    }
+            const subscribers = SUBSCRIBERS.getSet(target, key);
+            if (subscribers.has(currentEffect)) return wrap(value);
 
+            subscribers.add(currentEffect);
+            currentEffect.dependencies.add(() => subscribers.delete(currentEffect));
+
+            return wrap(value);
+        },
+        set(target, key, new_value) {
+            // console.log('set', target, key, new_value);
+
+            let unwrapped_value = new_value;
+
+            if (isObject(new_value)) {
+                if (!new_value[IS_PROXY]) {
+                    new_value = createDeepProxy(new_value);
+                }
+                unwrapped_value = new_value[UNWRAPPED_VALUE];
+            }
+
+            // Cleanup if replacing target[key] (object) with a non-object new_value
+            if (isObject(target[key]) && (!isObject(new_value) || !new_value[IS_PROXY])) {
+                SUBSCRIBERS.getMap(target).delete(key);
+                SUBSCRIBERS.deepDelete(target[key]);
+            }
+
+            target[key] = unwrapped_value;
+
+            const subscribers = SUBSCRIBERS.getSet(target, key);
+            if (subscribers.size > 0) notifySubscribers(subscribers);
+
+            return true;
+        },
+        deleteProperty(target, key) {
+            if (isObject(target[key])) {
+                SUBSCRIBERS.getMap(target).delete(key);
+                SUBSCRIBERS.deepDelete(target[key]);
+            }
+
+            delete target[key];
+            return true;
+        }
+    });
+
+    proxyCache.set(obj, proxy);
+
+    return proxy;
+}
+
+function createDeepProxy(target) {
     return wrap(target);
 }
