@@ -255,7 +255,7 @@ function processDirectiveBlocks(template, directive, processBlocks) {
 
         template = template.replace(blocks[i], `<template data-directive="${directive}" data-marker-id="${marker_id}"></template>`)
 
-        const start = blocks[i].match(new RegExp(`\\{\\{#${directive}\\s+([^\\}]+)\\}\\}`))[0];
+        const start = blocks[i].match(new RegExp(`\\{\\{#${directive}\\s+(.*?)\\}\\}`))[0];
         const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
         const block = blocks[i].slice(0, end).replace(start, "");
 
