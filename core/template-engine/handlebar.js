@@ -740,6 +740,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
         },
         /** @param {any} newValue */
         set [eachConfig.blockVar](newValue) {
+            blockDatas[index] = newValue;
             blockData.value = newValue;
             return true;
         },
@@ -952,10 +953,17 @@ function applyDirectiveUse(node, process, ctx) {
 
 function applyDirectiveBind(node, process, ctx) {
     const binding = evaluate(`v => ${process.value} = v`, ctx);
+
     const eventListener = (event) => {
         const type = event.target.type;
-        if (type === "date") return binding(new Date(event.target[process.input_type]))
-        binding(event.target[process.input_type])
+
+        if (process.value.includes(".") || process.value.includes("[") || process.value.includes("]")) {
+            if (type === "date") return binding(new Date(event.target[process.input_type]))
+            binding(event.target[process.input_type])
+        }
+
+        if (type === "date") return ctx[process.value] = new Date(event.target[process.input_type]);
+        return ctx[process.value] = event.target[process.input_type];
     };
 
     const remove_listener = event_delegation.addListener(process.event_type, node, eventListener);

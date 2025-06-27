@@ -11,6 +11,7 @@
     {{#each names.value as name, i}}
         <h1>{{ i+1}}. {{name.toUpperCase() }}</h1>
         <button onclick="{{ () => { names.value.splice(i, 1) } }}">Delete</button>
+        <input type="text" bind:value="name">
     {{:empty}}
         <h1>Empty list</h1>
     {{/each}}
