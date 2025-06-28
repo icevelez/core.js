@@ -723,25 +723,30 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeEnd);
 
     const blockIndex = new State(index);
-    const blockData = new State(blockDatas[index]);
 
     const block = {
         nodeStart,
         nodeEnd,
         unmount,
         index: blockIndex,
-        data: blockData,
+        get data() {
+            return blockDatas[index]
+        },
+        /** @param {any} newValue */
+        set data(newValue) {
+            blockDatas[index] = newValue;
+            return true;
+        },
     };
 
     const childCtx = {
         ...ctx,
         get [eachConfig.blockVar]() {
-            return blockData.value;
+            return blockDatas[index];
         },
         /** @param {any} newValue */
         set [eachConfig.blockVar](newValue) {
             blockDatas[index] = newValue;
-            blockData.value = newValue;
             return true;
         },
         ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return blockIndex.value } } : {})
@@ -873,14 +878,14 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             // USE EXISTING BLOCK
             if (block) {
                 // IF THE SAME, RE-USE
-                if (block.data.value === blockDatas[index]) {
+                if (block.data === blockDatas[index]) {
                     currentNode = block.nodeEnd.nextSibling;
                     newRenderedBlocks.push(block);
                     continue;
                 }
 
                 // IF NOT, UPDATE VALUE AND RE-USE
-                if (block.data.value !== blockDatas[index]) block.data.value = blockDatas[index];
+                if (block.data !== blockDatas[index]) block.data = blockDatas[index];
                 if (block.index.value !== index) block.index.value = index;
 
                 currentNode = block.nodeEnd.nextSibling;
@@ -959,7 +964,7 @@ function applyDirectiveBind(node, process, ctx) {
 
         if (process.value.includes(".") || process.value.includes("[") || process.value.includes("]")) {
             if (type === "date") return binding(new Date(event.target[process.input_type]))
-            binding(event.target[process.input_type])
+            return binding(event.target[process.input_type])
         }
 
         if (type === "date") return ctx[process.value] = new Date(event.target[process.input_type]);
