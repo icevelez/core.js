@@ -56,7 +56,6 @@ export function parseOuterBlocks(template, openTag, closeTag) {
 }
 
 /**
-*
 * @param {Node} startNode
 * @param {Node} endNode
 */
@@ -70,13 +69,10 @@ export function removeNodesBetween(startNode, endNode) {
     }
 }
 
-let commentCounter = 1;
-
 const use_comment = true;
 
 export function createStartEndNode(name = 'item') {
-    const rand = commentCounter++;
-    const blockStart = use_comment ? document.createComment(`${name}-start-${rand}`) : document.createTextNode("");
-    const blockEnd = use_comment ? document.createComment(`${name}-end-${rand}`) : document.createTextNode("");
+    const blockStart = use_comment ? document.createComment(`${name}-start`) : document.createTextNode("");
+    const blockEnd = use_comment ? document.createComment(`${name}-end`) : document.createTextNode("");
     return [blockStart, blockEnd];
 }

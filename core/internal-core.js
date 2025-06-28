@@ -66,13 +66,13 @@ export function evaluate(expr, ctx) {
  */
 const delegated_events = new Map();
 
-export const event_delegation = Object.freeze({
+export const coreEventListener = Object.freeze({
     /**
      * @param {string} event_name
      * @param {Node} node
      * @param {Function} func
      */
-    addListener: function (event_name, node, func) {
+    add: function (event_name, node, func) {
         let event_node_weakmap = delegated_events.get(event_name);
 
         if (!event_node_weakmap) {
@@ -87,7 +87,7 @@ export const event_delegation = Object.freeze({
                 match_delegated_node(event_node_weakmap, e, e.target);
             });
 
-            return () => this.removeListener(event_name, node, func);
+            return () => this.remove(event_name, node, func);
         }
 
         let funcs = event_node_weakmap.get(node);
@@ -98,7 +98,7 @@ export const event_delegation = Object.freeze({
 
         funcs.add(func);
 
-        return () => this.removeListener(event_name, node, func);
+        return () => this.remove(event_name, node, func);
     },
     /**
      *
@@ -106,7 +106,7 @@ export const event_delegation = Object.freeze({
      * @param {node} node
      * @param {Function} func
      */
-    removeListener: function remove_delegated_node(event_name, node, func = null) {
+    remove: function remove_delegated_node(event_name, node, func = null) {
         const event = delegated_events.get(event_name);
         if (!event) return;
         const funcs = event.get(node);

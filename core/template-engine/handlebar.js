@@ -1,4 +1,4 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate, event_delegation, scopedMountUnmountRun } from "../internal-core.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun } from "../internal-core.js";
 import { effect, untrackedEffect, State } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 
@@ -939,7 +939,7 @@ function applyAttributeInterpolation(node, process, ctx) {
 function applyEventListener(node, process, ctx) {
     effect(() => {
         const func = evaluate(process.expr, ctx);
-        return event_delegation.addListener(process.event_type, node, func);
+        return coreEventListener.add(process.event_type, node, func);
     })
 }
 
@@ -971,7 +971,7 @@ function applyDirectiveBind(node, process, ctx) {
         return ctx[process.value] = event.target[process.input_type];
     };
 
-    const remove_listener = event_delegation.addListener(process.event_type, node, eventListener);
+    const remove_listener = coreEventListener.add(process.event_type, node, eventListener);
     const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     unmountSet.add(remove_listener);
 
