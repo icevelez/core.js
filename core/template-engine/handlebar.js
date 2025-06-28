@@ -923,8 +923,11 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 }
 
 function applyTextInterpolation(node, process, ctx) {
+    let prevContent;
     effect(() => {
-        node.textContent = evaluate(process.expr, ctx);
+        const textContent = evaluate(process.expr, ctx);
+        if (prevContent === textContent) return;
+        node.textContent = prevContent = textContent;
     })
 }
 

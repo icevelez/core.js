@@ -1,10 +1,10 @@
-{{#if AppModule.Router.match("/benchmark").is_match}}
+{{#if Router.match("/benchmark").is_match}}
     {{#await import("/src/pages/Benchmark.js")}}
         <h1>Loading Benchmark component</h1>
     {{:then Benchmark}}
         <Core:component default="Benchmark"/>
     {{/await}}
-{{:else if AppModule.Router.match("/playground").is_match}}
+{{:else if Router.match("/playground").is_match}}
     {{#await import("/src/pages/Playground.js")}}
         <h1>Loading Playground component</h1>
     {{:then Playground}}
@@ -17,6 +17,7 @@
         <input type="text" bind:value="name.value" />
     </div>
     <p>Counter: {{ counter.value }}</p>
+    <p>Double: {{ double.value }}</p>
     <button onclick="{{ () => counter.value++ }}">Click Me!</button>
     <br><br>
     <div>
