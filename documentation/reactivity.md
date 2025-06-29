@@ -14,9 +14,14 @@ createSignal<T>(initialValue: T)
 ```
 ```
 Properties
-    value: T
+    () => T
     Getter tracks access in effect.
-    Setter updates the internal value and triggers subscribed effects.
+
+    set(new_value)
+    Sets a new internal value then triggers subscribed effects.
+
+    Update((current_value) => new_value)
+    updates the internal value using a callback to either mutate the current value or replace it entirely which then triggers subscribed effects.
 ```
 ### Example
 ```js
@@ -42,7 +47,7 @@ createDerived<T>(computeFn: () => T)
 ```
 ```
 Properties
-    value: T
+    () => T
     Automatically re-evaluated when dependencies change.
 ```
 ### Example
