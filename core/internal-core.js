@@ -6,7 +6,7 @@ const evaluationCache = new Map();
 
 if (dev_mode_on) {
     window.__corejs__ = {
-        version: "0.1.7",
+        version: "0.1.10",
         evaluationCache
     }
 }
