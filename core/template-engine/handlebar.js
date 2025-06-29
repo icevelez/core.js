@@ -524,8 +524,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     applyComponents(process.payload, nodeStart, nodeEnd, ctx);
                 }
 
-                node.before(fragment);
-                node.remove();
+                node.parentNode.replaceChild(fragment, node);
                 break;
             }
             case process_type_enum.children: {
@@ -721,7 +720,6 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeStart);
     currentNode.before(nodeEnd);
 
-    const blockIndex = createSignal(index);
     const blockData = makeFuncSignal(function () {
         return blockDatas[index];
     })
@@ -738,14 +736,14 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
         nodeStart,
         nodeEnd,
         unmount,
-        index: blockIndex,
+        index,
         data: blockData,
     };
 
     const childCtx = {
         ...ctx,
         [eachConfig.blockVar]: blockData,
-        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return blockIndex() } } : {})
+        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
     };
 
     cleanupEffect = untrackedEffect(() => {
@@ -882,7 +880,6 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
                 // IF NOT, UPDATE VALUE AND RE-USE
                 if (block.data() !== blockDatas[index]) block.data.set(blockDatas[index]);
-                if (block.index.value !== index) block.index.value = index;
 
                 currentNode = block.nodeEnd.nextSibling;
                 newRenderedBlocks.push(block);
