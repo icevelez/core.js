@@ -13,7 +13,7 @@ export default component({
 
     counter = new State(0);
     double = new Derived(() => this.counter.value * 2);
-    isEven = new Derived(() => this.double.value % 2 === 0);
+
     name = new State('User');
 
     constructor() { }

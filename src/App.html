@@ -18,6 +18,7 @@
     </div>
     <p>Counter: {{ counter.value }}</p>
     <p>Double: {{ double.value }}</p>
+    <p>Double is even: {{ double.value % 2 === 0 }}</p>
     <button onclick="{{ () => counter.value++ }}">Click Me!</button>
     <br><br>
     <div>

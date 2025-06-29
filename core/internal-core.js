@@ -49,15 +49,15 @@ export function evaluate(expr, ctx) {
 
     let evalFunc = evaluationCache.get(key);
     if (!evalFunc) {
-        evalFunc = Function(...ctx_keys, `return ${expr};`);
+        evalFunc = new Function(...ctx_keys, `return ${expr};`);
         evaluationCache.set(key, evalFunc);
     }
 
     try {
         return evalFunc(...ctx_keys.map(k => ctx[k]));
-    } catch (e) {
-        console.error(`Evaluation run-time error: ${expr}`, e, ctx);
-        return {};
+    } catch (error) {
+        console.errror(error, ctx);
+        throw new Error(`Evaluation run-time error: ${expr}`);
     }
 }
 
@@ -128,7 +128,5 @@ function match_delegated_node(event_node_weakmap, event, target) {
         return match_delegated_node(event_node_weakmap, event, target.parentNode);
     }
 
-    for (const func of funcs) {
-        func(event);
-    }
+    for (const func of funcs) func(event);
 }

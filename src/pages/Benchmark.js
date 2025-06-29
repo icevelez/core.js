@@ -82,11 +82,22 @@ export default component({
     components: {}
 }, class {
 
+    // count = new State(0);
+    // getName = () => {
+    //     console.log("get name")
+    //     return "Jonas"
+    // }
+
     constructor() {
         setTimeout(() => {
             this.runLots();
             console.log("X");
         }, 2000)
+
+        // setTimeout(() => {
+        //     this.count.value += 1;
+        //     console.log("count update");
+        // }, 1000);
     }
 
     data = new State([]);

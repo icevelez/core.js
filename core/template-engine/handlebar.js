@@ -342,7 +342,7 @@ const process_type_enum = {
 
 /**
 * The purpose of this function is to search and store the dynamic binding of a node and its children recursively
-* so that static nodes are not included when processing a node's dynamic bindings
+* so that static nodes are not included when processing dynamic bindings
 * @param {Node} node
 */
 function preprocessNode(node) {
@@ -425,7 +425,6 @@ function preprocessNode(node) {
 
                 processes.push({ type: process_type_enum.eventListener, event_type, expr });
                 node.removeAttribute(attrName);
-
             } else if (attrValue.includes('{{')) {
                 let matches = [];
                 let exprs = [];
@@ -449,7 +448,7 @@ function preprocessNode(node) {
 }
 
 /**
- * The purpose of this function is to avoid recursive function closures which having too many can slow down performance
+ * The purpose of this function is to apply data bindings or node replacement to nodes deemed dynamic after running it through `preprocessNode` function
  * @param {Node} node
  * @param {Record<string, any>[]} processes
  * @param {any} ctx
@@ -932,9 +931,11 @@ function applyTextInterpolation(node, process, ctx) {
 }
 
 function applyAttributeInterpolation(node, process, ctx) {
+    let prevAttr;
     effect(() => {
         let new_attr = process.value;
         for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
+        if (prevAttr === new_attr) return;
         node.setAttribute(process.attr_name, new_attr);
     })
 }
