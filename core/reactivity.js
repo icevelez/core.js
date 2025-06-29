@@ -47,6 +47,7 @@ export function isSignal(input) {
  * @param {T} initial_value
  */
 export function createSignal(initial_value = undefined) {
+    /** @type {T} */
     let value = isObject(initial_value) ? createDeepProxy(initial_value) : initial_value;
     const subscribers = new Set();
 

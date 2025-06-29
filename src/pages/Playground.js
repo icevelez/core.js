@@ -28,7 +28,7 @@ export default component({
     addName = (event) => {
         if (event.key !== "Enter") return;
 
-        this.names.value.push(event.target.value)
+        this.names().push(event.target.value)
         event.target.value = "";
     }
 });
