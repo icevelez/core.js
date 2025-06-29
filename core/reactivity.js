@@ -26,43 +26,49 @@ function notifySubscribers(subscribers) {
     });
 }
 
+const IS_SIGNAL = Symbol('is_signal');
+
+export function makeFuncSignal(func) {
+    if (typeof func !== "function") throw new Error("func is not a function");
+    func[IS_SIGNAL] = true;
+    return func;
+}
+
 /**
-* @template {any} T
-*/
-export class State {
+ * @param {any} input
+ * @returns {boolean}
+ */
+export function isSignal(input) {
+    return input && typeof input === "function" && input[IS_SIGNAL];
+}
 
-    /**
-    * @type {T}
-    */
-    #value;
+/**
+ * @template {any} T
+ * @param {T} initial_value
+ */
+export function createSignal(initial_value = undefined) {
+    let value = isObject(initial_value) ? createDeepProxy(initial_value) : initial_value;
+    const subscribers = new Set();
 
-    /**
-    * @type {Set<Function>}
-    */
-    #subscribers = new Set();
-
-    /**
-    * @param {T} initialValue
-    */
-    constructor(initialValue) {
-        this.value = initialValue && typeof initialValue === "object" ? createDeepProxy(initialValue) : initialValue;
-    }
-
-    get value() {
-        if (effectStack.length <= 0) return this.#value;
+    function read() {
+        if (effectStack.length <= 0) return value;
 
         const currentEffect = effectStack[effectStack.length - 1];
-        this.#subscribers.add(currentEffect);
+        subscribers.add(currentEffect);
 
         currentEffect.dependencies.add(() => {
-            this.#subscribers.delete(currentEffect);
+            subscribers.delete(currentEffect);
         });
 
-        return this.#value;
+        return value;
     }
 
-    set value(new_value) {
-        if (new_value === this.#value) return true;
+    /**
+     *
+     * @param {T} new_value
+     */
+    function write(new_value) {
+        if (new_value === value) return
 
         // Preserve subscriber map of this.#value by transferring it to new_value unproxy
         if (isObject(new_value) && !new_value[IS_PROXY]) {
@@ -71,48 +77,45 @@ export class State {
         }
 
         // Cleanup if replacing this.#value (object) with a non-object new_value
-        if (isObject(this.#value) && (!isObject(new_value) || !new_value[IS_PROXY])) {
-            const old_value = this.#value[UNWRAPPED_VALUE];
+        if (isObject(value) && (!isObject(new_value) || !new_value[IS_PROXY])) {
+            const old_value = value[UNWRAPPED_VALUE];
             SUBSCRIBERS.deepDelete(old_value);
         }
 
-        this.#value = new_value;
+        value = new_value;
 
-        if (this.#subscribers.size > 0) notifySubscribers(this.#subscribers);
-
-        return true;
+        if (subscribers.size > 0) notifySubscribers(subscribers);
     }
+
+    /**
+     * @param {(old_value:T) => T} callbackfn
+     */
+    function update(callbackfn) {
+        if (typeof callbackfn !== "function") throw new Error("callbackfn is not a function");
+        write(callbackfn(value));
+    }
+
+    read.set = write;
+    read.update = update;
+    read[IS_SIGNAL] = true;
+
+    return read;
 }
 
 /**
-* @template {any} T
-*/
-export class Derived {
+ * @template {any} T
+ * @param {() => T} callbackfn
+ */
+export function createDerived(callbackfn) {
+    const signal = createSignal();
 
-    /**
-    * @type {State<T>}
-    */
-    #state = new State(undefined);
-
-    /**
-     * @type {() => void}
-     */
-    dispose;
-
-    /**
-    * @param {() => T} callback
-    */
-    constructor(callback) {
-        if (typeof callback !== "function") throw new TypeError("callback is not a function");
-        this.dispose = effect(() => {
-            const value = callback();
-            this.#state.value = value;
-        });
+    function read() {
+        return signal();
     }
 
-    get value() {
-        return this.#state.value;
-    }
+    read.dispose = effect(() => signal.set(callbackfn()));
+
+    return read;
 }
 
 const effectStack = [];

@@ -1,8 +1,8 @@
-import { State } from "../../core/reactivity.js";
+import { createSignal } from "../../core/reactivity.js";
 
 class RouterInstance {
 
-    #url = new State(new URL(window.location));
+    #url = createSignal(new URL(window.location));
 
     /**
      * Used to cache RegEx and ParamNames of a Route to skip doing ".replace" and ".push" inside `matchRoute()`
@@ -13,15 +13,15 @@ class RouterInstance {
     #updateHashFragment = () => {
         let route = window.location.hash.replace("#", "");
         if (route.substring(0, 1) !== "/") route = `/${route}`;
-        this.#url.value = new URL(`${window.location.protocol}//${window.location.host}${route}`);
+        this.#url.set(new URL(`${window.location.protocol}//${window.location.host}${route}`));
     }
 
     get queryParams() {
-        return this.#url.value.searchParams;
+        return this.#url().searchParams;
     };
 
     get pathname() {
-        return this.#url.value.pathname;
+        return this.#url().pathname;
     }
 
     constructor() {

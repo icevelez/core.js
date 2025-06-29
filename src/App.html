@@ -11,15 +11,15 @@
         <Core:component default="Playground"/>
     {{/await}}
 {{:else}}
-    <h1>Hello {{ name.value }}!</h1>
+    <h1>Hello {{ name() }}!</h1>
     <div>
         <label>Type new name</label>
-        <input type="text" bind:value="name.value" />
+        <input type="text" bind:value="name" />
     </div>
-    <p>Counter: {{ counter.value }}</p>
-    <p>Double: {{ double.value }}</p>
-    <p>Double is even: {{ double.value % 2 === 0 }}</p>
-    <button onclick="{{ () => counter.value++ }}">Click Me!</button>
+    <p>Counter: {{ counter() }}</p>
+    <p>Double: {{ double() }}</p>
+    <p>Double is even: {{ double() % 2 === 0 }}</p>
+    <button onclick="{{ () => counter.set(counter()+1) }}">Click Me!</button>
     <br><br>
     <div>
         <a href="#/benchmark">Go to benchmark page</a>

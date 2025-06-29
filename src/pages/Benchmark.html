@@ -3,7 +3,7 @@
 	<div class="jumbotron">
 		<div class="row">
 		    <!-- <h1>{{ getName() }}</h1>
-            <h1>counter {{ count.value }}</h1> -->
+            <h1>counter {{ count() }}</h1> -->
 			<div class="col-md-6">
 				<h1>Core (non-keyed)</h1>
 			</div>
@@ -53,14 +53,14 @@
 	</div>
 	<table class="table table-hover table-striped test-data">
 		<tbody>
-			{{#each data.value as row, i}}
-				<tr class="{{selected.value === row.id ? 'danger' : ''}}">
-				    <td class="col-md-1">{{row.value.id}}</td>
+			{{#each data() as row, i}}
+				<tr class="{{selected() === row.id ? 'danger' : ''}}">
+				    <td class="col-md-1">{{row().id}}</td>
 					<td class="col-md-4">
-						<a onclick="{{ () => selected.value = row.value.id }}">{{ i+1 }} {{row.value.label}}</a>
+						<a onclick="{{ () => selected() = row().id }}">{{ i+1 }} {{row().label}}</a>
 					</td>
 					<td class="col-md-1">
-					    <a onclick="{{() => remove(row.value)}}">
+					    <a onclick="{{() => remove(row())}}">
 						    Delete
 						</a>
 					</td>

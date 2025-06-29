@@ -5,13 +5,13 @@
 <br/>
 <div>
     <label>Change name of no.1</label>
-    <input type="text" bind:value="names.value[0]">
+    <input type="text" bind:value="names()[0]">
 </div>
 <div>
-    {{#each names.value as name, i}}
-        <h1>{{ i+1}}. {{name.value.toUpperCase() }}</h1>
-        <button onclick="{{ () => { names.value.splice(i, 1) } }}">Delete</button>
-        <input type="text" bind:value="name.value">
+    {{#each names() as name, i}}
+        <h1>{{ i+1}}. {{name().toUpperCase() }}</h1>
+        <button onclick="{{ () => { names().splice(i, 1) } }}">Delete</button>
+        <input type="text" bind:value="name">
     {{:empty}}
         <h1>Empty list</h1>
     {{/each}}
@@ -19,5 +19,5 @@
 <br/>
 <TestComponent/>
 <ExampleSub>
-    Hello {{ names.value[0] }}!
+    Hello {{ names()[0] }}!
 </ExampleSub>

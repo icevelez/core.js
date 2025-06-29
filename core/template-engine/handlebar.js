@@ -1,5 +1,5 @@
 import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun } from "../internal-core.js";
-import { effect, untrackedEffect, State } from "../reactivity.js";
+import { effect, untrackedEffect, createSignal, isSignal, makeFuncSignal } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 
 /**
@@ -721,16 +721,17 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeStart);
     currentNode.before(nodeEnd);
 
-    const blockIndex = new State(index);
-    const blockData = {
-        get value() {
-            return blockDatas[index]
-        },
-        /** @param {any} newValue */
-        set value(newValue) {
-            blockDatas[index] = newValue;
-            return true;
-        },
+    const blockIndex = createSignal(index);
+    const blockData = makeFuncSignal(function () {
+        return blockDatas[index];
+    })
+
+    blockData.set = function (new_value) {
+        blockDatas[index] = new_value;
+    }
+
+    blockData.update = function (callbackfn) {
+        blockDatas[index] = callbackfn(blockDatas[index]);
     }
 
     const block = {
@@ -744,7 +745,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     const childCtx = {
         ...ctx,
         [eachConfig.blockVar]: blockData,
-        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return blockIndex.value } } : {})
+        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return blockIndex() } } : {})
     };
 
     cleanupEffect = untrackedEffect(() => {
@@ -880,7 +881,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 }
 
                 // IF NOT, UPDATE VALUE AND RE-USE
-                if (block.data.value !== blockDatas[index]) block.data.value = blockDatas[index];
+                if (block.data() !== blockDatas[index]) block.data.set(blockDatas[index]);
                 if (block.index.value !== index) block.index.value = index;
 
                 currentNode = block.nodeEnd.nextSibling;
@@ -957,18 +958,12 @@ function applyDirectiveUse(node, process, ctx) {
 }
 
 function applyDirectiveBind(node, process, ctx) {
-    const binding = evaluate(`v => ${process.value} = v`, ctx);
+    const binding = evaluate(`(v, c) => { (c(${process.value})) ? ${process.value}.set(v) : ${process.value} = v; }`, ctx);
 
     const eventListener = (event) => {
         const type = event.target.type;
-
-        if (process.value.includes(".") || process.value.includes("[") || process.value.includes("]")) {
-            if (type === "date") return binding(new Date(event.target[process.input_type]))
-            return binding(event.target[process.input_type])
-        }
-
-        if (type === "date") return ctx[process.value] = new Date(event.target[process.input_type]);
-        return ctx[process.value] = event.target[process.input_type];
+        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal)
+        return binding(event.target[process.input_type], isSignal)
     };
 
     const remove_listener = coreEventListener.add(process.event_type, node, eventListener);
@@ -976,7 +971,11 @@ function applyDirectiveBind(node, process, ctx) {
     unmountSet.add(remove_listener);
 
     effect(() => {
-        const value = evaluate(process.value, ctx);
+        let value = evaluate(process.value, ctx);
+        value = isSignal(value) ? value() : value;
+
+        console.log(value);
+
         if (node.type === "date") {
             if (!(value instanceof Date)) throw new Error("input value is not a valid Date");
             node[process.input_type] = value.toISOString().split('T')[0];

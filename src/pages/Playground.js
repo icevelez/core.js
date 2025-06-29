@@ -1,6 +1,6 @@
 import { load, onMount, onUnmount } from "../../core/core.js";
 import { component } from "../../core/template-engine/handlebar.js";
-import { State } from "../../core/reactivity.js";
+import { createSignal } from "../../core/reactivity.js";
 
 import TestComponent from "../components/TestComponent.js";
 import ExampleSub from "../components/ExampleSub.js";
@@ -13,7 +13,7 @@ export default component({
     }
 }, class {
 
-    names = new State(['ice', 'ian', 'takeru', 'piox']);
+    names = createSignal(['ice', 'ian', 'takeru', 'piox']);
 
     constructor() {
         onMount(() => {

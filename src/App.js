@@ -1,6 +1,6 @@
 import { load } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
-import { Derived, State } from "../core/reactivity.js";
+import { createDerived, createSignal } from "../core/reactivity.js";
 
 import { Router } from "./common/router.js";
 
@@ -11,10 +11,10 @@ export default component({
 
     Router = Router;
 
-    counter = new State(0);
-    double = new Derived(() => this.counter.value * 2);
+    counter = createSignal(0);
+    double = createDerived(() => this.counter() * 2);
 
-    name = new State('User');
+    name = createSignal('User');
 
     constructor() { }
 

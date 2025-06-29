@@ -1,6 +1,6 @@
 import { load } from "../../core/core.js";
 import { component } from "../../core/template-engine/handlebar.js";
-import { State } from "../../core/reactivity.js";
+import { createSignal, effect } from "../../core/reactivity.js";
 
 let rowId = 1;
 
@@ -82,7 +82,7 @@ export default component({
     components: {}
 }, class {
 
-    // count = new State(0);
+    // count = createSignal(0);
     // getName = () => {
     //     console.log("get name")
     //     return "Jonas"
@@ -95,17 +95,17 @@ export default component({
         }, 2000)
 
         // setTimeout(() => {
-        //     this.count.value += 1;
+        //     this.count.set(this.count()+1);
         //     console.log("count update");
         // }, 1000);
     }
 
-    data = new State([]);
-    selected = new State(null);
+    data = createSignal([]);
+    selected = createSignal(null);
 
     add = () => {
         console.time('add');
-        this.data.value = [...this.data.value, ...buildData(1000)]
+        this.data.set([...this.data(), ...buildData(1000)])
         requestAnimationFrame(() => {
             console.timeEnd('add');
         });
@@ -113,7 +113,7 @@ export default component({
 
     clear = () => {
         console.time('clear');
-        this.data.value = [];
+        this.data.set([])
         requestAnimationFrame(() => {
             console.timeEnd('clear');
         });
@@ -121,8 +121,8 @@ export default component({
 
     partialUpdate = () => {
         console.time('partial update');
-        for (let i = 0; i < this.data.value.length; i += 10) {
-            const row = this.data.value[i];
+        for (let i = 0; i < this.data().length; i += 10) {
+            const row = this.data()[i];
             row.label = row.label + ' !!!';
         }
         requestAnimationFrame(() => {
@@ -132,7 +132,7 @@ export default component({
 
     remove = (row) => {
         console.time('remove');
-        this.data.value.splice(this.data.value.indexOf(row), 1);
+        this.data().splice(this.data().indexOf(row), 1);
         requestAnimationFrame(() => {
             console.timeEnd('remove');
         });
@@ -140,7 +140,7 @@ export default component({
 
     run = () => {
         console.time('run');
-        this.data.value = buildData(1000);
+        this.data.set(buildData(1000))
         requestAnimationFrame(() => {
             console.timeEnd('run');
         });
@@ -150,7 +150,7 @@ export default component({
         // const n = (new Date()).getTime()
 
         console.time('runLots');
-        this.data.value = buildData(10000);
+        this.data.set(buildData(10000))
 
         requestAnimationFrame(() => {
             console.timeEnd('runLots');
@@ -160,13 +160,14 @@ export default component({
     };
 
     swapRows = () => {
-        const tmp = this.data.value;
+        const tmp = this.data();
         if (tmp < 998) return;
 
         const a = tmp[1];
         tmp[1] = tmp[998];
         tmp[998] = a;
-        this.data.value = tmp;
+
+        this.data.set(tmp);
     };
 
 });
