@@ -4,13 +4,13 @@ The reactvity syntax is based on the concept of `Signals` or auto-tracked observ
 
 ---
 
-## 1. State
+## 1. Signal
 
 It is a reactive container that holds a value of any type. When the value is accessed inside an `effect`, it automatically tracks the dependency. When the value is updated, all subscribed effects are scheduled to re-run.
 
 ### Constructor
 ```js
-new State<T>(initialValue: T)
+createSignal<T>(initialValue: T)
 ```
 ```
 Properties
@@ -20,25 +20,25 @@ Properties
 ```
 ### Example
 ```js
-const count = new State(0);
+const count = createSignal(0);
 
 effect(() => {
-  console.log("Count is:", count.value);
+  console.log("Count is:", count());
 });
 
-count.value = 1; // Console logs: "Count is: 1"
+count.set(1); // Console logs: "Count is: 1"
 ```
 
 ---
 
 ## 2. Derived
 
-It is a read-only reactive value computed from other State or Derived values. It automatically re-evaluates and updates its internal value when dependencies change.
+It is a read-only reactive value computed from other Signal or Derived values. It automatically re-evaluates and updates its internal value when dependencies change.
 
 ### Constructor
 
 ```js
-new Derived<T>(computeFn: () => T)
+createDerived<T>(computeFn: () => T)
 ```
 ```
 Properties
@@ -47,15 +47,15 @@ Properties
 ```
 ### Example
 ```js
-const a = new State(1);
-const b = new State(2);
-const sum = new Derived(() => a.value + b.value);
+const a = createSignal(1);
+const b = createSignal(2);
+const sum = createDerived(() => a() + b());
 
 effect(() => {
-  console.log("Sum is:", sum.value);
+  console.log("Sum is:", sum());
 });
 
-a.value = 3; // Console logs: "Sum is: 5"
+a.set(3); // Console logs: "Sum is: 5"
 ```
 
 ---

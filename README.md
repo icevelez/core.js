@@ -30,7 +30,7 @@ BUT! I want to break free from having a build step you have to do when using tra
 
 There's two components that make up `Core.js`. It's **reactivity system** and **template engine**
 
-The reactivity system handles tracking state update, deletion, and creation of data while the template engine is in charge of parsing template string to the DOM. Combined the two and you get this framework
+The reactivity system handles tracking signal update, deletion, and creation of data while the template engine is in charge of parsing template string to the DOM. Combined the two and you get this framework
 
 > One neat tidbit you might have not notice is that you can build your own template engine that parses whatever syntax you want, as long as the reactivity system is integrated by using `effect()` among other primitives.
 >
