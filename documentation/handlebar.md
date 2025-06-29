@@ -54,11 +54,13 @@ Expressions can be embedded inside HTML attributes.
 
 ## 3. Loops
 
+> Accessing individual values from an array requires using the `.value` property because re-assignment of said property cannot trigger reactivity. I wish there was a better way but as of writing I found none.
+
 ### ✅ `each` block
 ```html
 <ul>
   {{#each items.value as item, i}}
-    <li>{{ i }}. {{ item.name }}</li>
+    <li>{{ i }}. {{ item.value.name }}</li>
   {{/each}}
 </ul>
 ```
@@ -67,7 +69,7 @@ Expressions can be embedded inside HTML attributes.
 ```html
 <ul>
   {{#each users.value as user}}
-    <li>{{ user.name }}</li>
+    <li>{{ user.value.name }}</li>
   {{:empty}}
     <li>No users found.</li>
   {{/each}}
@@ -271,11 +273,18 @@ The `<Core:slot />` directive allows a **custom component** to display child con
 
 ## 8. `use:` Directive (Action Support)
 
-> NOTE: Due to HTML specification, HTML attributes are case insensitive so function names used in this directive cannot be Pascal Case
+### Caveat!
 
-### ✅ Basic usage
+> due to HTML specification, HTML attributes are case insensitive so function names used in this directive cannot be pascal Case
+
+### ✅ Correct usage
 ```html
 <input use:myaction />
+```
+
+### 🚫 Incorrect usage
+```html
+<input use:myAction />
 ```
 
 ### ✅ With parameters
@@ -295,20 +304,54 @@ function myaction(node, parameter) {
 }
 ```
 
+# Component Life Cycle
+
+## 🔼 onMount
+
+Invoked once when the component or DOM fragment is inserted into the DOM. Use it to run setup logic like subscriptions, measurements, or animations.
+Function signature
+
+```js
+function onMount(callback: () => void | (() => void)): void
+```
+
+> The callback can optionally return a cleanup function. The returned cleanup will be called automatically when the component unmounts (see onUnmount).
+
+### Example
+```js
+onMount(() => {
+  console.log("Component mounted!");
+
+  const interval = setInterval(() => console.log("Tick"), 1000);
+
+  return () => {
+    clearInterval(interval);
+    console.log("Cleanup on unmount");
+  };
+});
+```
+
+## 🔽 onUnmount
+
+Registers a cleanup function to be called when the component or block is removed from the DOM.
+
+Function signature
+```js
+function onUnmount(callback: () => void): void
+```
+
+> Called once during teardown. Useful for manually registered cleanups that cannot be returned from onMount.
+
+### Example
+```js
+onUnmount(() => {
+  console.log("Component was removed");
+});
+```
+
+## ✅ Best Practices
+
+- Always clean up side effects in `onUnmount` or via the return function of `onMount`.
+- Avoid DOM reads or writes in component constructors — defer those to `onMount` for correct timing.
+
 ---
-
-## 🛠️ Notes
-
-- Templates are parsed into real DOM nodes (not strings).
-- JavaScript expressions inside `{{ }}` are evaluated in the current context.
-
-## ⚙️ Internal process of how the Handlebar engine works
-
-1. The template engine parses your html file by collecting all expression block like `{{#if}}` or `{{#each}}` and replacing it with a div element with a marker id (`<div id="marker">`) and converts it to a DOM element
-2. Which is then processed by replacing the marked div elements with **anchor tags** (represented as a comment element or text node to make it invisible in the elements tab) and render the dynamic content in between the anchor tags by evaluating the saved expression
-
-> The anchor tags are used to keep track each dynamic content's placement in the DOM
-
-3. All processed DOM elements are ran inside the reactive primitive `effect` to keep track of any updates and re-renders
-4. Then put all rendered DOM element inside a `DocumentFragment`
-5. Which is then appended to a target element using the `mount` function from `core.js`

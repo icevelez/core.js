@@ -10,7 +10,7 @@ const slotCache = new Map();
 /**
 * @type {Map<string, (startNode:Node, endNode:Node, ctx:any) => void>}
 */
-const processedBlocks = new Map();
+const markedNodeCache = new Map();
 
 /**
 * @type {Map<number, Record<string, Function>>}
@@ -28,7 +28,7 @@ const nodeChildren = new WeakMap();
 const cacheNodeProcesses = new WeakMap();
 
 if (window.__corejs__) {
-    window.__corejs__.processedBlocks = processedBlocks;
+    window.__corejs__.markedNodeCache = markedNodeCache;
     window.__corejs__.slotCache = slotCache;
     window.__corejs__.nodeChildren = nodeChildren;
     window.__corejs__.imported_components = imported_components;
@@ -261,7 +261,7 @@ function processDirectiveBlocks(template, directive, processBlocks) {
 
         blocks[i] = start + preprocessTemplateString(block) + `{{/${directive}}}`;
 
-        processedBlocks.set(marker_id, processBlocks(blocks[i]));
+        markedNodeCache.set(marker_id, processBlocks(blocks[i]));
     }
 
     return template;
@@ -288,7 +288,7 @@ function preprocessComponents(template, imported_components_id) {
         }
         const marker_id = `${directive}-${makeId(8)}`;
         const component = { import_id: imported_components_id, tag, attrStr, slot_node: createNodes(slot_content) || [] };
-        processedBlocks.set(marker_id, component);
+        markedNodeCache.set(marker_id, component);
 
         return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
     })
@@ -389,7 +389,7 @@ function preprocessNode(node) {
     if (isMarkedNode(node)) {
         const marker_type = node.dataset.directive;
         const marker_id = node.dataset.markerId;
-        const payload = processedBlocks.get(marker_id);
+        const payload = markedNodeCache.get(marker_id);
         if (!payload) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
         processes.push({ type: process_type_enum.markedBlocks, marker_type, payload });
         return processes;
