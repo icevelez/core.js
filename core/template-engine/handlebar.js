@@ -722,32 +722,28 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeEnd);
 
     const blockIndex = new State(index);
+    const blockData = {
+        get value() {
+            return blockDatas[index]
+        },
+        /** @param {any} newValue */
+        set value(newValue) {
+            blockDatas[index] = newValue;
+            return true;
+        },
+    }
 
     const block = {
         nodeStart,
         nodeEnd,
         unmount,
         index: blockIndex,
-        get data() {
-            return blockDatas[index]
-        },
-        /** @param {any} newValue */
-        set data(newValue) {
-            blockDatas[index] = newValue;
-            return true;
-        },
+        data: blockData,
     };
 
     const childCtx = {
         ...ctx,
-        get [eachConfig.blockVar]() {
-            return blockDatas[index];
-        },
-        /** @param {any} newValue */
-        set [eachConfig.blockVar](newValue) {
-            blockDatas[index] = newValue;
-            return true;
-        },
+        [eachConfig.blockVar]: blockData,
         ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return blockIndex.value } } : {})
     };
 
@@ -884,7 +880,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 }
 
                 // IF NOT, UPDATE VALUE AND RE-USE
-                if (block.data !== blockDatas[index]) block.data = blockDatas[index];
+                if (block.data.value !== blockDatas[index]) block.data.value = blockDatas[index];
                 if (block.index.value !== index) block.index.value = index;
 
                 currentNode = block.nodeEnd.nextSibling;

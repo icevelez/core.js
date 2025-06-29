@@ -56,7 +56,7 @@ export function evaluate(expr, ctx) {
     try {
         return evalFunc(...ctx_keys.map(k => ctx[k]));
     } catch (error) {
-        console.errror(error, ctx);
+        console.error(error, ctx);
         throw new Error(`Evaluation run-time error: ${expr}`);
     }
 }

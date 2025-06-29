@@ -55,12 +55,12 @@
 		<tbody>
 			{{#each data.value as row, i}}
 				<tr class="{{selected.value === row.id ? 'danger' : ''}}">
-				    <td class="col-md-1">{{row.id}}</td>
+				    <td class="col-md-1">{{row.value.id}}</td>
 					<td class="col-md-4">
-						<a onclick="{{ () => selected.value = row.id }}">{{ i+1 }} {{row.label}}</a>
+						<a onclick="{{ () => selected.value = row.value.id }}">{{ i+1 }} {{row.value.label}}</a>
 					</td>
 					<td class="col-md-1">
-					    <a onclick="{{() => remove(row)}}">
+					    <a onclick="{{() => remove(row.value)}}">
 						    Delete
 						</a>
 					</td>
