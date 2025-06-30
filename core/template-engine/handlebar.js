@@ -2,29 +2,19 @@ import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener
 import { effect, untrackedEffect, createSignal, isSignal, makeFuncSignal } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 
-/**
-* @type {Map<string, Node[]>}
-*/
+/** @type {Map<string, Node[]>} */
 const slotCache = new Map();
 
-/**
-* @type {Map<string, (startNode:Node, endNode:Node, ctx:any) => void>}
-*/
+/** @type {Map<string, (startNode:Node, endNode:Node, ctx:any) => void>} */
 const markedNodeCache = new Map();
 
-/**
-* @type {Map<number, Record<string, Function>>}
-*/
+/** @type {Map<number, Record<string, Function>>} */
 const imported_components = new Map();
 
-/**
-* @type {WeakMap<Node, Node[]>}
-*/
+/** @type {WeakMap<Node, Node[]>} */
 const nodeChildren = new WeakMap();
 
-/**
-* @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:(() => DocumentFragment)) => void)>}
-*/
+/** @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:(() => DocumentFragment)) => void)>} */
 const cacheNodeProcesses = new WeakMap();
 
 if (window.__corejs__) {
@@ -34,8 +24,6 @@ if (window.__corejs__) {
     window.__corejs__.imported_components = imported_components;
     window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
 }
-
-// ============================= //
 
 let imported_components_id_counter = 1;
 
@@ -49,10 +37,10 @@ export function component(options, Context = class { }) {
     const imported_components_id = imported_components_id_counter;
     imported_components_id_counter++;
 
-    let template = preprocessComponents(options.template, imported_components_id);
+    let template = processComponents(options.template, imported_components_id);
     if (options.components && Object.keys(options.components).length > 0) imported_components.set(imported_components_id, options.components);
 
-    const fragment = createNodes(preprocessTemplateString(template));
+    const fragment = createNodes(parseTemplate(template));
 
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
@@ -104,7 +92,7 @@ function createFragment(fragment, ctx, render_slot_callbackfn) {
 /**
 * @param {string} eachBlock
 */
-function processEachBlock(eachBlock) {
+function parseEach(eachBlock) {
     const eachRegex = /{{#each\s+(.+?)\s+as\s+(\w+)(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
     let eachConfig = { expression: "", mainContent: [], emptyContent: [], blockVar: "", indexVar: "" }
 
@@ -119,13 +107,11 @@ function processEachBlock(eachBlock) {
 /**
 * @param {string} ifBlock
 */
-function processIfBlock(ifBlock) {
+function parseIf(ifBlock) {
     const ifRegex = /{{#if\s+(.+?)}}([\s\S]*?){{\/if}}/g;
     const ifElseregex = /{{:else\s+if\s+(.+?)}}|{{:else}}/g;
 
-    /**
-    * @type {{ block : string, condition : string }[]}
-    */
+    /** @type {{ block : string, condition : string }[]} */
     const segments = [];
 
     ifBlock.replace(ifRegex, (_, firstCondition, firstBlock) => {
@@ -166,7 +152,7 @@ function processIfBlock(ifBlock) {
 /**
 * @param {string} awaitBlock
 */
-function processAwaitBlock(awaitBlock) {
+function parseAwait(awaitBlock) {
     const awaitRegex = /{{#await\s+(.+?)}}([\s\S]*?){{\/await}}/g;
     const thenRegex = /\{\{:then(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
     const catchRegex = /\{\{:catch(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
@@ -201,48 +187,20 @@ function processAwaitBlock(awaitBlock) {
     return awaitConfig;
 }
 
-function applyComponents(component, startNode, endNode, ctx) {
-    const components = imported_components.get(component.import_id);
-    if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
-
-    let componentFunc = components[component.tag];
-    if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
-
-    const attrs = {};
-    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-
-    let match;
-    while ((match = regex.exec(component.attrStr)) !== null) {
-        const [, key, value] = match;
-        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
-    }
-
-    let componentBlock;
-
-    if (component.slot_node) {
-        const renderSlotCallbackfn = () => createFragment(component.slot_node, ctx);
-        componentBlock = componentFunc(attrs, renderSlotCallbackfn)
-    } else {
-        componentBlock = componentFunc(attrs);
-    }
-
-    endNode.parentNode.insertBefore(componentBlock, endNode);
-}
-
-// ====================================================
-
 /**
-* Process and store all `{{#..}}` directives to be used later when rendering
+* Replaces handlebar directive like `{{#if}}` or `{{#each}}` with a placeholder element and processed by a custom function
 * @param {string} template
 */
-function preprocessTemplateString(template) {
-    template = processDirectiveBlocks(template, "await", processAwaitBlock);
-    template = processDirectiveBlocks(template, "if", processIfBlock);
-    template = processDirectiveBlocks(template, "each", processEachBlock);
+function parseTemplate(template) {
+    template = processDirectiveBlocks(template, "await", parseAwait);
+    template = processDirectiveBlocks(template, "if", parseIf);
+    template = processDirectiveBlocks(template, "each", parseEach);
     return template;
 }
 
 /**
+* Indirect recursive function to process handlebar directive, replacing it with a placeholder `<template>` element
+* then process the contents of each directive block with its respective processor function and cached to be used upon rendering
 * @param {string} template
 * @param {string} directive
 * @param {Function} processBlocks
@@ -262,7 +220,7 @@ function processDirectiveBlocks(template, directive, processBlocks) {
         const end = blocks[i].lastIndexOf(`{{/${directive}}}`);
         const block = blocks[i].slice(0, end).replace(start, "");
 
-        blocks[i] = start + preprocessTemplateString(block) + `{{/${directive}}}`;
+        blocks[i] = start + parseTemplate(block) + `{{/${directive}}}`;
 
         markedNodeCache.set(marker_id, processBlocks(blocks[i]));
     }
@@ -271,10 +229,11 @@ function processDirectiveBlocks(template, directive, processBlocks) {
 }
 
 /**
+* Replaces all custom HTML Tags with capital first letter with a placeholder element to be replaced later
 * @param {string} template
 * @param {number} imported_components_id
 */
-function preprocessComponents(template, imported_components_id) {
+function processComponents(template, imported_components_id) {
     const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
     const directive = "component";
 
@@ -300,7 +259,7 @@ function preprocessComponents(template, imported_components_id) {
 }
 
 /**
-* The purpose of this function is to search for text and split them into individual text nodes to for a finer text interpolation
+* The purpose of this function is to search for text and split them into individual text nodes for finer text interpolation
 * @param {Node} node
 */
 function preprocessTextNodes(node) {
@@ -344,16 +303,14 @@ const process_type_enum = {
 };
 
 /**
-* The purpose of this function is to search and store the dynamic binding of a node and its children recursively
-* so that static nodes are not included when processing dynamic bindings
+* The purpose of this function is to search the dynamic bindings of a node and its children (recursively)
+* and caching those bindings to be used when rendering to the DOM, skipping static nodes and attributes
 * @param {Node} node
 */
 function preprocessNode(node) {
     const isText = node.nodeType === Node.TEXT_NODE;
 
-    /**
-    * @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]}
-    */
+    /** @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]} */
     const processes = [];
 
     if (isText) {
@@ -541,6 +498,227 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
 }
 
 /**
+ * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVar: string; indexVar: string; }} eachConfig
+ * @param {any[]} blockDatas
+ * @param {number} index
+ * @param {any} ctx
+ * @param {Node} currentNode
+ */
+function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
+    const onUnmountSet = new Set();
+    const onMountSet = new Set();
+    let cleanupEffect;
+
+    function unmount() {
+        if (typeof cleanupEffect === "function") cleanupEffect();
+        for (const unmount of onUnmountSet) unmount();
+        onUnmountSet.clear();
+    };
+
+    function mount() {
+        for (const mount of onMountSet) mount();
+        onMountSet.clear();
+    }
+
+    const [nodeStart, nodeEnd] = createStartEndNode('each-block');
+
+    currentNode.before(nodeStart);
+    currentNode.before(nodeEnd);
+
+    const blockData = makeFuncSignal(function () {
+        return blockDatas[index];
+    })
+
+    blockData.set = function (new_value) {
+        blockDatas[index] = new_value;
+    }
+
+    blockData.update = function (callbackfn) {
+        blockDatas[index] = callbackfn(blockDatas[index]);
+    }
+
+    const block = {
+        nodeStart,
+        nodeEnd,
+        unmount,
+        index,
+        data: blockData,
+    };
+
+    const childCtx = {
+        ...ctx,
+        [eachConfig.blockVar]: blockData,
+        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
+    };
+
+    cleanupEffect = untrackedEffect(() => {
+        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const mainBlock = createFragment(eachConfig.mainContent, childCtx);
+            nodeEnd.before(mainBlock);
+        })
+
+        if (core_context.is_mounted_to_the_DOM) {
+            mount();
+        } else {
+            core_context.onMountSet.add(mount)
+            core_context.onUnmountSet.add(unmount)
+        }
+    });
+
+    return block;
+}
+
+/**
+ * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVar: string; indexVar: string; }} eachConfig
+ * @param {Node} startNode
+ * @param {Node} endNode
+ * @param {any} ctx
+ */
+function applyEachBlock(eachConfig, startNode, endNode, ctx) {
+
+    // THIS SECTION IS FOR EMPTY BLOCK MOUNT/UNMOUNT
+
+    const onUnmountSet = new Set();
+    const onMountSet = new Set();
+
+    function unmount() {
+        if (typeof cleanupEffect === "function") cleanupEffect();
+        for (const unmount of onUnmountSet) unmount();
+        onUnmountSet.clear();
+    };
+
+    function mount() {
+        for (const mount of onMountSet) mount();
+        onMountSet.clear();
+    }
+
+    // END OF EMPTY BLOCK
+
+    function unmountEachBlock() {
+        for (const renderBlock of renderedBlocks) {
+            renderBlock.unmount();
+        };
+        renderedBlocks = [];
+    };
+
+    const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
+    if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock))
+        parentOnUnmountSet.add(unmountEachBlock);
+
+    /** @type {{ nodeStart:Node, nodeEnd:Node, data:{ ():any, set:(new_value:any) => any }, index : State<number>, unmount:Function }[]} */
+    let renderedBlocks = [];
+    let isEmptyBlockMounted = false;
+
+    effect(() => {
+        const newRenderedBlocks = [];
+
+        let currentNode = endNode;
+
+        const blockDatas = evaluate(eachConfig.expression, ctx) || [];
+
+        if (blockDatas.length <= 0 && !isEmptyBlockMounted) {
+            isEmptyBlockMounted = true;
+
+            if (renderedBlocks.length > 0) {
+                removeNodesBetween(startNode, endNode);
+
+                for (let i = 0; i < renderedBlocks.length; i++) {
+                    const block = renderedBlocks[i];
+                    block.unmount();
+                    block.index = null;
+                }
+
+                renderedBlocks = [];
+            }
+
+            if (eachConfig.emptyContent.length <= 0) return;
+
+            const [nodeStart, nodeEnd] = createStartEndNode('each-block');
+
+            currentNode.before(nodeStart);
+            currentNode.before(nodeEnd);
+
+            onUnmountSet.add(() => {
+                removeNodesBetween(nodeStart, nodeEnd);
+                nodeStart.remove();
+                nodeEnd.remove();
+            })
+
+            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+                const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
+                nodeEnd.before(eamptyBlock);
+            })
+
+            if (core_context.is_mounted_to_the_DOM) return mount();
+
+            core_context.onMountSet.add(mount)
+            core_context.onUnmountSet.add(unmount)
+            return;
+        }
+
+        isEmptyBlockMounted = false;
+        unmount();
+
+        if (renderedBlocks.length <= 0) {
+            for (let index = 0; index < blockDatas.length; index++) {
+                const block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
+                renderedBlocks.push(block);
+                currentNode = block.nodeEnd.nextSibling;
+            }
+            return;
+        }
+
+        for (let index = 0; index < blockDatas.length; index++) {
+
+            let block = renderedBlocks[index];
+
+            // USE EXISTING BLOCK
+            if (block) {
+                // IF THE SAME, RE-USE
+                if (block.data === blockDatas[index]) {
+                    currentNode = block.nodeEnd.nextSibling;
+                    newRenderedBlocks.push(block);
+                    continue;
+                }
+
+                // IF NOT, UPDATE VALUE AND RE-USE
+                if (block.data() !== blockDatas[index]) block.data.set(blockDatas[index]);
+
+                currentNode = block.nodeEnd.nextSibling;
+                newRenderedBlocks.push(block);
+                continue;
+            }
+
+            // CREATE NEW BLOCK IF NOT EXISTS
+            block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
+            newRenderedBlocks.push(block);
+            currentNode = block.nodeEnd.nextSibling;
+        }
+
+        // REMOVE UNUSED EACH BLOCKS
+        for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
+            const renderBlock = renderedBlocks[i];
+
+            let node = renderBlock.nodeStart;
+            let nodeEnd = renderBlock.nodeEnd;
+
+            while (node && node !== nodeEnd) {
+                const next = node.nextSibling;
+                node.remove();
+                node = next;
+            }
+
+            nodeEnd.remove();
+            renderBlock.unmount();
+        }
+
+        renderedBlocks = newRenderedBlocks;
+
+        return;
+    })
+}
+
+/**
  * @param {{ promiseExpr:string, pendingContent:Node[], then: { match:Boolean, var:string | null, content:Node[] }, catch: { match:Boolean, var:string | null, content:Node[] } }} awaitConfig
  * @param {Node} startNode
  * @param {Node} endNode
@@ -696,227 +874,32 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     })
 }
 
-/**
- * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVar: string; indexVar: string; }} eachConfig
- * @param {any[]} blockDatas
- * @param {number} index
- * @param {any} ctx
- * @param {Node} currentNode
- */
-function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
-    const onUnmountSet = new Set();
-    const onMountSet = new Set();
-    let cleanupEffect;
+function applyComponents(component, startNode, endNode, ctx) {
+    const components = imported_components.get(component.import_id);
+    if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
-    function unmount() {
-        if (typeof cleanupEffect === "function") cleanupEffect();
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
+    let componentFunc = components[component.tag];
+    if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
-    function mount() {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
+    const attrs = {};
+    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
+
+    let match;
+    while ((match = regex.exec(component.attrStr)) !== null) {
+        const [, key, value] = match;
+        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
     }
 
-    const [nodeStart, nodeEnd] = createStartEndNode('each-block');
+    let componentBlock;
 
-    currentNode.before(nodeStart);
-    currentNode.before(nodeEnd);
-
-    const blockData = makeFuncSignal(function () {
-        return blockDatas[index];
-    })
-
-    blockData.set = function (new_value) {
-        blockDatas[index] = new_value;
+    if (component.slot_node) {
+        const renderSlotCallbackfn = () => createFragment(component.slot_node, ctx);
+        componentBlock = componentFunc(attrs, renderSlotCallbackfn)
+    } else {
+        componentBlock = componentFunc(attrs);
     }
 
-    blockData.update = function (callbackfn) {
-        blockDatas[index] = callbackfn(blockDatas[index]);
-    }
-
-    const block = {
-        nodeStart,
-        nodeEnd,
-        unmount,
-        index,
-        data: blockData,
-    };
-
-    const childCtx = {
-        ...ctx,
-        [eachConfig.blockVar]: blockData,
-        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
-    };
-
-    cleanupEffect = untrackedEffect(() => {
-        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-            const mainBlock = createFragment(eachConfig.mainContent, childCtx);
-            nodeEnd.before(mainBlock);
-        })
-
-        if (core_context.is_mounted_to_the_DOM) {
-            mount();
-        } else {
-            core_context.onMountSet.add(mount)
-            core_context.onUnmountSet.add(unmount)
-        }
-    });
-
-    return block;
-}
-
-/**
- * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVar: string; indexVar: string; }} eachConfig
- * @param {Node} startNode
- * @param {Node} endNode
- * @param {any} ctx
- */
-function applyEachBlock(eachConfig, startNode, endNode, ctx) {
-
-    // THIS SECTION IS FOR EMPTY BLOCK MOUNT/UNMOUNT
-
-    const onUnmountSet = new Set();
-    const onMountSet = new Set();
-
-    function unmount() {
-        if (typeof cleanupEffect === "function") cleanupEffect();
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
-
-    function mount() {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
-    }
-
-    // END OF EMPTY BLOCK
-
-    function unmountEachBlock() {
-        for (const renderBlock of renderedBlocks) {
-            renderBlock.unmount();
-        };
-        renderedBlocks = [];
-    };
-
-    const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-    if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock))
-        parentOnUnmountSet.add(unmountEachBlock);
-
-    /**
-    * @type {{ nodeStart:Node, nodeEnd:Node, value:any, index : State<number>, unmount:Function }[]}
-    */
-    let renderedBlocks = [];
-    let isEmptyBlockMounted = false;
-
-    effect(() => {
-        const newRenderedBlocks = [];
-
-        let currentNode = endNode;
-
-        const blockDatas = evaluate(eachConfig.expression, ctx) || [];
-
-        if (blockDatas.length <= 0 && !isEmptyBlockMounted) {
-            isEmptyBlockMounted = true;
-
-            if (renderedBlocks.length > 0) {
-                removeNodesBetween(startNode, endNode);
-
-                for (let i = 0; i < renderedBlocks.length; i++) {
-                    const block = renderedBlocks[i];
-                    block.unmount();
-                    block.index = null;
-                }
-
-                renderedBlocks = [];
-            }
-
-            if (eachConfig.emptyContent.length <= 0) return;
-
-            const [nodeStart, nodeEnd] = createStartEndNode('each-block');
-
-            currentNode.before(nodeStart);
-            currentNode.before(nodeEnd);
-
-            onUnmountSet.add(() => {
-                removeNodesBetween(nodeStart, nodeEnd);
-                nodeStart.remove();
-                nodeEnd.remove();
-            })
-
-            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-                const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
-                nodeEnd.before(eamptyBlock);
-            })
-
-            if (core_context.is_mounted_to_the_DOM) return mount();
-
-            core_context.onMountSet.add(mount)
-            core_context.onUnmountSet.add(unmount)
-            return;
-        }
-
-        isEmptyBlockMounted = false;
-        unmount();
-
-        if (renderedBlocks.length <= 0) {
-            for (let index = 0; index < blockDatas.length; index++) {
-                const block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
-                renderedBlocks.push(block);
-                currentNode = block.nodeEnd.nextSibling;
-            }
-            return;
-        }
-
-        for (let index = 0; index < blockDatas.length; index++) {
-
-            let block = renderedBlocks[index];
-
-            // USE EXISTING BLOCK
-            if (block) {
-                // IF THE SAME, RE-USE
-                if (block.data === blockDatas[index]) {
-                    currentNode = block.nodeEnd.nextSibling;
-                    newRenderedBlocks.push(block);
-                    continue;
-                }
-
-                // IF NOT, UPDATE VALUE AND RE-USE
-                if (block.data() !== blockDatas[index]) block.data.set(blockDatas[index]);
-
-                currentNode = block.nodeEnd.nextSibling;
-                newRenderedBlocks.push(block);
-                continue;
-            }
-
-            // CREATE NEW BLOCK IF NOT EXISTS
-            block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
-            newRenderedBlocks.push(block);
-            currentNode = block.nodeEnd.nextSibling;
-        }
-
-        // REMOVE UNUSED EACH BLOCKS
-        for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
-            const renderBlock = renderedBlocks[i];
-
-            let node = renderBlock.nodeStart;
-            let nodeEnd = renderBlock.nodeEnd;
-
-            while (node && node !== nodeEnd) {
-                const next = node.nextSibling;
-                node.remove();
-                node = next;
-            }
-
-            nodeEnd.remove();
-            renderBlock.unmount();
-        }
-
-        renderedBlocks = newRenderedBlocks;
-
-        return;
-    })
+    endNode.parentNode.insertBefore(componentBlock, endNode);
 }
 
 function applyTextInterpolation(node, process, ctx) {
