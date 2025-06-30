@@ -54,13 +54,13 @@ Expressions can be embedded inside HTML attributes.
 
 ## 3. Loops
 
-> Accessing individual values from an array requires using the `.value` property because re-assignment of said property cannot trigger reactivity. I wish there was a better way but as of writing I found none.
+> Accessing individual values from an array requires using the getter as a function `()` property and setting a new value requires using `.set()` or `.update()`. This API decision is due to the limitation of JavaScript with closures where re-assigning a value `item = new_item` will not trigger reactivity.
 
 ### ✅ `each` block
 ```html
 <ul>
-  {{#each items.value as item, i}}
-    <li>{{ i }}. {{ item.value.name }}</li>
+  {{#each items() as item, i}}
+    <li>{{ i }}. {{ item().name }}</li>
   {{/each}}
 </ul>
 ```
@@ -68,8 +68,8 @@ Expressions can be embedded inside HTML attributes.
 ### ✅ `each` with empty fallback
 ```html
 <ul>
-  {{#each users.value as user}}
-    <li>{{ user.value.name }}</li>
+  {{#each users() as user}}
+    <li>{{ user().name }}</li>
   {{:empty}}
     <li>No users found.</li>
   {{/each}}
