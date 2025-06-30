@@ -524,7 +524,8 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     applyComponents(process.payload, nodeStart, nodeEnd, ctx);
                 }
 
-                node.parentNode.replaceChild(fragment, node);
+                node.before(fragment);
+                node.remove();
                 break;
             }
             case process_type_enum.children: {
