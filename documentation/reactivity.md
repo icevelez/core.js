@@ -81,10 +81,10 @@ effect(fn: () => void | (() => void)): () => void
 const message = new State("Hello");
 
 const stop = effect(() => {
-  console.log("Message is:", message.value);
+  console.log("Message is:", message());
 });
 
-message.value = "World"; // Console logs: "Message is: World"
+message.set("World"); // Console logs: "Message is: World"
 stop();
 ```
 
