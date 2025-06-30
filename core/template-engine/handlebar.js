@@ -79,7 +79,10 @@ function createNodes(template) {
 
     for (const childNode of childNodes) fragment.append(childNode);
 
-    cacheNodeProcesses.set(fragment, preprocessNode(fragment));
+    const processes = preprocessNode(fragment);
+    if (processes.length <= 0) return fragment;
+
+    cacheNodeProcesses.set(fragment, processes);
 
     return fragment;
 }
