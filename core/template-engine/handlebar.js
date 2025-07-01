@@ -30,7 +30,7 @@ let imported_components_id_counter = 1;
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
 * @param {Object} Context anonymous class that encapsulate logic
-* @returns {(attrs:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
+* @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Context = class { }) {
 
@@ -44,8 +44,8 @@ export function component(options, Context = class { }) {
 
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
-    return function (attrs, render_slot_callbackfn) {
-        const ctx = !Context ? {} : new Context(attrs);
+    return function (props, render_slot_callbackfn) {
+        const ctx = !Context ? {} : new Context(props);
         return createFragment(fragment, ctx, render_slot_callbackfn);
     }
 }
@@ -93,13 +93,16 @@ function createFragment(fragment, ctx, render_slot_callbackfn) {
 * @param {string} eachBlock
 */
 function parseEach(eachBlock) {
-    const eachRegex = /{{#each\s+(.+?)\s+as\s+(\w+)(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
-    let eachConfig = { expression: "", mainContent: [], emptyContent: [], blockVar: "", indexVar: "" }
+    const eachRegex = /{{#each\s+(.+?)\s+as\s+((?:\w+|\{[\s\S]*?\}|\([\s\S]*?\)))\s*(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
+    let eachConfig = { expression: "", mainContent: [], emptyContent: [], blockVars: [], blockVar: "", indexVar: "" }
 
     eachBlock.replace(eachRegex, (_, expression, blockVar, indexVar, content) => {
         const [mainContent, emptyContent] = content.split(/{{:empty}}/);
-        eachConfig = { expression, blockVar, indexVar, mainContent: createNodes(mainContent), emptyContent: emptyContent ? createNodes(emptyContent) : [] };
+        eachConfig = { expression, blockVars: [], blockVar, indexVar, mainContent: createNodes(mainContent), emptyContent: emptyContent ? createNodes(emptyContent) : [] };
     });
+
+    const blockvar = eachConfig.blockVar.trim();
+    if (blockvar.startsWith("{")) eachConfig.blockVars = blockvar.replace("{", "").replace("}", "").trim().split(",").map(v => v.trim());
 
     return eachConfig;
 }
@@ -451,19 +454,19 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     return;
                 }
 
-                const attrs = {};
+                const props = {};
 
                 for (const attr of node.attributes) {
                     const attrName = attr.name;
                     const attrValue = attr.value;
-                    attrs[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
+                    props[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
                 }
 
                 if (process.slot_nodes) {
                     const renderSlotCallbackfn = () => createFragment(process.slot_nodes, ctx);
-                    node.before(component(attrs, renderSlotCallbackfn));
+                    node.before(component(props, renderSlotCallbackfn));
                 } else {
-                    node.before(component(attrs));
+                    node.before(component(props));
                 }
 
                 node.remove();
@@ -498,7 +501,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
 }
 
 /**
- * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVar: string; indexVar: string; }} eachConfig
+ * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVars : []string, blockVar: string; indexVar: string; }} eachConfig
  * @param {any[]} blockDatas
  * @param {number} index
  * @param {any} ctx
@@ -545,11 +548,26 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
         data: blockData,
     };
 
-    const childCtx = {
-        ...ctx,
-        [eachConfig.blockVar]: blockData,
-        ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
-    };
+    let childCtx;
+
+    if (eachConfig.blockVars.length > 0) {
+        childCtx = {
+            ...ctx,
+            ...(eachConfig.blockVars.reduce((obj, key) => {
+                obj[key] = makeFuncSignal(() => blockData()[key]);
+                obj[key].set = (v) => blockData()[key] = v;
+                obj[key].update = (fn) => blockData()[key] = fn(blockData[key])
+                return obj;
+            }, {})),
+            ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
+        };
+    } else {
+        childCtx = {
+            ...ctx,
+            [eachConfig.blockVar]: blockData,
+            ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
+        };
+    }
 
     cleanupEffect = untrackedEffect(() => {
         scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
@@ -881,22 +899,22 @@ function applyComponents(component, startNode, endNode, ctx) {
     let componentFunc = components[component.tag];
     if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
-    const attrs = {};
+    const props = {};
     const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
 
     let match;
     while ((match = regex.exec(component.attrStr)) !== null) {
         const [, key, value] = match;
-        attrs[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
+        props[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
     }
 
     let componentBlock;
 
     if (component.slot_node) {
         const renderSlotCallbackfn = () => createFragment(component.slot_node, ctx);
-        componentBlock = componentFunc(attrs, renderSlotCallbackfn)
+        componentBlock = componentFunc(props, renderSlotCallbackfn)
     } else {
-        componentBlock = componentFunc(attrs);
+        componentBlock = componentFunc(props);
     }
 
     endNode.parentNode.insertBefore(componentBlock, endNode);

@@ -13,7 +13,7 @@ export default component({
     }
 }, class {
 
-    names = createSignal(['ice', 'ian', 'takeru', 'piox']);
+    names = createSignal(['ice', 'ian', 'takeru', 'piox'].map(n => ({ name: n })));
 
     constructor() {
         onMount(() => {
@@ -28,7 +28,7 @@ export default component({
     addName = (event) => {
         if (event.key !== "Enter") return;
 
-        this.names().push(event.target.value)
+        this.names().push({ name: event.target.value })
         event.target.value = "";
     }
 });
