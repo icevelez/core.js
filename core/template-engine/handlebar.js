@@ -996,8 +996,6 @@ function applyDirectiveBind(node, process, ctx) {
         let value = evaluate(process.value, ctx);
         value = isSignal(value) ? value() : value;
 
-        console.log(value);
-
         if (node.type === "date") {
             if (!(value instanceof Date)) throw new Error("input value is not a valid Date");
             node[process.input_type] = value.toISOString().split('T')[0];
