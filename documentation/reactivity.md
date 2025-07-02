@@ -25,6 +25,8 @@ Properties
 ```
 ### Example
 ```js
+import { createSignal } from "/core/reactvity.js";
+
 const count = createSignal(0);
 
 effect(() => {
@@ -52,6 +54,8 @@ Properties
 ```
 ### Example
 ```js
+import { createSignal, createDerived, effect } from "/core/reactvity.js";
+
 const a = createSignal(1);
 const b = createSignal(2);
 const sum = createDerived(() => a() + b());
@@ -78,7 +82,9 @@ effect(fn: () => void | (() => void)): () => void
 
 ### Example
 ```js
-const message = new State("Hello");
+import { createSignal, effect } from "/core/reactvity.js";
+
+const message = createSignal("Hello");
 
 const stop = effect(() => {
   console.log("Message is:", message());
@@ -97,6 +103,9 @@ Runs an effect in a "detached" mode, the reactive dependencies are not tracked b
 untrackedEffect(fn: () => void): () => void
 ```
 > Returns a cleanup function for internal subscriptions.
+
+### Example
+> It's the same as effect
 
 ---
 

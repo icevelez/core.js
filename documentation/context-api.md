@@ -10,6 +10,8 @@ Establishes a key–value pair on the current component or execution scope. Desc
 ### Usage
 
 ```js
+import { setContext } from "core/core.js";
+
 // In a parent component
 setContext('theme', 'dark');
 ```
@@ -23,6 +25,8 @@ Retrieves a value associated with a previously established context `key`. Search
 ### Usage
 
 ```js
+import { getContext } from "core/core.js";
+
 // In a child component
 const theme = getContext('theme');
 console.log(theme); // "dark"

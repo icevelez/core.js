@@ -15,6 +15,8 @@ function onMount(callback: () => void | (() => void)): void
 
 ### Example
 ```js
+import { onMount } from "/core/core.js";
+
 onMount(() => {
   console.log("Component mounted!");
 
@@ -40,6 +42,8 @@ function onUnmount(callback: () => void): void
 
 ### Example
 ```js
+import { onUnmount } from "/core/core.js";
+
 onUnmount(() => {
   console.log("Component was removed");
 });
