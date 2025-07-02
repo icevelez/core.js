@@ -1,4 +1,4 @@
-import { onMountQueue, onUnmountQueue, core_context } from "./internal-core.js";
+import { onMountQueue, onUnmountQueue, core_context, contextQueue } from "./internal-core.js";
 import { effect } from "./reactivity.js";
 import { isObject } from "./helper-functions.js";
 
@@ -74,4 +74,24 @@ export function onUnmount(callback) {
     const onUnmount = onUnmountQueue[onUnmountQueue.length - 1];
     if (!onUnmount) throw new Error("no unmount set has been created");
     onUnmount.add(callback);
+}
+
+/**
+ * @param {string} key
+ * @param {any} value
+ */
+export function setContext(key, value) {
+    let context = contextQueue[contextQueue.length - 1];
+    if (!context) throw new Error("context queue is empty");
+    context.set(key, value);
+}
+/**
+ * @param {string} key
+ */
+export function getContext(key) {
+    for (let i = contextQueue.length - 1; i >= 0; i--) {
+        const value = contextQueue[i].get(key);
+        if (value) return value;
+    }
+    return undefined;
 }

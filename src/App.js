@@ -1,12 +1,15 @@
-import { load } from "../core/core.js";
+import { load, setContext } from "../core/core.js";
 import { component } from "../core/template-engine/handlebar.js";
 import { createDerived, createSignal } from "../core/reactivity.js";
 
 import { Router } from "./common/router.js";
+import TestComponent from "./components/TestComponent.js";
 
 export default component({
     template: await load("src/App.html"),
-    components: {},
+    components: {
+        TestComponent,
+    },
 }, class {
 
     Router = Router;
@@ -16,6 +19,9 @@ export default component({
 
     name = createSignal('User');
 
-    constructor() { }
+    constructor() {
+        setContext('root-app', 'hello from root');
+        console.log("SET ROOT CONTEXT")
+    }
 
 });

@@ -1,4 +1,4 @@
-import { load, onMount, onUnmount } from "../../core/core.js";
+import { getContext, load, onMount, onUnmount, setContext } from "../../core/core.js";
 import { component } from "../../core/template-engine/handlebar.js";
 import { createSignal } from "../../core/reactivity.js";
 
@@ -16,6 +16,10 @@ export default component({
     names = createSignal(['ice', 'ian', 'takeru', 'piox'].map(n => ({ name: n })));
 
     constructor() {
+        console.log('CONTEXT from playground:', getContext('root-app'));
+        setContext('root-app', 'not anymore')
+        console.log('NEW CONTEXT from playground:');
+
         onMount(() => {
             console.log("mounting Playground")
         })
