@@ -1,7 +1,9 @@
 // This file exists so I don't have to export this internal variable inside "core.js"
+import { onMount } from "./core.js";
 
 const dev_mode_on = true;
 
+/** @type {Map<string, Function>} */
 const evaluationCache = new Map();
 
 if (dev_mode_on) {
@@ -13,14 +15,44 @@ if (dev_mode_on) {
 
 export const core_context = { is_mounted_to_the_DOM: false, onMountSet: new Set(), onUnmountSet: new Set() };
 
-/**
-* @type {Set<Function>[]}
-*/
-export const onMountQueue = [];
+/** @type {Map<string, any>[]} */
+export let contextQueue = [];
+
+export function newContextScope(fn) {
+
+    contextQueue.push(new Map());
+    const copy = [...contextQueue];
+    let reset;
+    onMount(() => {
+        reset = setContextQueue(copy);
+    })
+
+    fn();
+
+    contextQueue.pop()
+    onMount(() => {
+        reset();
+    })
+}
+
+export function copyContextQueue() {
+    return [...contextQueue];
+}
 
 /**
-* @type {Set<Function>[]}
-*/
+ * @param {Map<string, any[]} newContextQueue
+ * @returns {() => void} revert back to the old context queue
+ */
+export function setContextQueue(newContextQueue) {
+    const oldContextQueue = contextQueue;
+    contextQueue = newContextQueue;
+    return () => contextQueue = oldContextQueue;
+}
+
+/** @type {Set<Function>[]} */
+export const onMountQueue = [];
+
+/** @type {Set<Function>[]} */
 export const onUnmountQueue = [];
 
 /**
@@ -61,11 +93,14 @@ export function evaluate(expr, ctx) {
     }
 }
 
-/**
- * @type {Map<string, WeakMap<Node, Set<Function>>>}
- */
+/** @type {Map<string, WeakMap<Node, Set<Function>>>} */
 const delegated_events = new Map();
 
+/**
+ * NOTE: this will create a single global listener but that global listener will stay persistent through out the app life-cycle,
+ * it will not be dispose of even if there are no node listener because it's using a `WeakMap`
+ * there's no way of knowing if there's zero nodes listening, so there's no way of disposing the global listener
+ */
 export const coreEventListener = Object.freeze({
     /**
      * @param {string} event_name
@@ -127,6 +162,5 @@ function match_delegated_node(event_node_weakmap, event, target) {
         if (!target.parentNode) return;
         return match_delegated_node(event_node_weakmap, event, target.parentNode);
     }
-
     for (const func of funcs) func(event);
 }

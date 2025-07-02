@@ -1,5 +1,5 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun } from "../internal-core.js";
-import { effect, untrackedEffect, createSignal, isSignal, makeFuncSignal } from "../reactivity.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun, newContextScope, copyContextQueue, setContextQueue } from "../internal-core.js";
+import { effect, untrackedEffect, isSignal, makeFuncSignal } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 
 /** @type {Map<string, Node[]>} */
@@ -45,8 +45,14 @@ export function component(options, Context = class { }) {
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
-        const ctx = !Context ? {} : new Context(props);
-        return createFragment(fragment, ctx, render_slot_callbackfn);
+        let processed_fragment;
+
+        newContextScope(() => {
+            const ctx = !Context ? {} : new Context(props);
+            processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
+        });
+
+        return processed_fragment;
     }
 }
 
@@ -759,6 +765,8 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount)) parentOnUnmountSet.add(unmount);
 
+    const contextQueue = copyContextQueue();
+
     function mountInit() {
         if (core_context.is_mounted_to_the_DOM) {
             mount();
@@ -788,9 +796,11 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         if (!awaitConfig.then.match) return;
 
         scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const resetContextQueue = setContextQueue(contextQueue);
             const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
             const nodes = createFragment(awaitConfig.then.content, childCtx);
             endNode.before(nodes);
+            resetContextQueue();
         })
 
         mountInit();
@@ -805,9 +815,11 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         if (!awaitConfig.catch.match) return;
 
         scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+            const resetContextQueue = setContextQueue(contextQueue);
             const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
             const nodes = createFragment(awaitConfig.catch.content, childCtx);
             endNode.before(nodes);
+            resetContextQueue();
         })
 
         mountInit();
