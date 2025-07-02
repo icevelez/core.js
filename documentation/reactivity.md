@@ -1,4 +1,4 @@
-# 📘Reacitivty Syntax Documentation
+# 📘 Reacitivty API
 
 The reactvity syntax is based on the concept of `Signals` or auto-tracked observable subscriptions
 

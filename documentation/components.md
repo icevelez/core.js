@@ -1,0 +1,117 @@
+# 📘 Components
+
+A self-contained, reusable building block that represents a piece of UI along with its associated logic, styles, and behavior.
+
+> “A small, independent unit of an interface that manages its own data, rendering, and interaction.”
+
+## 1 Creating Components
+
+### ✅ Basic Usage
+
+To create components you must use the `component` function from `core/template-engine/handlebar.js`
+
+```js
+import { component } from "../core/template-engine/handlebar.js";
+
+export default component({
+    // Directly embedding template inside a component
+    template: `
+        <h1>Hello World!</h1>
+    `
+});
+```
+
+### ✅  Adding in context and logic to your component
+```js
+import { component } from "../core/template-engine/handlebar.js";
+
+export default component({
+    template: `
+        <h1>Hello {{ name }}</h1>
+    `
+}, class {
+    // all component logic lives here
+    name = "Viewer"
+
+    constructor() {}
+});
+```
+
+### ✅  Using the `load` function to load an html template
+```js
+import { load } from "../core/core.js";
+import { component } from "../core/template-engine/handlebar.js";
+
+export default component({
+    template: await load("src/App.html")
+}, class {
+    // all component logic lives here
+
+});
+```
+
+## 2 Importing Components
+
+### ✅ Usage
+```js
+import { load } from "../core/core.js";
+import { component } from "../core/template-engine/handlebar.js";
+
+import CustomComponent from "./components/CustomComponent.js";
+import AnotherComponent from "./components/AnotherComponent.js";
+
+export default component({
+    template: await load("src/App.html"),
+    component : {
+        CustomComponent,
+        AnotherComponent
+    }
+}, ...);
+```
+
+## 3 Using imported Component
+
+### ✅ Self-closing components
+```html
+<CustomComponent />
+```
+
+### ✅ Component with children
+```html
+<AnotherComponent>
+  <h1>This is a child element</h1>
+</AnotherComponent>
+```
+
+## 4 Custom Component Attributes
+
+### ✅ Supports passing any expression as an attribute:
+```html
+<MyButton onClick="{{ () => submit(form) }}" text="{{ buttonText }}" />
+```
+
+## 5 Component Content Insertion
+
+The `<Core:slot />` directive allows a **custom component** to display child content passed into it.
+
+> in v0.1.1 and below. the directive was called `<Slot>`
+
+---
+
+### ✅ Basic Usage
+
+**Component Definition:**
+
+```html
+<!-- MyComponent.html -->
+<div class="card">
+  <Core:slot/>
+</div>
+```
+```html
+<MyComponent>
+  <h1>Hello from outside</h1>
+</MyComponent>
+```
+
+---
