@@ -7,9 +7,7 @@ import TestComponent from "./components/TestComponent.js";
 
 export default component({
     template: await load("src/App.html"),
-    components: {
-        TestComponent,
-    },
+    components: {},
 }, class {
 
     Router = Router;
@@ -20,8 +18,6 @@ export default component({
     name = createSignal('User');
 
     constructor() {
-        setContext('root-app', 'hello from root');
-        console.log("SET ROOT CONTEXT")
+        setContext('root-app', this.counter);
     }
-
 });

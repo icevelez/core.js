@@ -79,7 +79,7 @@ Expressions can be embedded inside HTML attributes.
 ### ✅ With index
 ```html
 {{#each items as product, i}}
-  <div>{{ i }}. {{ product.name }}</div>
+  <div>{{ i }}. {{ product().name }}</div>
 {{/each}}
 ```
 > The second alias (`i`) is optional. You can name it anything:

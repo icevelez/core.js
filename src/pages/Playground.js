@@ -15,18 +15,11 @@ export default component({
 
     names = createSignal(['ice', 'ian', 'takeru', 'piox'].map(n => ({ name: n })));
 
+    counter;
+
     constructor() {
-        console.log('CONTEXT from playground:', getContext('root-app'));
-        setContext('root-app', 'not anymore')
-        console.log('NEW CONTEXT from playground:');
-
-        onMount(() => {
-            console.log("mounting Playground")
-        })
-
-        onUnmount(() => {
-            console.log("unmounting Playground")
-        })
+        this.counter = getContext('root-app');
+        setContext('root-app', 'not counter');
     }
 
     addName = (event) => {

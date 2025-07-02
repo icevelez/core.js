@@ -1,4 +1,9 @@
 <div>
+    <p>Counter from Parent Component: {{ counter() }}</p>
+    <button onclick="{{ () => counter.set(counter()+1) }}">Click Me</button>
+    <br><br>
+</div>
+<div>
     <label>Add Name</label>
     <input type="text" onkeypress="{{ addName }}">
 </div>

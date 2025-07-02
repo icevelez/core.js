@@ -1,4 +1,4 @@
-import { onMount, onUnmount } from "../../core/core.js";
+import { getContext, onMount, onUnmount } from "../../core/core.js";
 import { createSignal } from "../../core/reactivity.js";
 import { component } from "../../core/template-engine/handlebar.js";
 
@@ -9,10 +9,9 @@ export default component({
     `
 }, class {
 
-    name = createSignal("EXAMPLE SUB");
+    name = createSignal("");
 
     constructor() {
-        onMount(() => console.log("mount from ExampleSub"))
-        onUnmount(() => console.log("unmount from ExampleSub"))
+        this.name.set(getContext('root-app'));
     }
 });
