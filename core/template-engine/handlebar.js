@@ -1,6 +1,7 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun, newContextScope, copyContextQueue, setContextQueue } from "../internal-core.js";
+import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "../internal-core.js";
 import { effect, untrackedEffect, isSignal, makeFuncSignal } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
+import { onMount } from "../core.js";
 
 /** @type {Map<string, Node[]>} */
 const slotCache = new Map();
@@ -45,11 +46,18 @@ export function component(options, Context = class { }) {
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
-        let processed_fragment;
+        const current_context = pushNewContext();
+        let resetContext;
 
-        newContextScope(() => {
-            const ctx = !Context ? {} : new Context(props);
-            processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
+        onMount(() => {
+            resetContext = setContextQueue(current_context);
+        });
+
+        const ctx = !Context ? {} : new Context(props);
+        const processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
+
+        onMount(() => {
+            resetContext();
         });
 
         return processed_fragment;

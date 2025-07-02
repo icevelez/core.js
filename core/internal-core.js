@@ -18,21 +18,9 @@ export const core_context = { is_mounted_to_the_DOM: false, onMountSet: new Set(
 /** @type {Map<string, any>[]} */
 export let contextQueue = [];
 
-export function newContextScope(fn) {
-
+export function pushNewContext() {
     contextQueue.push(new Map());
-    const copy = [...contextQueue];
-    let reset;
-    onMount(() => {
-        reset = setContextQueue(copy);
-    })
-
-    fn();
-
-    contextQueue.pop()
-    onMount(() => {
-        reset();
-    })
+    return [...contextQueue];
 }
 
 export function copyContextQueue() {
