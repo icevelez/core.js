@@ -522,8 +522,11 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
  * @param {Node} currentNode
  */
 function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
+    /** @type {Set<Function>} */
     const onUnmountSet = new Set();
+    /** @type {Set<Function>} */
     const onMountSet = new Set();
+    /** @type {Function} */
     let cleanupEffect;
 
     function unmount() {
@@ -602,11 +605,12 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
     // THIS SECTION IS FOR EMPTY BLOCK MOUNT/UNMOUNT
 
+    /** @type {Set<Function>} */
     const onUnmountSet = new Set();
+    /** @type {Set<Function>} */
     const onMountSet = new Set();
 
     function unmount() {
-        if (typeof cleanupEffect === "function") cleanupEffect();
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
     };
@@ -629,12 +633,17 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock))
         parentOnUnmountSet.add(unmountEachBlock);
 
-    /** @type {{ nodeStart:Node, nodeEnd:Node, data:{ ():any, set:(new_value:any) => any }, index : State<number>, unmount:Function }[]} */
+    /** @typedef {{ nodeStart:Node, nodeEnd:Node, data:{ ():any, set:(new_value:any) => void }, index : { ():number, set(new_index:number) => void }, unmount:Function }} EachBlock */
+
+    /** @type {EachBlock[]} */
     let renderedBlocks = [];
+
+    /** @type {Map<any, EachBlock>} */
     let renderedBlockMap = new Map();
     let isEmptyBlockMounted = false;
 
     effect(() => {
+        /** @type {EachBlock[]} */
         const newRenderedBlocks = [];
 
         let currentNode = endNode;
@@ -694,6 +703,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             return;
         }
 
+        /** @type {Map<any, EachBlock>} */
         const newRenderedBlockMap = new Map();
 
         // FIND EXISTING BLOCK WITH THE SAME VALUE
@@ -811,7 +821,9 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
  * @param {any} ctx
  */
 function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
+    /** @type {Set<Function>} */
     const onUnmountSet = new Set();
+    /** @type {Set<Function>} */
     const onMountSet = new Set();
 
     function unmount() {
@@ -910,7 +922,9 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
  * @param {any} ctx
  */
 function applyIfBlock(segments, startNode, endNode, ctx) {
+    /** @type {Set<Function>} */
     const onUnmountSet = new Set();
+    /** @type {Set<Function>} */
     const onMountSet = new Set();
     let cleanup;
 
