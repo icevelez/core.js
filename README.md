@@ -102,7 +102,7 @@ We are importing `App.js` from the `src` folder to render it to our target eleme
 
 ## 📖 Documentation
 
-You can read the full documentation of how to use this framework by opening the `handlerbar.md` under `documentation` folder in this repository
+You can read the full documentation of how to use this framework by opening the `*.md` files under `documentation` folder of this repository
 
 ---
 
@@ -113,18 +113,8 @@ You can read the full documentation of how to use this framework by opening the 
 
 ---
 
-## 🐛 Known Bugs
-
-- Circular dependency via components
-
-> `<ComponentA>` uses `<ComponentB>` and `<ComponentB>` uses `<ComponentA>`
-
 ## Limitation
 
-*"Nothing is free. There is always a trade off"* - Hussein Nasser
-
-- No bundler means. Lack of code minification leading to bigger bundle sizes and optimization by removing comments and unused code
-- Runtime processing and parsing template strings at runtime has performance overhead
 - Missing IntelliSense support in VSCode, Zed, etc...
 
 ## 📝 P.S

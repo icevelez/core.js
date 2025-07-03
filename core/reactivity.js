@@ -1,8 +1,6 @@
 import { isObject } from "./helper-functions.js";
 
-/**
-* @type {Set<Function>}
-*/
+/** @type {Set<Function>} */
 const subscriber_queue = new Set();
 
 let is_notifying_subscribers = false;

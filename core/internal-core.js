@@ -1,6 +1,4 @@
 // This file exists so I don't have to export this internal variable inside "core.js"
-import { onMount } from "./core.js";
-
 const dev_mode_on = true;
 
 /** @type {Map<string, Function>} */

@@ -26,7 +26,10 @@ if (window.__corejs__) {
     window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
 }
 
-let imported_components_id_counter = 1;
+let components_id_counter = 1;
+
+/** @type {Set<number>} */
+let component_id_stack = new Set();
 
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
@@ -35,17 +38,20 @@ let imported_components_id_counter = 1;
 */
 export function component(options, Context = class { }) {
 
-    const imported_components_id = imported_components_id_counter;
-    imported_components_id_counter++;
+    const components_id = components_id_counter;
+    components_id_counter++;
 
-    let template = processComponents(options.template, imported_components_id);
-    if (options.components && Object.keys(options.components).length > 0) imported_components.set(imported_components_id, options.components);
+    let template = processComponents(options.template, components_id);
+    if (options.components && Object.keys(options.components).length > 0) imported_components.set(components_id, options.components);
 
     const fragment = createNodes(parseTemplate(template));
 
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
+        if (component_id_stack.has(component_id_stack)) throw new Error(`cyclic component dependency detected! component id ${components_id}`)
+        component_id_stack.add(components_id);
+
         const current_context = pushNewContext();
         let resetContext;
 
@@ -248,9 +254,9 @@ function processDirectiveBlocks(template, directive, processBlocks) {
 /**
 * Replaces all custom HTML Tags with capital first letter with a placeholder element to be replaced later
 * @param {string} template
-* @param {number} imported_components_id
+* @param {number} imported_component_id
 */
-function processComponents(template, imported_components_id) {
+function processComponents(template, imported_component_id) {
     const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
     const directive = "component";
 
@@ -266,10 +272,10 @@ function processComponents(template, imported_components_id) {
             return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
         }
         const marker_id = `${directive}-${makeId(8)}`;
-        const component = { import_id: imported_components_id, tag, attrStr, slot_node: createNodes(slot_content) || [] };
+        const component = { import_id: imported_component_id, tag, attrStr, slot_node: createNodes(slot_content) || [] };
         markedNodeCache.set(marker_id, component);
 
-        return `<template data-import-id="${imported_components_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
+        return `<template data-import-id="${imported_component_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
     })
 
     return template;
