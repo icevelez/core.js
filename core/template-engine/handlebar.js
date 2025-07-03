@@ -1,5 +1,5 @@
 import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "../internal-core.js";
-import { effect, untrackedEffect, isSignal, makeFuncSignal } from "../reactivity.js";
+import { effect, untrackedEffect, isSignal, makeFuncSignal, createSignal } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 import { onMount } from "../core.js";
 
@@ -542,23 +542,15 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeStart);
     currentNode.before(nodeEnd);
 
-    const blockData = makeFuncSignal(function () {
-        return blockDatas[index];
-    })
-
-    blockData.set = function (new_value) {
-        blockDatas[index] = new_value;
-    }
-
-    blockData.update = function (callbackfn) {
-        blockDatas[index] = callbackfn(blockDatas[index]);
-    }
+    const blockData = createSignal(blockDatas[index]);
+    const blockIndex = createSignal(index);
 
     const block = {
         nodeStart,
         nodeEnd,
         unmount,
-        index,
+        frozen_index: index,
+        index: blockIndex,
         data: blockData,
     };
 
@@ -573,13 +565,13 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
                 obj[key].update = (fn) => blockData()[key] = fn(blockData[key])
                 return obj;
             }, {})),
-            ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
+            ...(eachConfig.indexVar ? { [eachConfig.indexVar]() { return blockIndex() } } : {})
         };
     } else {
         childCtx = {
             ...ctx,
             [eachConfig.blockVar]: blockData,
-            ...(eachConfig.indexVar ? { get [eachConfig.indexVar]() { return index } } : {})
+            ...(eachConfig.indexVar ? { [eachConfig.indexVar]() { return blockIndex() } } : {})
         };
     }
 
@@ -639,6 +631,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
     /** @type {{ nodeStart:Node, nodeEnd:Node, data:{ ():any, set:(new_value:any) => any }, index : State<number>, unmount:Function }[]} */
     let renderedBlocks = [];
+    let renderedBlockMap = new Map();
     let isEmptyBlockMounted = false;
 
     effect(() => {
@@ -694,41 +687,48 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             for (let index = 0; index < blockDatas.length; index++) {
                 const block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
                 renderedBlocks.push(block);
+                renderedBlockMap.set(blockDatas[index], block);
                 currentNode = block.nodeEnd.nextSibling;
             }
             return;
         }
 
+        console.log("FIND EXISTING OR CREATE NEW ONES")
+
+        const newRenderedBlockMap = new Map();
+
         for (let index = 0; index < blockDatas.length; index++) {
 
-            let block = renderedBlocks[index];
+            let block = renderedBlockMap.get(blockDatas[index]);
+            let renderedBlock = renderedBlocks[index];
 
             // USE EXISTING BLOCK
-            if (block) {
-                // IF THE SAME, RE-USE
-                if (block.data === blockDatas[index]) {
-                    currentNode = block.nodeEnd.nextSibling;
-                    newRenderedBlocks.push(block);
-                    continue;
-                }
-
-                // IF NOT, UPDATE VALUE AND RE-USE
-                if (block.data() !== blockDatas[index]) block.data.set(blockDatas[index]);
-
+            if (block && block.data() === blockDatas[index]) {
+                if (block.index() !== index) block.index.set(index);
                 currentNode = block.nodeEnd.nextSibling;
                 newRenderedBlocks.push(block);
+                newRenderedBlockMap.set(blockDatas[index], block);
+                continue;
+            } else if (renderedBlock) {
+                renderedBlock.data.set(blockDatas[index]);
+                currentNode = renderedBlock.nodeEnd.nextSibling;
+                newRenderedBlocks.push(renderedBlock);
+                newRenderedBlockMap.set(blockDatas[index], renderedBlock);
                 continue;
             }
 
             // CREATE NEW BLOCK IF NOT EXISTS
             block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
             newRenderedBlocks.push(block);
+            newRenderedBlockMap.set(blockDatas[index], block);
             currentNode = block.nodeEnd.nextSibling;
         }
 
         // REMOVE UNUSED EACH BLOCKS
-        for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
+        for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
+
+            if (newRenderedBlockMap.get(renderBlock.data())) continue;
 
             let node = renderBlock.nodeStart;
             let nodeEnd = renderBlock.nodeEnd;
@@ -743,7 +743,60 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             renderBlock.unmount();
         }
 
+        renderedBlockMap.clear();
+        renderedBlockMap = newRenderedBlockMap;
         renderedBlocks = newRenderedBlocks;
+
+        let previousNode = startNode;
+
+        for (let i = 0; i < renderedBlocks.length; i++) {
+            const renderBlock = renderedBlocks[i];
+
+            if (renderBlock.nodeStart.previousSibling !== previousNode) {
+                let nextRenderBlock;
+                let nextIndex;
+
+                for (let j = i + 1; j < renderedBlocks.length; j++) {
+                    nextRenderBlock = renderedBlocks[j];
+                    nextIndex = j;
+                    if (nextRenderBlock.nodeStart.previousSibling !== previousNode) continue;
+                    break;
+                }
+
+                const anchor = document.createComment("swap-anchor");
+                const anchor2 = document.createComment("swap-anchor2");
+
+                nextRenderBlock.nodeEnd.after(anchor);
+                renderBlock.nodeEnd.after(anchor2);
+
+                let node, next;
+
+                node = nextRenderBlock.nodeStart;
+                while (node) {
+                    next = node.nextSibling;
+                    anchor2.before(node);
+                    if (node === nextRenderBlock.nodeEnd) break;
+                    node = next;
+                }
+
+                node = renderBlock.nodeStart;
+                while (node) {
+                    next = node.nextSibling;
+                    anchor.before(node);
+                    if (node === renderBlock.nodeEnd) break;
+                    node = next;
+                }
+
+                const frozen_index = nextRenderBlock.frozen_index;
+                nextRenderBlock.frozen_index = renderBlock.frozen_index;
+                renderBlock.frozen_index = frozen_index;
+
+                anchor.remove();
+                anchor2.remove();
+            }
+
+            previousNode = renderBlock.nodeEnd;
+        }
 
         return;
     })
