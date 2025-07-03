@@ -57,6 +57,7 @@ export function mount(component, options) {
 }
 
 /**
+* Callback function that is executed when a component is rendered to the DOM
 * @param {Function} callback
 */
 export function onMount(callback) {
@@ -67,6 +68,7 @@ export function onMount(callback) {
 }
 
 /**
+* Callback function that is executed before a component is removed from the DOM
 * @param {Function} callback
 */
 export function onUnmount(callback) {

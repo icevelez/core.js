@@ -652,14 +652,13 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             isEmptyBlockMounted = true;
 
             if (renderedBlocks.length > 0) {
-                removeNodesBetween(startNode, endNode);
-
                 for (let i = 0; i < renderedBlocks.length; i++) {
                     const block = renderedBlocks[i];
                     block.unmount();
                     block.index = null;
                 }
 
+                removeNodesBetween(startNode, endNode);
                 renderedBlocks = [];
             }
 
