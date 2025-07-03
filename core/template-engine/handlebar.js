@@ -669,15 +669,15 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             currentNode.before(nodeStart);
             currentNode.before(nodeEnd);
 
+            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
+                const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
+                nodeEnd.before(eamptyBlock);
+            })
+
             onUnmountSet.add(() => {
                 removeNodesBetween(nodeStart, nodeEnd);
                 nodeStart.remove();
                 nodeEnd.remove();
-            })
-
-            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-                const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
-                nodeEnd.before(eamptyBlock);
             })
 
             if (core_context.is_mounted_to_the_DOM) return mount();
