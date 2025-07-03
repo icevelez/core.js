@@ -92,9 +92,9 @@ export default component({
 
 ## 5 Component Content Insertion
 
-The `<Core:slot />` directive allows a **custom component** to display child content passed into it.
+`<Core:slot/>` is a special element that allows content from the parent component to displayed inside a section of the child component.
 
-> in v0.1.1 and below. the directive was called `<Slot>`
+> in v0.1.1 and below. the syntax was `<Slot>`
 
 ---
 

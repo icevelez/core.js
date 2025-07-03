@@ -79,10 +79,11 @@ Expressions can be embedded inside HTML attributes.
 ### ✅ With index
 ```html
 {{#each items as product, i}}
-  <div>{{ i }}. {{ product().name }}</div>
+  <div>{{ i() }}. {{ product().name }}</div>
 {{/each}}
 ```
-> The second alias (`i`) is optional. You can name it anything:
+
+> The second alias (`i`) is optional. You can name it anything but it is also used as a getter function to access its value
 
 ---
 
@@ -119,9 +120,9 @@ Expressions can be embedded inside HTML attributes.
 {{/await}}
 ```
 
-The `<Core:component/>` directive allows a **custom component** to be displayed
+`<Core:component/>` is a special element that allows a **component** to be displayed
 
-> in v0.1.1 and below. the component syntax was `<Component default="{{ componentName }}">`
+> in v0.1.1 and below. the syntax was `<Component default="{{ componentName }}">`
 
 ```html
 <Core:component default="component">
