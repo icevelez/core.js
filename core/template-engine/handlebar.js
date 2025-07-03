@@ -683,6 +683,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         isEmptyBlockMounted = false;
         unmount();
 
+        // CREATE NEW BLOCKS FROM SCRATCH
         if (renderedBlocks.length <= 0) {
             for (let index = 0; index < blockDatas.length; index++) {
                 const block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
@@ -693,16 +694,16 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             return;
         }
 
-        console.log("FIND EXISTING OR CREATE NEW ONES")
-
         const newRenderedBlockMap = new Map();
 
+        // FIND EXISTING BLOCK WITH THE SAME VALUE
+        // UPDATE EXISTING BLOCK WITH NEW VALUE
+        // CREATE NEW BLOCKS
         for (let index = 0; index < blockDatas.length; index++) {
 
             let block = renderedBlockMap.get(blockDatas[index]);
             let renderedBlock = renderedBlocks[index];
 
-            // USE EXISTING BLOCK
             if (block && block.data() === blockDatas[index]) {
                 if (block.index() !== index) block.index.set(index);
                 currentNode = block.nodeEnd.nextSibling;
@@ -724,7 +725,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             currentNode = block.nodeEnd.nextSibling;
         }
 
-        // REMOVE UNUSED EACH BLOCKS
+        // REMOVE UNUSED BLOCKS
         for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
 
@@ -749,6 +750,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
         let previousNode = startNode;
 
+        // RE-ORDER BLOCKS
         for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
 
