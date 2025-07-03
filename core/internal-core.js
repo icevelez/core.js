@@ -86,6 +86,9 @@ const delegated_events = new Map();
  * NOTE: this will create a single global listener but that global listener will stay persistent through out the app life-cycle,
  * it will not be dispose of even if there are no node listener because it's using a `WeakMap`
  * there's no way of knowing if there's zero nodes listening, so there's no way of disposing the global listener
+ *
+ * I want to dispose the global listener if there's zero nodes listening but there's no way of doing that so that's the drawback for now
+ * until I come up with another solution
  */
 export const coreEventListener = Object.freeze({
     /**
@@ -122,7 +125,6 @@ export const coreEventListener = Object.freeze({
         return () => this.remove(event_name, node, func);
     },
     /**
-     *
      * @param {string} event_name
      * @param {node} node
      * @param {Function} func
@@ -137,7 +139,6 @@ export const coreEventListener = Object.freeze({
 })
 
 /**
- * Traverse event.target to event.target.parentNode recursively until a WeakMap<Node> matches, if not, return void, if has, run functions
  * @param {WeakMap<Node, Set<Function>>} event_node_weakmap
  * @param {Event} event
  * @param {Node} target

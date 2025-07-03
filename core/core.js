@@ -18,12 +18,14 @@ export async function load(template_url) {
 * @returns {() => void} unmount function
 */
 export function mount(component, options) {
-    if (isMounted) throw new Error("cannot mount twice");
+    if (isMounted) throw new Error("core.js is already mounted. Cannot mount twice");
     if (!isObject(options)) throw new TypeError("options is not an object");
     if (!(options.target instanceof HTMLElement)) throw new TypeError("options.target is not an HTMLElement");
     if (typeof component !== "function") throw new Error("component is not a function");
 
+    /** @type {Set<Function>} */
     const onMountSet = new Set();
+    /** @type {Set<Function>} */
     const onUnmountSet = new Set();
 
     const cleanup = effect(() => {
@@ -57,7 +59,7 @@ export function mount(component, options) {
 }
 
 /**
-* Callback function that is executed when a component is rendered to the DOM
+* Execute a callback function when a component is rendered to the DOM
 * @param {Function} callback
 */
 export function onMount(callback) {
@@ -68,7 +70,7 @@ export function onMount(callback) {
 }
 
 /**
-* Callback function that is executed before a component is removed from the DOM
+* Execute a callback function "before" a component is removed from the DOM
 * @param {Function} callback
 */
 export function onUnmount(callback) {

@@ -165,9 +165,8 @@ export function effect(callbackfn) {
 let is_in_untrack_from_parent_effect_scope = [];
 
 /**
-* Effect that is detached from any parent effect
-* It is used in `template/engine/handlerbar.js` for processing item inside an {{#each}} block
-*
+* Effect that is detached from any parent effect.
+* It is used in `template-engine/handlerbar.js` for processing an item inside an array of an `{{#each}}` block
 * @param {Function} callbackfn
 */
 export function untrackedEffect(callbackfn) {
@@ -185,10 +184,10 @@ export function untrackedEffect(callbackfn) {
     };
 }
 
-// =======================================================================
-
+// Keep track of deeply nested proxy subscribers
 class SubscriberMap {
-    map = new WeakMap(); // target -> Map<property, Set<Function>>
+    /** @type {WeakMap<any, Map<any, Set<Function>>>} */
+    map = new WeakMap();
 
     constructor() { }
 
@@ -227,11 +226,10 @@ class SubscriberMap {
         return set;
     }
 
-    transferMap(fromTarget, toTarget) {
-        const keyMap = this.map.get(fromTarget);
-        if (keyMap) this.map.set(toTarget, keyMap);
-    }
-
+    /**
+     * @param {any} target
+     * @param {WeakSet} visited
+     */
     deepDelete(target, visited = new WeakSet()) {
         if (!isObject(target) || visited.has(target)) return;
 
