@@ -3,7 +3,6 @@ import { component } from "../core/template-engine/handlebar.js";
 import { createDerived, createSignal } from "../core/reactivity.js";
 
 import { Router } from "./common/router.js";
-import TestComponent from "./components/TestComponent.js";
 
 export default component({
     template: await load("src/App.html"),

@@ -28,9 +28,6 @@ if (window.__corejs__) {
 
 let components_id_counter = 1;
 
-/** @type {Set<number>} */
-let component_id_stack = new Set();
-
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
 * @param {Object} Context anonymous class that encapsulate logic
@@ -49,9 +46,6 @@ export function component(options, Context = class { }) {
     if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
-        if (component_id_stack.has(component_id_stack)) throw new Error(`cyclic component dependency detected! component id ${components_id}`)
-        component_id_stack.add(components_id);
-
         const current_context = pushNewContext();
         let resetContext;
 
