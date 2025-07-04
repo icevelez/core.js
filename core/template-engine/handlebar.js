@@ -898,10 +898,11 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     const onUnmountSet = new Set();
     /** @type {Set<Function>} */
     const onMountSet = new Set();
+    /** @type {Function} */
     let cleanup;
 
     function unmount() {
-        if (cleanup) cleanup();
+        if (typeof cleanup === "function") cleanup();
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
     };
@@ -950,6 +951,12 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     })
 }
 
+/**
+ * @param {{ import_id : number, tag : string, attrStr : string, slot_node : DocumentFragment | null }} component
+ * @param {Node} startNode
+ * @param {Node} endNode
+ * @param {any} ctx
+ */
 function applyComponents(component, startNode, endNode, ctx) {
     const components = imported_components.get(component.import_id);
     if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
@@ -957,10 +964,13 @@ function applyComponents(component, startNode, endNode, ctx) {
     let componentFunc = components[component.tag];
     if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
+    /** @type {{ [key:string] : any }} */
     const props = {};
     const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
 
+    /** @type {string} */
     let match;
+
     while ((match = regex.exec(component.attrStr)) !== null) {
         const [, key, value] = match;
         props[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
@@ -975,9 +985,14 @@ function applyComponents(component, startNode, endNode, ctx) {
         componentBlock = componentFunc(props);
     }
 
-    endNode.parentNode.insertBefore(componentBlock, endNode);
+    endNode.before(componentBlock);
 }
 
+/**
+ * @param {Node} node
+ * @param {{ expr : string }} process
+ * @param {any} ctx
+ */
 function applyTextInterpolation(node, process, ctx) {
     let prevContent;
     effect(() => {
@@ -987,6 +1002,11 @@ function applyTextInterpolation(node, process, ctx) {
     })
 }
 
+/**
+ * @param {Node} node
+ * @param {{ value : string, matches : string[], exprs : string[], attr_name : string }} process
+ * @param {any} ctx
+ */
 function applyAttributeInterpolation(node, process, ctx) {
     let prevAttr;
     effect(() => {
@@ -997,6 +1017,11 @@ function applyAttributeInterpolation(node, process, ctx) {
     })
 }
 
+/**
+ * @param {Node} node
+ * @param {{ expr : string, event_type : string }} process
+ * @param {any} ctx
+ */
 function applyEventListener(node, process, ctx) {
     effect(() => {
         const func = evaluate(process.expr, ctx);
@@ -1004,9 +1029,15 @@ function applyEventListener(node, process, ctx) {
     })
 }
 
+/**
+ * @param {Node} node
+ * @param {{ func_name : string, func_attr : string | null }} process
+ * @param {any} ctx
+ */
 function applyDirectiveUse(node, process, ctx) {
     const func = ctx[process.func_name];
     if (!func) throw new Error(`use: directive "${process.func_name}" not found.`);
+    if (typeof func !== "function") throw new Error(`function "${process.name}" is not a function`);
 
     const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     const onMountSet = onMountQueue[onMountQueue.length - 1];
@@ -1017,6 +1048,11 @@ function applyDirectiveUse(node, process, ctx) {
     });
 }
 
+/**
+ * @param {Node} node
+ * @param {{ value:string, input_type: string, event_type: string }} process
+ * @param {any} ctx
+ */
 function applyDirectiveBind(node, process, ctx) {
     const binding = evaluate(`(v, c) => { (c(${process.value})) ? ${process.value}.set(v) : ${process.value} = v; }`, ctx);
 
