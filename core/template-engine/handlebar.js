@@ -889,7 +889,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         componentIdStack = componentIdStackCopy;
 
         const resetContextQueue = setContextQueue(contextQueue);
-        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx));
+        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: error } : ctx));
         resetContextQueue();
         componentIdStack = originalComponentIdStack;
 
