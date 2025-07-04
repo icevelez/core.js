@@ -578,10 +578,8 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     }
 
     cleanupEffect = untrackedEffect(() => {
-        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-            const mainBlock = createFragment(eachConfig.mainContent, childCtx);
-            nodeEnd.before(mainBlock);
-        })
+        const mainBlock = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(eachConfig.mainContent, childCtx));
+        nodeEnd.before(mainBlock);
 
         if (core_context.is_mounted_to_the_DOM) {
             mount();
@@ -670,10 +668,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             currentNode.before(nodeStart);
             currentNode.before(nodeEnd);
 
-            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-                const eamptyBlock = createFragment(eachConfig.emptyContent, ctx);
-                nodeEnd.before(eamptyBlock);
-            })
+            const eamptyBlock = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(eachConfig.emptyContent, ctx))
+            nodeEnd.before(eamptyBlock);
 
             onUnmountSet.add(() => {
                 removeNodesBetween(nodeStart, nodeEnd);
@@ -836,10 +832,8 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         unmount();
         removeNodesBetween(startNode, endNode);
 
-        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-            const nodes = createFragment(awaitConfig.pendingContent, ctx);
-            endNode.before(nodes);
-        })
+        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.pendingContent, ctx))
+        endNode.before(nodes);
 
         mountInit();
     };
@@ -850,13 +844,10 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
         if (!awaitConfig.then.match) return;
 
-        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-            const resetContextQueue = setContextQueue(contextQueue);
-            const childCtx = awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx;
-            const nodes = createFragment(awaitConfig.then.content, childCtx);
-            endNode.before(nodes);
-            resetContextQueue();
-        })
+        const resetContextQueue = setContextQueue(contextQueue);
+        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.then.content, awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx))
+        resetContextQueue();
+        endNode.before(nodes);
 
         mountInit();
     };
@@ -869,13 +860,10 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
         if (!awaitConfig.catch.match) return;
 
-        scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-            const resetContextQueue = setContextQueue(contextQueue);
-            const childCtx = awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx;
-            const nodes = createFragment(awaitConfig.catch.content, childCtx);
-            endNode.before(nodes);
-            resetContextQueue();
-        })
+        const resetContextQueue = setContextQueue(contextQueue);
+        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx))
+        resetContextQueue();
+        endNode.before(nodes);
 
         mountInit();
     };
@@ -948,10 +936,8 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
             unmount();
             removeNodesBetween(startNode, endNode);
 
-            scopedMountUnmountRun(onMountSet, onUnmountSet, () => {
-                const segmentBlock = createFragment(condition.block, ctx);
-                endNode.parentNode.insertBefore(segmentBlock, endNode);
-            })
+            const segmentBlock = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(condition.block, ctx))
+            endNode.before(segmentBlock);
 
             if (core_context.is_mounted_to_the_DOM) return mount();
 

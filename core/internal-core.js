@@ -49,9 +49,10 @@ export const onUnmountQueue = [];
 export function scopedMountUnmountRun(onMountSet, onUnmountSet, fn) {
     onUnmountQueue.push(onUnmountSet);
     onMountQueue.push(onMountSet);
-    fn();
+    const value = fn();
     onMountQueue.pop();
     onUnmountQueue.pop();
+    return value;
 }
 
 /**
