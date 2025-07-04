@@ -30,10 +30,10 @@ let components_id_counter = 1;
 
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
-* @param {Object} Context anonymous class that encapsulate logic
+* @param {Object} Model anonymous class that encapsulate logic
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
-export function component(options, Context = class { }) {
+export function component(options, Model = class { }) {
 
     const components_id = components_id_counter;
     components_id_counter++;
@@ -43,17 +43,20 @@ export function component(options, Context = class { }) {
 
     const fragment = createNodes(parseTemplate(template));
 
-    if (Context && Context.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
+    if (Model && Model.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
+        // add a new `Map<any,any>` to the context stack to collect all set context when the new Model is instantiated
         const current_context = pushNewContext();
         let resetContext;
 
+        // setting a copy of the current context when executing onMount to preserve the context stack when using `onMount` inside the Model class
+        // then pushing another onMount after instantiating both the new Model and createFragment to reset the context stack to its previous state
         onMount(() => {
             resetContext = setContextQueue(current_context);
         });
 
-        const ctx = !Context ? {} : new Context(props);
+        const ctx = !Model ? {} : new Model(props);
         const processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
 
         onMount(() => {

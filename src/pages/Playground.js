@@ -15,10 +15,9 @@ export default component({
 
     names = createSignal(['ice', 'ian', 'takeru', 'piox'].map(n => ({ name: n })));
 
-    counter;
+    counter = getContext('root-app');
 
     constructor() {
-        this.counter = getContext('root-app');
         setContext('root-app', 'not counter');
     }
 
