@@ -26,6 +26,12 @@ if (window.__corejs__) {
     window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
 }
 
+/**
+ * Used to keep track of components used in a tree and check for any circular dependency by finding if a component is already in the stack
+ * @type {Set<number>}
+ */
+let componentIdStack = new Set();
+
 let components_id_counter = 1;
 
 /**
@@ -46,6 +52,9 @@ export function component(options, Model = class { }) {
     if (Model && Model.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
+        if (componentIdStack.has(components_id)) throw new Error("cyclic component dependency detected!")
+        componentIdStack.add(components_id);
+
         // add a new `Map<any,any>` to the context stack to collect all set context when the new Model is instantiated
         const current_context = pushNewContext();
         let resetContext;
@@ -62,6 +71,8 @@ export function component(options, Model = class { }) {
         onMount(() => {
             resetContext();
         });
+
+        componentIdStack.delete(components_id);
 
         return processed_fragment;
     }
@@ -810,6 +821,8 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     /** @type {Set<Function>} */
     const onMountSet = new Set();
 
+    const componentIdStackCopy = new Set(componentIdStack);
+
     function unmount() {
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
@@ -851,9 +864,14 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
         if (!awaitConfig.then.match) return;
 
+        const originalComponentIdStack = componentIdStack
+        componentIdStack = componentIdStackCopy;
+
         const resetContextQueue = setContextQueue(contextQueue);
         const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.then.content, awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx))
         resetContextQueue();
+        componentIdStack = originalComponentIdStack;
+
         endNode.before(nodes);
 
         mountInit();
@@ -867,9 +885,14 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
         if (!awaitConfig.catch.match) return;
 
+        const originalComponentIdStack = componentIdStack
+        componentIdStack = componentIdStackCopy;
+
         const resetContextQueue = setContextQueue(contextQueue);
-        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx))
+        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: result } : ctx));
         resetContextQueue();
+        componentIdStack = originalComponentIdStack;
+
         endNode.before(nodes);
 
         mountInit();
