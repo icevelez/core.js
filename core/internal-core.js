@@ -42,9 +42,10 @@ export const onMountQueue = [];
 export const onUnmountQueue = [];
 
 /**
+ * @template {any} T
  * @param {Set<Function>} onMountSet
  * @param {Set<Function>} onUnmountSet
- * @param {Function} fn
+ * @param {() => T} fn
  */
 export function scopedMountUnmountRun(onMountSet, onUnmountSet, fn) {
     onUnmountQueue.push(onUnmountSet);

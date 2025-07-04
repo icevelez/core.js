@@ -753,12 +753,11 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             const renderBlock = renderedBlocks[i];
 
             if (renderBlock.nodeStart.previousSibling !== previousNode) {
+                /** @type {EachBlock} */
                 let nextRenderBlock;
-                let nextIndex;
 
                 for (let j = i + 1; j < renderedBlocks.length; j++) {
                     nextRenderBlock = renderedBlocks[j];
-                    nextIndex = j;
                     if (nextRenderBlock.nodeStart.previousSibling !== previousNode) continue;
                     break;
                 }
@@ -766,9 +765,13 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 const renderAnchor = nextRenderBlock.nodeEnd.nextSibling;
                 const nextAnchor = renderBlock.nodeEnd.nextSibling;
 
-                let node, next, fragment;
+                /** @type {Node} */
+                let node;
+                /** @type {Node} */
+                let next;
+                /** @type {DocumentFragment} */
+                let fragment = document.createDocumentFragment();
 
-                fragment = document.createDocumentFragment();
                 node = nextRenderBlock.nodeStart;
                 while (node) {
                     next = node.nextSibling;
@@ -786,6 +789,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     if (node === renderBlock.nodeEnd) break;
                     node = next;
                 }
+
                 renderAnchor.before(fragment);
             }
 
@@ -915,9 +919,11 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     if (parentOnUnmountSet && !parentOnUnmountSet.has(unmount)) parentOnUnmountSet.add(unmount);
 
+    /** @type {{ block: string; condition: string; }} */
     let previousCondition;
 
     effect(() => {
+        /** @type {{ block: string; condition: string; }} */
         let condition;
 
         for (const segment of segments) {
@@ -968,11 +974,11 @@ function applyComponents(component, startNode, endNode, ctx) {
     const props = {};
     const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
 
-    /** @type {string} */
+    /** @type {RegExpExecArray | null} */
     let match;
 
     while ((match = regex.exec(component.attrStr)) !== null) {
-        const [, key, value] = match;
+        const [_, key, value] = match;
         props[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
     }
 
