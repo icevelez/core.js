@@ -1,4 +1,4 @@
-import { onMountQueue, onUnmountQueue, core_context, contextQueue } from "./internal-core.js";
+import { onMountQueue, onUnmountQueue, coreObj, contextQueue } from "./internal-core.js";
 import { effect } from "./reactivity.js";
 import { isObject } from "./helper-functions.js";
 
@@ -42,9 +42,9 @@ export function mount(component, options) {
 
         for (const mount of onMountSet) mount();
 
-        core_context.is_mounted_to_the_DOM = true;
-        for (const mount of core_context.onMountSet) mount();
-        core_context.onMountSet.clear();
+        coreObj.is_mounted_to_the_DOM = true;
+        for (const mount of coreObj.onMountSet) mount();
+        coreObj.onMountSet.clear();
     })
 
     isMounted = true;
@@ -53,8 +53,8 @@ export function mount(component, options) {
         cleanup();
         onUnmountSet.forEach((unmount) => unmount());
         onUnmountSet.clear();
-        for (const unmount of core_context.onUnmountSet) unmount();
-        core_context.onUnmountSet.clear();
+        for (const unmount of coreObj.onUnmountSet) unmount();
+        coreObj.onUnmountSet.clear();
     };
 }
 
