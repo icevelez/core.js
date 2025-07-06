@@ -47,17 +47,13 @@ if (dev_mode_on) window.__corejs__ = {
  */
 let componentIdStack = new Set();
 
-let components_id_counter = 1;
-
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
 * @param {Object} Model anonymous class that encapsulate data and logic
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Model = class { }) {
-
-    const components_id = components_id_counter;
-    components_id_counter++;
+    const components_id = makeId(6);
 
     let template = processComponents(options.template, components_id);
     if (options.components && Object.keys(options.components).length > 0) imported_components.set(components_id, options.components);
