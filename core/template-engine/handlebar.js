@@ -78,7 +78,7 @@ export function component(options, Model = class { }) {
         const ctx = !Model ? {} : new Model(props);
         const processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
 
-        onMount(resetContext);
+        onMount(() => resetContext());
 
         componentIdStack.delete(components_id);
 
