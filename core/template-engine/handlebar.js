@@ -164,9 +164,9 @@ function parseIf(ifBlock) {
 
     ifBlock.replace(ifRegex,
         /**
-         * @param {sting} _
-         * @param {sting} firstCondition
-         * @param {sting} firstBlock
+         * @param {string} _
+         * @param {string} firstCondition
+         * @param {string} firstBlock
          */
         function (_, firstCondition, firstBlock) {
             let lastIndex = 0;
@@ -759,8 +759,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         /** @type {Map<any, EachBlock>} */
         const newRenderedBlockMap = new Map();
 
-        // FIND EXISTING BLOCK WITH THE SAME VALUE
-        // UPDATE EXISTING BLOCK WITH NEW VALUE
+        // FIND EXIstring BLOCK WITH THE SAME VALUE
+        // UPDATE EXIstring BLOCK WITH NEW VALUE
         // CREATE NEW BLOCKS
         for (let index = 0; index < blockDatas.length; index++) {
             let block = renderedBlockMap.get(blockDatas[index]);
