@@ -51,7 +51,7 @@ let components_id_counter = 1;
 
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
-* @param {Object} Model anonymous class that encapsulate logic
+* @param {Object} Model anonymous class that encapsulate data and logic
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Model = class { }) {
@@ -70,12 +70,9 @@ export function component(options, Model = class { }) {
         if (componentIdStack.has(components_id)) throw new Error("cyclic component dependency detected!")
         componentIdStack.add(components_id);
 
-        // add a new `Map<any,any>` to the context stack to collect all set context when the new Model is instantiated
         const current_context = pushNewContext();
         let resetContext;
 
-        // setting a copy of the current context when executing onMount to preserve the context stack when using `onMount` inside the Model class
-        // then pushing another onMount after instantiating both the new Model and createFragment to reset the context stack to its previous state
         onMount(() => resetContext = setContextQueue(current_context));
 
         const ctx = !Model ? {} : new Model(props);
