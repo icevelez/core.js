@@ -20,9 +20,6 @@ const markedNodeCache = new Map();
 /** @type {Map<number, Record<string, Function>>} */
 const imported_components = new Map();
 
-/** @type {WeakMap<Node, Node[]>} */
-const nodeChildren = new WeakMap();
-
 /** @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:(() => DocumentFragment)) => void)>} */
 const cacheNodeProcesses = new WeakMap();
 
@@ -30,7 +27,6 @@ if (dev_mode_on) window.__corejs__ = {
     evaluationCache,
     markedNodeCache,
     slotCache,
-    nodeChildren,
     imported_components,
     cacheNodeProcesses,
     delegated_events,
