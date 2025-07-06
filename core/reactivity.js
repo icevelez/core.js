@@ -335,18 +335,17 @@ function wrap(obj) {
 
             return true;
         },
-        // this can cause reactivity issues for handlebar.js in cases where deep proxy is access like `names()[1].name`
-        // when `names()` array is empty `names()[1]` subscriber is deleted and when a new `names()[1]` is inserted the old subscriber has already been deleted
-        // so no more reactivity. commenting this out for now
-        // deleteProperty(target, key) {
-        //     if (isObject(target[key])) {
-        //         SUBSCRIBERS.getMap(target).delete(key);
-        //         SUBSCRIBERS.deepDelete(target[key]);
-        //     }
-
-        //     delete target[key];
-        //     return true;
-        // }
+        deleteProperty(target, key) {
+            // this can cause reactivity issues for handlebar.js in cases where deep proxy is access like `names()[1].name`
+            // when `names()` array is empty `names()[1]` subscriber is deleted and when a new `names()[1]` is inserted the old subscriber has already been deleted
+            // so no more reactivity. commenting this out for now
+            // if (isObject(target[key])) {
+            //     SUBSCRIBERS.getMap(target).delete(key);
+            //     SUBSCRIBERS.deepDelete(target[key]);
+            // }
+            delete target[key];
+            return true;
+        }
     });
 
     proxyCache.set(obj, proxy);

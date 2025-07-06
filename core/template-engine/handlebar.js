@@ -1073,7 +1073,7 @@ function applyComponents(component, startNode, endNode, ctx) {
 function applyTextInterpolation(node, process, ctx) {
     let prevContent;
     effect(() => {
-        const textContent = evaluate(process.expr, ctx);
+        let textContent = evaluate(process.expr, ctx);
         if (prevContent === textContent) return;
         node.textContent = prevContent = textContent;
     })
@@ -1131,7 +1131,7 @@ function applyDirectiveUse(node, process, ctx) {
  * @param {any} ctx
  */
 function applyDirectiveBind(node, process, ctx) {
-    const binding = evaluate(`(v, c) => { (c(${process.value})) ? ${process.value}.set(v) : ${process.value} = v; }`, ctx);
+    const binding = evaluate(`(v, c) => { try { (c(${process.value})) ? ${process.value}.set(v) : ${process.value} = v; } catch (error) { console.error('variable ${process.value} is undefined'); } }`, ctx);
 
     const eventListener = (event) => {
         const type = event.target.type;
@@ -1176,8 +1176,8 @@ export function evaluate(expr, ctx) {
     try {
         return evalFunc(...ctx_keys.map(k => ctx[k]));
     } catch (error) {
-        console.error(error, ctx);
-        throw new Error(`Evaluation run-time error: ${expr}`);
+        console.error(`Evaluation run-time error: ${expr}`, error, ctx);
+        return undefined;
     }
 }
 
