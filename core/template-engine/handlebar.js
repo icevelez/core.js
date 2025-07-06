@@ -67,16 +67,12 @@ export function component(options, Model = class { }) {
 
         // setting a copy of the current context when executing onMount to preserve the context stack when using `onMount` inside the Model class
         // then pushing another onMount after instantiating both the new Model and createFragment to reset the context stack to its previous state
-        onMount(() => {
-            resetContext = setContextQueue(current_context);
-        });
+        onMount(() => resetContext = setContextQueue(current_context));
 
         const ctx = !Model ? {} : new Model(props);
         const processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
 
-        onMount(() => {
-            resetContext();
-        });
+        onMount(resetContext);
 
         componentIdStack.delete(components_id);
 
@@ -88,18 +84,16 @@ export function component(options, Model = class { }) {
 * @param {string} template
 */
 function createNodes(template) {
-    if (template == "" || typeof template !== "string") return document.createDocumentFragment();
+    if (typeof template !== "string") throw new Error("template is not a string");
+    if (template == "") return document.createDocumentFragment();
 
     const templateElement = document.createElement("template");
     templateElement.innerHTML = template;
 
-    const preprocessed_childNodes = Array.from(templateElement.content.childNodes);
-    for (const childNode of preprocessed_childNodes) preprocessTextNodes(childNode);
+    for (const childNode of Array.from(templateElement.content.childNodes)) preprocessTextNodes(childNode);
 
-    const childNodes = Array.from(templateElement.content.childNodes);
     const fragment = document.createDocumentFragment();
-
-    for (const childNode of childNodes) fragment.append(childNode);
+    for (const childNode of Array.from(templateElement.content.childNodes)) fragment.append(childNode);
 
     const processes = preprocessNode(fragment);
     if (processes.length <= 0) return fragment;
@@ -116,10 +110,8 @@ function createNodes(template) {
 */
 function createFragment(fragment, ctx, render_slot_callbackfn) {
     const clone_fragment = fragment.cloneNode(true);
-
     const processes = cacheNodeProcesses.get(fragment);
     if (processes) applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
-
     return clone_fragment;
 }
 
@@ -128,12 +120,31 @@ function createFragment(fragment, ctx, render_slot_callbackfn) {
 */
 function parseEach(eachBlock) {
     const eachRegex = /{{#each\s+(.+?)\s+as\s+((?:\w+|\{[\s\S]*?\}|\([\s\S]*?\)))\s*(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
-    let eachConfig = { expression: "", mainContent: [], emptyContent: [], blockVars: [], blockVar: "", indexVar: "" }
+    let eachConfig = {
+        expression: "",
+        /** @type {DocumentFragment} */
+        mainContent: null,
+        /** @type {DocumentFragment} */
+        emptyContent: null,
+        /** @type {string[]} */
+        blockVars: [],
+        blockVar: "",
+        indexVar: ""
+    }
 
-    eachBlock.replace(eachRegex, (_, expression, blockVar, indexVar, content) => {
-        const [mainContent, emptyContent] = content.split(/{{:empty}}/);
-        eachConfig = { expression, blockVars: [], blockVar, indexVar, mainContent: createNodes(mainContent), emptyContent: emptyContent ? createNodes(emptyContent) : [] };
-    });
+    eachBlock.replace(eachRegex,
+        /**
+         * @param {any} _
+         * @param {string} expression
+         * @param {string} blockVar
+         * @param {string} indexVar
+         * @param {string} content
+         */
+        function (_, expression, blockVar, indexVar, content) {
+            const [mainContent, emptyContent] = content.split(/{{:empty}}/);
+            eachConfig = { expression, blockVars: [], blockVar, indexVar, mainContent: createNodes(mainContent), emptyContent: createNodes(emptyContent || "") };
+        }
+    );
 
     const blockvar = eachConfig.blockVar.trim();
     if (blockvar.startsWith("{")) eachConfig.blockVars = blockvar.replace("{", "").replace("}", "").trim().split(",").map(v => v.trim());
@@ -148,40 +159,47 @@ function parseIf(ifBlock) {
     const ifRegex = /{{#if\s+(.+?)}}([\s\S]*?){{\/if}}/g;
     const ifElseregex = /{{:else\s+if\s+(.+?)}}|{{:else}}/g;
 
-    /** @type {{ block : string, condition : string }[]} */
+    /** @type {{ block : DocumentFragment, condition : string }[]} */
     const segments = [];
 
-    ifBlock.replace(ifRegex, (_, firstCondition, firstBlock) => {
-        let lastIndex = 0;
-        let match;
+    ifBlock.replace(ifRegex,
+        /**
+         * @param {sting} _
+         * @param {sting} firstCondition
+         * @param {sting} firstBlock
+         */
+        function (_, firstCondition, firstBlock) {
+            let lastIndex = 0;
+            let match;
 
-        while ((match = ifElseregex.exec(firstBlock)) !== null) {
-            if (match.index > lastIndex) {
+            while ((match = ifElseregex.exec(firstBlock)) !== null) {
+                if (match.index > lastIndex) {
+                    segments.push({
+                        condition: firstCondition,
+                        block: createNodes(firstBlock.substring(lastIndex, match.index))
+                    });
+                }
+
+                if (match[0].startsWith('{{:else if')) {
+                    firstCondition = match[1];
+                    lastIndex = match.index + match[0].length;
+                } else if (match[0] === '{{:else}}') {
+                    segments.push({
+                        condition: 'true', // Always true for else
+                        block: createNodes(firstBlock.substring(match.index + match[0].length))
+                    });
+                    lastIndex = firstBlock.length; // Done
+                }
+            }
+
+            if (lastIndex < firstBlock.length) {
                 segments.push({
                     condition: firstCondition,
-                    block: createNodes(firstBlock.substring(lastIndex, match.index))
+                    block: createNodes(firstBlock.substring(lastIndex))
                 });
             }
-
-            if (match[0].startsWith('{{:else if')) {
-                firstCondition = match[1];
-                lastIndex = match.index + match[0].length;
-            } else if (match[0] === '{{:else}}') {
-                segments.push({
-                    condition: 'true', // Always true for else
-                    block: createNodes(firstBlock.substring(match.index + match[0].length))
-                });
-                lastIndex = firstBlock.length; // Done
-            }
         }
-
-        if (lastIndex < firstBlock.length) {
-            segments.push({
-                condition: firstCondition,
-                block: createNodes(firstBlock.substring(lastIndex))
-            });
-        }
-    });
+    );
 
     return segments;
 }
@@ -197,29 +215,49 @@ function parseAwait(awaitBlock) {
 
     const awaitConfig = {
         promiseExpr: "",
-        pendingContent: [],
-        then: { match: false, var: null, expr: "", content: [], },
-        catch: { match: false, var: null, expr: "", content: [], },
+        /** @type {DocumentFragment} */
+        pendingContent: null,
+        then: {
+            match: false,
+            var: null,
+            expr: "",
+            /** @type {DocumentFragment} */
+            content: null,
+        },
+        catch: {
+            match: false,
+            var: null,
+            expr: "",
+            /** @type {DocumentFragment} */
+            content: null,
+        },
     }
 
-    awaitBlock.replace(awaitRegex, (_, promiseExpr, block) => {
-        awaitConfig.promiseExpr = promiseExpr;
+    awaitBlock.replace(awaitRegex,
+        /**
+         * @param {string} _
+         * @param {string} promiseExpr
+         * @param {string} block
+         */
+        function (_, promiseExpr, block) {
+            awaitConfig.promiseExpr = promiseExpr;
 
-        const thenMatch = block.match(thenRegex);
-        if (thenMatch) {
-            const [_, thenVar, thenContent] = thenMatch;
-            awaitConfig.then = { match: true, var: thenVar, content: thenContent ? createNodes(thenContent) : [] };
+            const thenMatch = block.match(thenRegex);
+            if (thenMatch) {
+                const [_, thenVar, thenContent] = thenMatch;
+                awaitConfig.then = { match: true, var: thenVar, content: createNodes(thenContent || "") };
+            }
+
+            const catchMatch = block.match(catchRegex);
+            if (catchMatch) {
+                const [_, catchVar, catchContent] = thenMatch;
+                awaitConfig.catch = { match: true, var: catchVar, content: createNodes(catchContent || "") };
+            }
+
+            const pendingContent = block.split(blockRegex)[0] || '';
+            awaitConfig.pendingContent = createNodes(pendingContent);
         }
-
-        const catchMatch = block.match(catchRegex);
-        if (catchMatch) {
-            const [_, catchVar, catchContent] = thenMatch;
-            awaitConfig.catch = { match: true, var: catchVar, content: catchContent ? createNodes(catchContent) : [] };
-        }
-
-        const pendingContent = block.split(blockRegex)[0] || '';
-        awaitConfig.pendingContent = createNodes(pendingContent);
-    });
+    );
 
     return awaitConfig;
 }
