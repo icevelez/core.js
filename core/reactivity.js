@@ -63,7 +63,6 @@ export function createSignal(initial_value = undefined) {
     }
 
     /**
-     *
      * @param {T} new_value
      */
     function write(new_value) {

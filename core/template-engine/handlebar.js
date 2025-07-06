@@ -319,14 +319,14 @@ function processComponents(template, imported_component_id) {
         if (match.startsWith("<Core:component")) {
             if (slot_content) {
                 const slot_id = `slot-${makeId(6)}`;
-                slotCache.set(slot_id, createNodes(slot_content))
+                slotCache.set(slot_id, createNodes(slot_content || ""))
                 return `<template data-directive="core-component" data-slot-id="${slot_id}" ${attrStr.slice(10)}></template>`;
             }
             return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
         }
 
         const marker_id = `${directive}-${makeId(8)}`;
-        const component = { import_id: imported_component_id, tag, attrStr, slot_node: createNodes(slot_content) || [] };
+        const component = { import_id: imported_component_id, tag, attrStr, slot_node: createNodes(slot_content || "") || [] };
         markedNodeCache.set(marker_id, component);
 
         return `<template data-import-id="${imported_component_id}" data-directive="${directive}" data-marker-id="${marker_id}"></template>`;
