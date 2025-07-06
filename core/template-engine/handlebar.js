@@ -1196,6 +1196,7 @@ export const coreEventListener = Object.freeze({
      * @param {Function} func
      */
     add: function (event_name, node, func) {
+        if (typeof func !== "function") throw new Error("func is not a function");
         let event_node_weakmap = delegated_events.get(event_name);
 
         if (!event_node_weakmap) {
