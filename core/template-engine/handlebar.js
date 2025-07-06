@@ -11,7 +11,7 @@ const evaluationCache = new Map();
 /** @type {Map<string, WeakMap<Node, Set<Function>>>} */
 const delegated_events = new Map();
 
-/** @type {Map<string, Node[]>} */
+/** @type {Map<string, DocumentFragment>} */
 const slotCache = new Map();
 
 /** @type {Map<string, (startNode:Node, endNode:Node, ctx:any) => void>} */
@@ -320,9 +320,9 @@ function processComponents(template, imported_component_id) {
                 slotCache.set(slot_id, createNodes(slot_content))
                 return `<template data-directive="core-component" data-slot-id="${slot_id}" ${attrStr.slice(10)}></template>`;
             }
-
             return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
         }
+
         const marker_id = `${directive}-${makeId(8)}`;
         const component = { import_id: imported_component_id, tag, attrStr, slot_node: createNodes(slot_content) || [] };
         markedNodeCache.set(marker_id, component);
@@ -572,8 +572,10 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
     }
 }
 
+/** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
+
 /**
- * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVars : []string, blockVar: string; indexVar: string; }} eachConfig
+ * @param {EachConfig} eachConfig
  * @param {any[]} blockDatas
  * @param {number} index
  * @param {any} ctx
@@ -651,7 +653,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
 }
 
 /**
- * @param {{ expression: string; mainContent: Node[]; emptyContent: Node[]; blockVar: string; indexVar: string; }} eachConfig
+ * @param {EachConfig} eachConfig
  * @param {Node} startNode
  * @param {Node} endNode
  * @param {any} ctx
@@ -854,7 +856,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 }
 
 /**
- * @param {{ promiseExpr:string, pendingContent:Node[], then: { match:Boolean, var:string | null, content:Node[] }, catch: { match:Boolean, var:string | null, content:Node[] } }} awaitConfig
+ * @param {{ promiseExpr:string, pendingContent:DocumentFragment, then: { match:Boolean, var:string | null, content:DocumentFragment }, catch: { match:Boolean, var:string | null, content:DocumentFragment } }} awaitConfig
  * @param {Node} startNode
  * @param {Node} endNode
  * @param {any} ctx
