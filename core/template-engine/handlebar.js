@@ -1,7 +1,15 @@
-import { core_context, onMountQueue, onUnmountQueue, evaluate, coreEventListener, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "../internal-core.js";
+import { core_context, onMountQueue, onUnmountQueue, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "../core-internal.js";
 import { effect, untrackedEffect, isSignal, makeFuncSignal, createSignal } from "../reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
 import { onMount } from "../core.js";
+
+const dev_mode_on = true;
+
+/** @type {Map<string, Function>} */
+const evaluationCache = new Map();
+
+/** @type {Map<string, WeakMap<Node, Set<Function>>>} */
+const delegated_events = new Map();
 
 /** @type {Map<string, Node[]>} */
 const slotCache = new Map();
@@ -18,12 +26,14 @@ const nodeChildren = new WeakMap();
 /** @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:(() => DocumentFragment)) => void)>} */
 const cacheNodeProcesses = new WeakMap();
 
-if (window.__corejs__) {
-    window.__corejs__.markedNodeCache = markedNodeCache;
-    window.__corejs__.slotCache = slotCache;
-    window.__corejs__.nodeChildren = nodeChildren;
-    window.__corejs__.imported_components = imported_components;
-    window.__corejs__.cacheNodeProcesses = cacheNodeProcesses;
+if (dev_mode_on) window.__corejs__ = {
+    evaluationCache,
+    markedNodeCache,
+    slotCache,
+    nodeChildren,
+    imported_components,
+    cacheNodeProcesses,
+    delegated_events,
 }
 
 /**
@@ -1106,4 +1116,99 @@ function applyDirectiveBind(node, process, ctx) {
         }
         node[process.input_type] = value;
     })
+}
+
+/**
+* @param {string} expr
+* @param {any} ctx
+* @returns {any}
+*/
+export function evaluate(expr, ctx) {
+    if (!expr || typeof expr !== "string") return undefined;
+
+    const ctx_keys = Object.keys(ctx);
+    const key = `${expr}::${ctx_keys.join(',')}`;
+
+    let evalFunc = evaluationCache.get(key);
+    if (!evalFunc) {
+        evalFunc = new Function(...ctx_keys, `return ${expr};`);
+        evaluationCache.set(key, evalFunc);
+    }
+
+    try {
+        return evalFunc(...ctx_keys.map(k => ctx[k]));
+    } catch (error) {
+        console.error(error, ctx);
+        throw new Error(`Evaluation run-time error: ${expr}`);
+    }
+}
+
+/**
+ * NOTE: this will create a single global listener but that global listener will stay persistent through out the app life-cycle,
+ * it will not be dispose of even if there are no node listener because it's using a `WeakMap`
+ * there's no way of knowing if there's zero nodes listening, so there's no way of disposing the global listener
+ *
+ * I want to dispose the global listener if there's zero nodes listening but there's no way of doing that so that's the drawback for now
+ * until I come up with another solution
+ */
+export const coreEventListener = Object.freeze({
+    /**
+     * @param {string} event_name
+     * @param {Node} node
+     * @param {Function} func
+     */
+    add: function (event_name, node, func) {
+        let event_node_weakmap = delegated_events.get(event_name);
+
+        if (!event_node_weakmap) {
+            event_node_weakmap = new WeakMap();
+            const funcs = new Set();
+            funcs.add(func);
+
+            event_node_weakmap.set(node, funcs);
+            delegated_events.set(event_name, event_node_weakmap);
+
+            window.addEventListener(event_name, (e) => {
+                match_delegated_node(event_node_weakmap, e, e.target);
+            });
+
+            return () => this.remove(event_name, node, func);
+        }
+
+        let funcs = event_node_weakmap.get(node);
+        if (!funcs) {
+            funcs = new Set();
+            event_node_weakmap.set(node, funcs);
+        }
+
+        funcs.add(func);
+
+        return () => this.remove(event_name, node, func);
+    },
+    /**
+     * @param {string} event_name
+     * @param {node} node
+     * @param {Function} func
+     */
+    remove: function remove_delegated_node(event_name, node, func = null) {
+        const event = delegated_events.get(event_name);
+        if (!event) return;
+        const funcs = event.get(node);
+        if (!funcs) return;
+        funcs.delete(func);
+    }
+})
+
+/**
+ * @param {WeakMap<Node, Set<Function>>} event_node_weakmap
+ * @param {Event} event
+ * @param {Node} target
+ */
+function match_delegated_node(event_node_weakmap, event, target) {
+    const funcs = event_node_weakmap.get(target);
+    if (!funcs) {
+        if (!target.parentNode) return;
+        return match_delegated_node(event_node_weakmap, event, target.parentNode);
+    }
+    for (const func of funcs) func(event);
 }

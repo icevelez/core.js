@@ -1,4 +1,4 @@
-import { onMountQueue, onUnmountQueue, core_context, contextQueue } from "./internal-core.js";
+import { onMountQueue, onUnmountQueue, core_context, contextQueue } from "./core-internal.js";
 import { effect } from "./reactivity.js";
 import { isObject } from "./helper-functions.js";
 
