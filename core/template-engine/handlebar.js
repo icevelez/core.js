@@ -789,16 +789,26 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         }
 
         // REMOVE UNUSED BLOCKS
+
+        let nodeStart, nodeEnd;
+
         for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
-            if (newRenderedBlockMap.get(renderBlock.data())) continue;
+
+            if (newRenderedBlockMap.get(renderBlock.data())) {
+                if (!nodeStart && !nodeEnd) continue;
+                removeNodesBetween(nodeStart, nodeEnd);
+                nodeStart.remove();
+                nodeEnd.remove();
+                nodeStart = null;
+                nodeEnd = null;
+                continue;
+            }
 
             renderBlock.unmount();
 
-            removeNodesBetween(renderBlock.nodeStart, renderBlock.nodeEnd);
-
-            renderBlock.nodeStart.remove();
-            renderBlock.nodeEnd.remove();
+            if (!nodeStart) nodeStart = renderBlock.nodeStart;
+            nodeEnd = renderBlock.nodeEnd;
         }
 
         renderedBlockMap.clear();
