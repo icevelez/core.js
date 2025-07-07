@@ -1,7 +1,7 @@
-import { core_context, onMountQueue, onUnmountQueue, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "../core-internal.js";
-import { effect, untrackedEffect, isSignal, makeFuncSignal, createSignal } from "../reactivity.js";
-import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "../helper-functions.js";
-import { onMount } from "../core.js";
+import { core_context, onMountQueue, onUnmountQueue, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "./core-internal.js";
+import { effect, untrackedEffect, isSignal, makeFuncSignal, createSignal } from "./reactivity.js";
+import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "./helper-functions.js";
+import { onMount } from "./core.js";
 
 const dev_mode_on = true;
 
@@ -35,14 +35,6 @@ if (dev_mode_on) window.__corejs__ = {
 /**
  * Used to store and keep track of components used in a tree to check for any circular dependency by finding if a component id is already in the stack.
  * If it detects its own id in the stack it means it was already called. See visualization below
- * ```html
- * <ParentComponent> --> check stack, none, add id
- *   <ChildComponent> --> check stack, none, add id
- *     <ParentComponent> --> check stack, id detected, throw an error
- *     </ParentComponent>
- *   </ChildComponent>
- * </ParentComponent>
- * ```
  * @type {Set<number>}
  */
 let componentIdStack = new Set();
