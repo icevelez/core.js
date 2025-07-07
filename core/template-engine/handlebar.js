@@ -358,10 +358,12 @@ function preprocessTextNodes(node) {
 
     node.textContent = "";
 
+    const parent = node.parentNode;
+
     for (const part of parts) {
         const textNode = document.createTextNode("");
         textNode.textContent = part;
-        node.before(textNode);
+        parent.insertBefore(textNode, node);
     };
 
     node.remove();
@@ -492,6 +494,7 @@ function preprocessNode(node) {
  * @param {() => DocumentFragment} render_slot_callbackfn
  */
 function applyProcess(node, processes, ctx, render_slot_callbackfn) {
+    const parent = node.parentNode;
     for (const process of processes) {
         switch (process.type) {
             case process_type_enum.textInterpolation: {
@@ -516,8 +519,8 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
             case process_type_enum.slotInjection: {
                 if (!render_slot_callbackfn) return;
-                node.before(render_slot_callbackfn());
-                node.remove();
+                const parent = node.parentNode;
+                parent.replaceChild(render_slot_callbackfn(), node);
                 break;
             }
             case process_type_enum.coreComponent: {
@@ -538,12 +541,10 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
 
                 if (process.slot_nodes) {
                     const renderSlotCallbackfn = () => createFragment(process.slot_nodes, ctx);
-                    node.before(component(props, renderSlotCallbackfn));
+                    parent.replaceChild(component(props, renderSlotCallbackfn), node);
                 } else {
-                    node.before(component(props));
+                    parent.replaceChild(component(props), node);
                 }
-
-                node.remove();
                 break;
             }
             case process_type_enum.markedBlocks: {
@@ -561,8 +562,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     applyComponents(process.payload, nodeStart, nodeEnd, ctx);
                 }
 
-                node.before(fragment);
-                node.remove();
+                parent.replaceChild(fragment, node);
                 break;
             }
             case process_type_enum.children: {
@@ -763,8 +763,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         /** @type {Map<any, EachBlock>} */
         const newRenderedBlockMap = new Map();
 
-        // FIND EXIstring BLOCK WITH THE SAME VALUE
-        // UPDATE EXIstring BLOCK WITH NEW VALUE
+        // FIND EXISTING BLOCK WITH THE SAME VALUE
+        // UPDATE EXISTING BLOCK WITH NEW VALUE
         // CREATE NEW BLOCKS
         for (let index = 0; index < blockDatas.length; index++) {
             let block = renderedBlockMap.get(blockDatas[index]);
@@ -848,7 +848,6 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     if (node === nextRenderBlock.nodeEnd) break;
                     node = next;
                 }
-                nextAnchor.before(fragment);
 
                 fragment = document.createDocumentFragment();
                 node = renderBlock.nodeStart;
@@ -859,6 +858,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     node = next;
                 }
 
+                nextAnchor.before(fragment);
                 renderAnchor.before(fragment);
             }
 
@@ -910,7 +910,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         unmount();
         removeNodesBetween(startNode, endNode);
 
-        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.pendingContent, ctx))
+        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.pendingContent, ctx));
         endNode.before(nodes);
 
         mountInit();

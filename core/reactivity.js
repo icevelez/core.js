@@ -184,72 +184,70 @@ export function untrackedEffect(callbackfn) {
 }
 
 // Keep track of deeply nested proxy subscribers
-class SubscriberMap {
+function subscriberMap() {
     /** @type {WeakMap<any, Map<any, Set<Function>>>} */
-    map = new WeakMap();
+    const map = new WeakMap();
 
-    constructor() { }
+    return {
+        /**
+        * @param {object} target
+        * @returns {Map<any, Set<Function>>}
+        */
+        getMap(target) {
+            let keyMap = map.get(target);
+            if (!keyMap) {
+                keyMap = new Map();
+                map.set(target, keyMap);
+            }
 
-    /**
-    * @param {object} target
-    * @returns {Map<any, Set<Function>>}
-    */
-    getMap(target) {
-        let keyMap = this.map.get(target);
-        if (!keyMap) {
-            keyMap = new Map();
-            this.map.set(target, keyMap);
+            return keyMap;
+        },
+        /**
+        * @param {object} target
+        * @param {any} key
+        * @returns {Set<Function>}
+        */
+        getSet(target, key) {
+            let keyMap = map.get(target);
+            if (!keyMap) {
+                keyMap = new Map();
+                map.set(target, keyMap);
+            }
+
+            let set = keyMap.get(key);
+            if (!set) {
+                set = new Set();
+                keyMap.set(key, set);
+            }
+
+            return set;
+        },
+        /**
+        * @param {any} target
+        * @param {WeakSet} visited
+        */
+        deepDelete(target, visited = new WeakSet()) {
+            if (!isObject(target) || visited.has(target)) return;
+
+            visited.add(target);
+
+            const keyMap = map.get(target);
+            if (!keyMap) return;
+
+            for (const key in target) {
+                const child = target[key];
+                if (!isObject(child)) continue;
+                deepDelete(child, visited); // recurse on children
+            }
+
+            map.delete(target); // delete after children
         }
-
-        return keyMap;
-    }
-
-    /**
-    * @param {object} target
-    * @param {any} key
-    * @returns {Set<Function>}
-    */
-    getSet(target, key) {
-        let keyMap = this.map.get(target);
-        if (!keyMap) {
-            keyMap = new Map();
-            this.map.set(target, keyMap);
-        }
-
-        let set = keyMap.get(key);
-        if (!set) {
-            set = new Set();
-            keyMap.set(key, set);
-        }
-
-        return set;
-    }
-
-    /**
-     * @param {any} target
-     * @param {WeakSet} visited
-     */
-    deepDelete(target, visited = new WeakSet()) {
-        if (!isObject(target) || visited.has(target)) return;
-
-        visited.add(target);
-
-        const keyMap = this.map.get(target);
-        if (!keyMap) return;
-
-        for (const key in target) {
-            const child = target[key];
-            if (!isObject(child)) continue;
-            this.deepDelete(child, visited); // recurse on children
-        }
-
-        this.map.delete(target); // delete after children
     }
 }
 
 const IS_PROXY = Symbol('is_deep_proxy');
 const UNWRAPPED_VALUE = Symbol('unwrapped_value');
-const SUBSCRIBERS = new SubscriberMap();
+const SUBSCRIBERS = subscriberMap();
 const SETTERGETTERCONST = ["has", "set", "get"];
 
 const proxyCache = new WeakMap();
@@ -325,7 +323,8 @@ function wrap(obj) {
             // Cleanup if replacing target[key] (object) with a non-object new_value
             if (isObject(target[key]) && (!isObject(new_value) || !new_value[IS_PROXY])) {
                 SUBSCRIBERS.getMap(target).delete(key);
-                SUBSCRIBERS.deepDelete(target[key]);
+                // read "deleteProperty" comment
+                // SUBSCRIBERS.deepDelete(target[key]);
             }
 
             target[key] = unwrapped_value;
@@ -338,7 +337,7 @@ function wrap(obj) {
         deleteProperty(target, key) {
             // this can cause reactivity issues for handlebar.js in cases where deep proxy is access like `names()[1].name`
             // when `names()` array is empty `names()[1]` subscriber is deleted and when a new `names()[1]` is inserted the old subscriber has already been deleted
-            // so no more reactivity. commenting this out for now
+            // so no more reactivity. commenting this to keep reacitivity but the effect subscription will persist
             // if (isObject(target[key])) {
             //     SUBSCRIBERS.getMap(target).delete(key);
             //     SUBSCRIBERS.deepDelete(target[key]);
