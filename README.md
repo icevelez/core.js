@@ -60,7 +60,7 @@ The reactivity system is my implementation of *Signals* based from my understand
 
 ```js
 import { load } from "../core/core.js";
-import { component } from "../core/template-engine/handlebar.js";
+import { component } from "../core/handlebar.js";
 
 export default component({
     template: await load("src/App.html"),

@@ -1,5 +1,5 @@
 import { load } from "../../core/core.js";
-import { component } from "../../core/template-engine/handlebar.js";
+import { component } from "../../core/handlebar.js";
 import { createSignal, effect } from "../../core/reactivity.js";
 
 let rowId = 1;

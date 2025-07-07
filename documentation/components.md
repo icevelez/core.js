@@ -8,10 +8,10 @@ A self-contained, reusable building block that represents a piece of UI along wi
 
 ### ✅ Basic Usage
 
-To create components you must use the `component` function from `core/template-engine/handlebar.js`
+To create components you must use the `component` function from `core/handlebar.js`
 
 ```js
-import { component } from "/core/template-engine/handlebar.js";
+import { component } from "/core/handlebar.js";
 
 export default component({
     // Directly embedding template inside a component
@@ -23,7 +23,7 @@ export default component({
 
 ### ✅  Adding in context and logic to your component
 ```js
-import { component } from "/core/template-engine/handlebar.js";
+import { component } from "/core/handlebar.js";
 
 export default component({
     template: `
@@ -40,7 +40,7 @@ export default component({
 ### ✅  Using the `load` function to load an html template
 ```js
 import { load } from "/core/core.js";
-import { component } from "/core/template-engine/handlebar.js";
+import { component } from "/core/handlebar.js";
 
 export default component({
     template: await load("src/App.html")
@@ -55,7 +55,7 @@ export default component({
 ### ✅ Usage
 ```js
 import { load } from "/core/core.js";
-import { component } from "/core/template-engine/handlebar.js";
+import { component } from "/core/handlebar.js";
 
 import CustomComponent from "./components/CustomComponent.js";
 import AnotherComponent from "./components/AnotherComponent.js";

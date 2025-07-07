@@ -1,5 +1,5 @@
 import { load, setContext } from "../core/core.js";
-import { component } from "../core/template-engine/handlebar.js";
+import { component } from "../core/handlebar.js";
 import { createDerived, createSignal } from "../core/reactivity.js";
 
 import { Router } from "./common/router.js";

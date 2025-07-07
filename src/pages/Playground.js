@@ -1,5 +1,5 @@
 import { getContext, load, onMount, onUnmount, setContext } from "../../core/core.js";
-import { component } from "../../core/template-engine/handlebar.js";
+import { component } from "../../core/handlebar.js";
 import { createSignal } from "../../core/reactivity.js";
 
 import TestComponent from "../components/TestComponent.js";
