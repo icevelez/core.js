@@ -602,7 +602,9 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeStart);
     currentNode.before(nodeEnd);
 
-    const blockData = createSignal(blockDatas[index]);
+    const blockData = makeFuncSignal(() => blockDatas[index]);
+    blockData.set = (v) => blockDatas[index] = v
+    blockData.update = (fn) => blockDatas[index] = fn(blockDatas[index]);
     const blockIndex = createSignal(index);
 
     const block = {
@@ -1158,6 +1160,9 @@ function applyDirectiveBind(node, process, ctx) {
             node[process.input_type] = value.toISOString().split('T')[0];
             return;
         }
+
+        console.log("value", value);
+
         node[process.input_type] = value;
     })
 }
