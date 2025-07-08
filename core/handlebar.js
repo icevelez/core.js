@@ -379,10 +379,13 @@ const process_type_enum = {
 * @param {Node} node
 */
 function preprocessNode(node) {
-    const isText = node.nodeType === Node.TEXT_NODE;
-
     /** @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]} */
     const processes = [];
+
+    const isStyle = node instanceof HTMLStyleElement;
+    if (isStyle) return processes;
+
+    const isText = node.nodeType === Node.TEXT_NODE;
 
     if (isText) {
         const expression = node.textContent;
@@ -841,6 +844,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     node = next;
                 }
 
+                nextAnchor.before(fragment);
+
                 fragment = document.createDocumentFragment();
                 node = renderBlock.nodeStart;
                 while (node) {
@@ -850,7 +855,6 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     node = next;
                 }
 
-                nextAnchor.before(fragment);
                 renderAnchor.before(fragment);
             }
 
