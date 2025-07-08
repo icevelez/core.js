@@ -1161,8 +1161,6 @@ function applyDirectiveBind(node, process, ctx) {
             return;
         }
 
-        console.log("value", value);
-
         node[process.input_type] = value;
     })
 }
