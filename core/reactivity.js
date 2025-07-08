@@ -26,6 +26,11 @@ function notifySubscribers(subscribers) {
 
 const IS_SIGNAL = Symbol('is_signal');
 
+/**
+ * @template {any} T
+ * @param {() => T} func
+ * @returns {{ () => T, set : (new_value:T) => void, update : ((callbackfn:(old_value:T) => T) => void, [IS_SIGNAL] : boolean }}
+ */
 export function makeFuncSignal(func) {
     if (typeof func !== "function") throw new Error("func is not a function");
     func[IS_SIGNAL] = true;
