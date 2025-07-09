@@ -773,7 +773,9 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 newRenderedBlocks.push(block);
                 newRenderedBlockMap.set(blockDatas[index], block);
             } else if (renderedBlock) {
-                renderedBlock.data.set(blockDatas[index]);
+                if (renderedBlock.data() !== blockDatas[index]) {
+                    renderedBlock.data.set(blockDatas[index]);
+                }
                 currentNode = renderedBlock.nodeEnd.nextSibling;
                 newRenderedBlocks.push(renderedBlock);
                 newRenderedBlockMap.set(blockDatas[index], renderedBlock);
@@ -808,16 +810,14 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             nodeEnd = renderBlock.nodeEnd;
         }
 
+        // REMOVE LAST NODES THAT HAVE THE SAME DATA VALUE BUT ARE NOT USED
         if (newRenderedBlocks.length < renderedBlocks.length) {
             for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
                 const renderBlock = renderedBlocks[i];
-
                 renderBlock.unmount();
-
                 if (!nodeStart) nodeStart = renderBlock.nodeStart;
                 nodeEnd = renderBlock.nodeEnd;
             }
-
             removeNodesBetween(nodeStart, nodeEnd);
             nodeStart.remove();
             nodeEnd.remove();
