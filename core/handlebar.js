@@ -808,6 +808,21 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             nodeEnd = renderBlock.nodeEnd;
         }
 
+        if (newRenderedBlocks.length < renderedBlocks.length) {
+            for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
+                const renderBlock = renderedBlocks[i];
+
+                renderBlock.unmount();
+
+                if (!nodeStart) nodeStart = renderBlock.nodeStart;
+                nodeEnd = renderBlock.nodeEnd;
+            }
+
+            removeNodesBetween(nodeStart, nodeEnd);
+            nodeStart.remove();
+            nodeEnd.remove();
+        }
+
         renderedBlockMap.clear();
         renderedBlockMap = newRenderedBlockMap;
         renderedBlocks = newRenderedBlocks;
