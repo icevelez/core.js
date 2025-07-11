@@ -146,14 +146,50 @@ Expressions can be embedded inside HTML attributes.
 
 ## 7. `bind:` Directive (Two-Way Binding)
 
+> Requires using `createSignal` values
+
 ### ✅ Bind `value`
+```js
+export default component(..., class {
+    user = createSignal("hello world");
+})
+```
 ```html
-<input type="text" bind:value="user.name" />
+<input type="text" bind:value="user" /> // input value: hello world
 ```
 
-### ✅ Bind `type="checkbox"` or other inputs
+### ✅ Bind `value` to an item of an array
+```js
+export default component(..., class {
+    list = createSignal(["red", "green", "blue"]);
+})
+```
 ```html
-<input type="checkbox" bind:checked="user.is_admin" />
+<input type="text" bind:value="list()[2]" /> // input value: blue
+```
+
+### ✅ Bind `value` to a property of an object inside an array
+```js
+export default component(..., class {
+    list = createSignal([
+        { name : "john" },
+        { name : "peter" },
+        { name : "robert" },
+    ]);
+})
+```
+```html
+<input type="text" bind:value="list()[0].name" /> // input value: john
+```
+
+### ✅ Bind `type="checkbox"` to boolean Signal
+```js
+export default component(..., class {
+    is_admin = createSignal(false);
+})
+```
+```html
+<input type="checkbox" bind:checked="is_admin" />
 ```
 
 ---

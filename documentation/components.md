@@ -94,6 +94,8 @@ export default component({
 
 `<Core:slot/>` is a special element that allows content from the parent component to displayed inside a section of the child component.
 
+> A component with a `<Core:slot/>` will only use the first element found, any other slot element will be ignored and removed
+
 > in v0.1.1 and below. the syntax was `<Slot>`
 
 ---
