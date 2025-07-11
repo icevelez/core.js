@@ -969,14 +969,24 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         mountInit();
     };
 
+    let lastPromiseId;
+
     effect(() => {
         try {
+            const currentPromiseId = makeId(6);
+            lastPromiseId = currentPromiseId;
             const promise = evaluate(awaitConfig.promiseExpr, ctx);
 
             if (promise instanceof Promise) {
                 showLoading();
-                promise.then(showThen).catch(showCatch);
+                promise
+                    .then((result) => {
+                        if (lastPromiseId !== currentPromiseId) return;
+                        showThen(result);
+                    })
+                    .catch(showCatch);
             } else {
+                if (lastPromiseId !== currentPromiseId) return;
                 showThen(promise);
             }
         } catch (err) {
