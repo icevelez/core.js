@@ -13,9 +13,8 @@ export default component({
     }
 }, class {
 
-    names = createSignal(['ice', 'ian', 'takeru', 'piox']);
-
     counter = getContext('root-app');
+    names = createSignal(['ice', 'ian', 'takeru', 'piox']);
 
     constructor() {
         setContext('root-app', 'not counter');

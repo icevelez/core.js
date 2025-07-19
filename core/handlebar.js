@@ -833,7 +833,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
 
-            if (renderBlock.nodeStart.previousSibling !== previousNode) {
+            if (renderBlock.nodeStart.previousSibling && renderBlock.nodeStart.previousSibling !== previousNode) {
                 /** @type {EachBlock} */
                 let nextRenderBlock;
 
@@ -843,8 +843,12 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     break;
                 }
 
+                if (!nextRenderBlock) return console.warn("nextRenderBlock is undefined");
+
                 const renderAnchor = nextRenderBlock.nodeEnd.nextSibling;
                 const nextAnchor = renderBlock.nodeEnd.nextSibling;
+
+                if (!nextAnchor) return console.warn("nextAnchor is undefined");
 
                 /** @type {Node} */
                 let node;
@@ -1210,7 +1214,7 @@ export function evaluate(expr, ctx) {
     try {
         return evalFunc(...ctx_keys.map(k => ctx[k]));
     } catch (error) {
-        console.error(`Evaluation run-time error: ${expr}`, error, ctx);
+        console.warn(`Evaluation run-time error: ${expr}`, error, ctx);
         return undefined;
     }
 }

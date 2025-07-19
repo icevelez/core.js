@@ -328,8 +328,6 @@ function wrap(obj) {
             // Cleanup if replacing target[key] (object) with a non-object new_value
             if (isObject(target[key]) && (!isObject(new_value) || !new_value[IS_PROXY])) {
                 SUBSCRIBERS.getMap(target).delete(key);
-                // read "deleteProperty" comment
-                // SUBSCRIBERS.deepDelete(target[key]);
             }
 
             target[key] = unwrapped_value;
@@ -340,14 +338,13 @@ function wrap(obj) {
             return true;
         },
         deleteProperty(target, key) {
-            // this can cause reactivity issues for handlebar.js in cases where deep proxy is access like `names()[1].name`
-            // when `names()` array is empty `names()[1]` subscriber is deleted and when a new `names()[1]` is inserted the old subscriber has already been deleted
-            // so no more reactivity. commenting this to keep reacitivity but the effect subscription will persist
-            // if (isObject(target[key])) {
-            //     SUBSCRIBERS.getMap(target).delete(key);
-            //     SUBSCRIBERS.deepDelete(target[key]);
-            // }
             delete target[key];
+
+            setTimeout(() => {
+                const subscribers = SUBSCRIBERS.getSet(target, key);
+                if (subscribers.size > 0) notifySubscribers(subscribers);
+            })
+
             return true;
         }
     });
