@@ -1,30 +1,14 @@
 # Core.js
 
-A Framework without a bundler
+A Framework built for the web
 
 ---
 
-Version: 0.2.2
+Version: 0.2.3
 
 License: MIT
 
 ---
-
-## 👁️👄👁️ What is Core.js?
-
-Core.js is my attempt at building my own framework
-
-## 🙋 Why?
-
-> tl:dr -- satisfy an itch in my brain
-
-*Story Time*-- When I started web dev, I made my own paradigm at making it "easy" for myself to write component-based HTML/JS unaware that it looked exactly like React code but instead of JSX it was calling a helper function to create HTML `$.create("div")` and it wasn't easy, it just made it a lot harder and crappier
-
-I moved on to using JS Frameworks and fell in love with [Svelte](https://svelte.dev/), used it in every project, it has the expressiveness, the lightweight app bundle size, the friendly ecosystem, It felt like traditional web development, Perfect!
-
-BUT! I want to break free from having a build step you have to do when using traditional frameworks and that itch of finishing what I started kept coming back which lead me to try and build a framework. (multiple attempts was made before landing here)
-
-> [`Alpine.js`](https://alpinejs.dev/) exists, you can use that instead of this, this is my personal project, don't expect too much from it
 
 ## 👷 How does it work?
 
@@ -102,7 +86,7 @@ We are importing `App.js` from the `src` folder to render it to our target eleme
 
 ## 📖 Documentation
 
-You can read the full documentation of how to use this framework by opening the `*.md` files under `documentation` folder of this repository
+You can read the full documentation of how to use this framework by opening an `.md` file under `documentation` folder of this repository
 
 ---
 
