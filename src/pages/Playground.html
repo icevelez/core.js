@@ -9,12 +9,12 @@
 </div>
 <br/>
 <div>
-    <label>Change name of no.1 ({{ names()[0].toUpperCase() }})</label>
+    <label>Change name of no.1 ({{ names()[0]?.toUpperCase() }})</label>
     <input type="text" bind:value="names()[0]">
 </div>
 <div>
     {{#each names() as name, i}}
-        <h1>{{ i()+1 }}. {{name().toUpperCase() }}</h1>
+        <h1>{{ i()+1 }}. {{name()?.toUpperCase() }}</h1>
         <button onclick="{{ () => { names().splice(i(), 1) } }}">Delete</button>
         <input type="text" bind:value="name">
     {{:empty}}

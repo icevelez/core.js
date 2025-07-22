@@ -45,14 +45,23 @@ export function isSignal(input) {
     return input && typeof input === "function" && input[IS_SIGNAL];
 }
 
+const objectSubscriberCache = new WeakMap();
+
 /**
  * @template {any} T
  * @param {T} initial_value
  */
 export function createSignal(initial_value = undefined) {
     /** @type {T} */
-    let value = isObject(initial_value) ? createDeepProxy(initial_value) : initial_value;
+    let value;
     const subscribers = new Set();
+
+    if (isObject(initial_value)) {
+        objectSubscriberCache.set(initial_value, subscribers);
+        value = createDeepProxy(initial_value)
+    } else {
+        value = initial_value;
+    }
 
     function read() {
         if (effectStack.length <= 0) return value;
@@ -334,6 +343,9 @@ function wrap(obj) {
 
             const subscribers = SUBSCRIBERS.getSet(target, key);
             if (subscribers.size > 0) notifySubscribers(subscribers);
+
+            const parentSubscribers = objectSubscriberCache.get(target);
+            if (parentSubscribers.size > 0) notifySubscribers(parentSubscribers);
 
             return true;
         },
