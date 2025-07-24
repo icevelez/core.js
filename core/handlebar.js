@@ -602,9 +602,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeStart);
     currentNode.before(nodeEnd);
 
-    const blockData = makeFuncSignal(() => blockDatas[index]);
-    blockData.set = (v) => blockDatas[index] = v
-    blockData.update = (fn) => blockDatas[index] = fn(blockDatas[index]);
+    const blockData = createSignal(blockDatas[index]);
     const blockIndex = createSignal(index);
 
     const block = {
@@ -788,7 +786,6 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         }
 
         // REMOVE UNUSED BLOCKS
-
         let nodeStart, nodeEnd;
 
         for (let i = 0; i < renderedBlocks.length; i++) {
@@ -808,19 +805,6 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
             if (!nodeStart) nodeStart = renderBlock.nodeStart;
             nodeEnd = renderBlock.nodeEnd;
-        }
-
-        // REMOVE LAST NODES THAT HAVE THE SAME DATA VALUE BUT ARE NOT USED
-        if (newRenderedBlocks.length < renderedBlocks.length) {
-            for (let i = newRenderedBlocks.length; i < renderedBlocks.length; i++) {
-                const renderBlock = renderedBlocks[i];
-                renderBlock.unmount();
-                if (!nodeStart) nodeStart = renderBlock.nodeStart;
-                nodeEnd = renderBlock.nodeEnd;
-            }
-            removeNodesBetween(nodeStart, nodeEnd);
-            nodeStart.remove();
-            nodeEnd.remove();
         }
 
         renderedBlockMap.clear();

@@ -345,7 +345,7 @@ function wrap(obj) {
             if (subscribers.size > 0) notifySubscribers(subscribers);
 
             const parentSubscribers = objectSubscriberCache.get(target);
-            if (parentSubscribers.size > 0) notifySubscribers(parentSubscribers);
+            if (parentSubscribers && parentSubscribers.size > 0) notifySubscribers(parentSubscribers);
 
             return true;
         },
