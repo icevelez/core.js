@@ -352,10 +352,8 @@ function wrap(obj) {
         deleteProperty(target, key) {
             delete target[key];
 
-            setTimeout(() => {
-                const subscribers = SUBSCRIBERS.getSet(target, key);
-                if (subscribers.size > 0) notifySubscribers(subscribers);
-            })
+            const subscribers = SUBSCRIBERS.getSet(target, key);
+            if (subscribers.size > 0) notifySubscribers(subscribers);
 
             return true;
         }
