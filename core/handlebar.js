@@ -569,9 +569,10 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
     }
 }
 
-/** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
-
+// make individual value of an array as a read-only Signal because for reasons I don't know why the reacitivity can't propogate back to the original signal
 const IS_READ_ONLY_SIGNAL = Symbol("is_read_only_signal");
+
+/** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
 
 /**
  * @param {EachConfig} eachConfig
