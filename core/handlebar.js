@@ -571,6 +571,8 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
 
 /** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
 
+const IS_READ_ONLY_SIGNAL = Symbol("is_read_only_signal");
+
 /**
  * @param {EachConfig} eachConfig
  * @param {any[]} blockDatas
@@ -603,6 +605,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     currentNode.before(nodeEnd);
 
     const blockData = createSignal(blockDatas[index]);
+    blockData[IS_READ_ONLY_SIGNAL] = true;
     const blockIndex = createSignal(index);
 
     const block = {
@@ -1152,12 +1155,23 @@ function applyDirectiveUse(node, process, ctx) {
  * @param {any} ctx
  */
 function applyDirectiveBind(node, process, ctx) {
-    const binding = evaluate(`(v, c) => { try { (c(${process.value})) ? ${process.value}.set(v) : ${process.value} = v; } catch (error) { console.error('variable ${process.value} is undefined'); } }`, ctx);
+    const binding = evaluate(`(v, c, s) => {
+        try {
+            if (c(${process.value})) {
+                if (${process.value}[s]) throw new Error("signal is read-only");
+                ${process.value}.set(v)
+            } else {
+                ${process.value} = v;
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }`, ctx);
 
     const eventListener = (event) => {
         const type = event.target.type;
-        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal)
-        return binding(event.target[process.input_type], isSignal)
+        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal, IS_READ_ONLY_SIGNAL);
+        return binding(event.target[process.input_type], isSignal, IS_READ_ONLY_SIGNAL);
     };
 
     const remove_listener = coreEventListener.add(process.event_type, node, eventListener);
