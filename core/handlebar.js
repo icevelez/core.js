@@ -1,4 +1,4 @@
-import { core_context, onMountQueue, onUnmountQueue, scopedMountUnmountRun, copyContextQueue, setContextQueue, pushNewContext } from "./core-internal.js";
+import { core_context, onMountQueue, onUnmountQueue, runScopedMountUnmount, copyContextQueue, setContextQueue, pushNewContext } from "./core-internal.js";
 import { effect, untrackedEffect, isSignal, makeFuncSignal, createSignal } from "./reactivity.js";
 import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "./helper-functions.js";
 import { onMount } from "./core.js";
@@ -86,9 +86,7 @@ function createNodes(template) {
 
     for (const childNode of Array.from(templateElement.content.childNodes)) preprocessTextNodes(childNode);
 
-    const fragment = document.createDocumentFragment();
-    for (const childNode of Array.from(templateElement.content.childNodes)) fragment.append(childNode);
-
+    const fragment = templateElement.content;
     const processes = preprocessNode(fragment);
     if (processes.length <= 0) return fragment;
 
@@ -109,11 +107,12 @@ function createFragment(fragment, ctx, render_slot_callbackfn) {
     return clone_fragment;
 }
 
+const eachRegex = /{{#each\s+(.+?)\s+as\s+((?:\w+|\{[\s\S]*?\}|\([\s\S]*?\)))\s*(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
+
 /**
 * @param {string} eachBlock
 */
 function parseEach(eachBlock) {
-    const eachRegex = /{{#each\s+(.+?)\s+as\s+((?:\w+|\{[\s\S]*?\}|\([\s\S]*?\)))\s*(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
     let eachConfig = {
         expression: "",
         /** @type {DocumentFragment} */
@@ -146,13 +145,13 @@ function parseEach(eachBlock) {
     return eachConfig;
 }
 
+const ifRegex = /{{#if\s+(.+?)}}([\s\S]*?){{\/if}}/g;
+const ifElseregex = /{{:else\s+if\s+(.+?)}}|{{:else}}/g;
+
 /**
 * @param {string} ifBlock
 */
 function parseIf(ifBlock) {
-    const ifRegex = /{{#if\s+(.+?)}}([\s\S]*?){{\/if}}/g;
-    const ifElseregex = /{{:else\s+if\s+(.+?)}}|{{:else}}/g;
-
     /** @type {{ block : DocumentFragment, condition : string }[]} */
     const segments = [];
 
@@ -186,27 +185,25 @@ function parseIf(ifBlock) {
                 }
             }
 
-            if (lastIndex < firstBlock.length) {
-                segments.push({
-                    condition: firstCondition,
-                    block: createNodes(firstBlock.substring(lastIndex))
-                });
-            }
+            if (lastIndex < firstBlock.length) segments.push({
+                condition: firstCondition,
+                block: createNodes(firstBlock.substring(lastIndex))
+            });
         }
     );
 
     return segments;
 }
 
+const awaitRegex = /{{#await\s+(.+?)}}([\s\S]*?){{\/await}}/g;
+const thenRegex = /\{\{:then(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
+const catchRegex = /\{\{:catch(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
+const blockRegex = /{{:then[\s\S]*?}}|{{catch[\s\S]*?}}/;
+
 /**
 * @param {string} awaitBlock
 */
 function parseAwait(awaitBlock) {
-    const awaitRegex = /{{#await\s+(.+?)}}([\s\S]*?){{\/await}}/g;
-    const thenRegex = /\{\{:then(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
-    const catchRegex = /\{\{:catch(?:\s+(\w+))?\}\}(.*?)(?={{:|$)/s;
-    const blockRegex = /{{:then[\s\S]*?}}|{{catch[\s\S]*?}}/;
-
     const awaitConfig = {
         promiseExpr: "",
         /** @type {DocumentFragment} */
@@ -333,7 +330,6 @@ function processComponents(template, imported_component_id) {
 */
 function preprocessTextNodes(node) {
     const isText = node.nodeType === Node.TEXT_NODE;
-
     if (!isText) {
         const childNodes = Array.from(node.childNodes);
         for (const child_node of childNodes) preprocessTextNodes(child_node);
@@ -513,25 +509,20 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 break;
             }
             case process_type_enum.slotInjection: {
-                if (!render_slot_callbackfn) return;
+                if (!render_slot_callbackfn) break;
                 const parent = node.parentNode;
                 parent.replaceChild(render_slot_callbackfn(), node);
                 break;
             }
             case process_type_enum.coreComponent: {
                 const component = ctx[process.component_name]?.default;
+                if (!component) throw new Error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
 
-                if (!component) {
-                    console.error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
-                    return;
-                }
-
+                /** @type {{ [key:string] : any }} */
                 const props = {};
 
                 for (const attr of node.attributes) {
-                    const attrName = attr.name;
-                    const attrValue = attr.value;
-                    props[attrName] = attrValue && attrValue.startsWith("{{") ? evaluate(attrValue.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attrValue;
+                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? evaluate(attr.value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attr.value;
                 }
 
                 if (process.slot_nodes) {
@@ -569,7 +560,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
     }
 }
 
-// make individual value of an array as a read-only Signal because for reasons I don't know why the reacitivity can't propogate back to the original signal
+// make individual value of an array as a read-only Signal because for reason, the reacitivity can't propogate back to the original signal
 const IS_READ_ONLY_SIGNAL = Symbol("is_read_only_signal");
 
 /** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
@@ -602,8 +593,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
 
     const [nodeStart, nodeEnd] = createStartEndNode('each-block');
 
-    currentNode.before(nodeStart);
-    currentNode.before(nodeEnd);
+    currentNode.before(nodeStart, nodeEnd);
 
     const blockData = createSignal(blockDatas[index]);
     blockData[IS_READ_ONLY_SIGNAL] = true;
@@ -639,15 +629,13 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     }
 
     cleanupEffect = untrackedEffect(() => {
-        const mainBlock = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(eachConfig.mainContent, childCtx));
+        const mainBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(eachConfig.mainContent, childCtx));
         nodeEnd.before(mainBlock);
 
-        if (core_context.is_mounted_to_the_DOM) {
-            mount();
-        } else {
-            core_context.onMountSet.add(mount)
-            core_context.onUnmountSet.add(unmount)
-        }
+        if (core_context.is_mounted_to_the_DOM) return mount();
+
+        core_context.onMountSet.add(mount)
+        core_context.onUnmountSet.add(unmount)
     });
 
     return block;
@@ -681,15 +669,12 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     // END OF EMPTY BLOCK
 
     function unmountEachBlock() {
-        for (const renderBlock of renderedBlocks) {
-            renderBlock.unmount();
-        };
+        for (const renderBlock of renderedBlocks) renderBlock.unmount();
         renderedBlocks = [];
     };
 
     const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
-    if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock))
-        parentOnUnmountSet.add(unmountEachBlock);
+    if (parentOnUnmountSet && !parentOnUnmountSet.has(unmountEachBlock)) parentOnUnmountSet.add(unmountEachBlock);
 
     /** @typedef {{ nodeStart:Node, nodeEnd:Node, data:{ ():any, set:(new_value:any) => void }, index : { ():number, set(new_index:number) => void }, unmount:Function }} EachBlock */
 
@@ -717,7 +702,6 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                     block.unmount();
                     block.index = null;
                 }
-
                 removeNodesBetween(startNode, endNode);
                 renderedBlocks = [];
             }
@@ -726,10 +710,9 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
             const [nodeStart, nodeEnd] = createStartEndNode('each-block');
 
-            currentNode.before(nodeStart);
-            currentNode.before(nodeEnd);
+            currentNode.before(nodeStart, nodeEnd);
 
-            const eamptyBlock = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(eachConfig.emptyContent, ctx))
+            const eamptyBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(eachConfig.emptyContent, ctx))
             nodeEnd.before(eamptyBlock);
 
             onUnmountSet.add(() => {
@@ -762,35 +745,30 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         /** @type {Map<any, EachBlock>} */
         const newRenderedBlockMap = new Map();
 
-        // FIND EXISTING BLOCK WITH THE SAME VALUE
-        // UPDATE EXISTING BLOCK WITH NEW VALUE
-        // CREATE NEW BLOCKS
+        // FIND EXISTING BLOCK WITH THE SAME VALUE, UPDATE EXISTING BLOCK WITH NEW VALUE, or CREATE NEW BLOCKS
         for (let index = 0; index < blockDatas.length; index++) {
             let block = renderedBlockMap.get(blockDatas[index]);
             let renderedBlock = renderedBlocks[index];
 
             if (block && block.data() === blockDatas[index]) {
                 if (block.index() !== index) block.index.set(index);
-                currentNode = block.nodeEnd.nextSibling;
-                newRenderedBlocks.push(block);
-                newRenderedBlockMap.set(blockDatas[index], block);
             } else if (renderedBlock) {
-                if (renderedBlock.data() !== blockDatas[index]) {
-                    renderedBlock.data.set(blockDatas[index]);
-                }
-                currentNode = renderedBlock.nodeEnd.nextSibling;
-                newRenderedBlocks.push(renderedBlock);
-                newRenderedBlockMap.set(blockDatas[index], renderedBlock);
+                if (renderedBlock.data() !== blockDatas[index]) renderedBlock.data.set(blockDatas[index]);
+                block = renderedBlock;
             } else {
                 block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
-                newRenderedBlocks.push(block);
-                newRenderedBlockMap.set(blockDatas[index], block);
-                currentNode = block.nodeEnd.nextSibling;
             }
+
+            newRenderedBlocks.push(block);
+            newRenderedBlockMap.set(blockDatas[index], block);
+            currentNode = block.nodeEnd.nextSibling;
         }
 
         // REMOVE UNUSED BLOCKS
-        let nodeStart, nodeEnd;
+        /** @type {Node} */
+        let nodeStart;
+        /** @type {Node} */
+        let nodeEnd;
 
         for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
@@ -842,7 +820,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
                 let node;
                 /** @type {Node} */
                 let next;
-                /** @type {DocumentFragment} */
+
                 let fragment = document.createDocumentFragment();
 
                 node = nextRenderBlock.nodeStart;
@@ -902,11 +880,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     const contextQueue = copyContextQueue();
 
     function mountInit() {
-        if (core_context.is_mounted_to_the_DOM) {
-            mount();
-            return;
-        }
-
+        if (core_context.is_mounted_to_the_DOM) return mount();
         core_context.onMountSet.add(mount);
         core_context.onUnmountSet.add(unmount);
     }
@@ -915,7 +889,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         unmount();
         removeNodesBetween(startNode, endNode);
 
-        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.pendingContent, ctx));
+        const nodes = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(awaitConfig.pendingContent, ctx));
         endNode.before(nodes);
 
         mountInit();
@@ -924,14 +898,13 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     const showThen = (result) => {
         unmount();
         removeNodesBetween(startNode, endNode);
-
         if (!awaitConfig.then.match) return;
 
         const originalComponentIdStack = componentIdStack
         componentIdStack = componentIdStackCopy;
 
         const resetContextQueue = setContextQueue(contextQueue);
-        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.then.content, awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx))
+        const nodes = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(awaitConfig.then.content, awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx))
         resetContextQueue();
         componentIdStack = originalComponentIdStack;
 
@@ -941,18 +914,15 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     };
 
     const showCatch = (error) => {
-        console.trace(error);
-
         unmount();
         removeNodesBetween(startNode, endNode);
-
         if (!awaitConfig.catch.match) return;
 
         const originalComponentIdStack = componentIdStack
         componentIdStack = componentIdStackCopy;
 
         const resetContextQueue = setContextQueue(contextQueue);
-        const nodes = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: error } : ctx));
+        const nodes = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: error } : ctx));
         resetContextQueue();
         componentIdStack = originalComponentIdStack;
 
@@ -961,6 +931,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         mountInit();
     };
 
+    /** @type {string} */
     let lastPromiseId;
 
     effect(() => {
@@ -971,18 +942,16 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
 
             if (promise instanceof Promise) {
                 showLoading();
-                promise
-                    .then((result) => {
-                        if (lastPromiseId !== currentPromiseId) return;
-                        showThen(result);
-                    })
-                    .catch(showCatch);
+                promise.then((result) => {
+                    if (lastPromiseId == currentPromiseId) showThen(result);
+                }).catch(showCatch);
             } else {
                 if (lastPromiseId !== currentPromiseId) return;
                 showThen(promise);
             }
         } catch (err) {
             showCatch(err);
+            console.trace(err);
         }
     })
 }
@@ -1042,7 +1011,7 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
             unmount();
             removeNodesBetween(startNode, endNode);
 
-            const segmentBlock = scopedMountUnmountRun(onMountSet, onUnmountSet, () => createFragment(condition.block, ctx))
+            const segmentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(condition.block, ctx))
             endNode.before(segmentBlock);
 
             if (core_context.is_mounted_to_the_DOM) return mount();
@@ -1069,8 +1038,6 @@ function applyComponents(component, startNode, endNode, ctx) {
     /** @type {{ [key:string] : any }} */
     const props = {};
     const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-
-    /** @type {RegExpExecArray | null} */
     let match;
 
     while ((match = regex.exec(component.attrStr)) !== null) {
@@ -1244,9 +1211,7 @@ export const coreEventListener = Object.freeze({
             event_node_weakmap.set(node, funcs);
             delegated_events.set(event_name, event_node_weakmap);
 
-            window.addEventListener(event_name, (e) => {
-                match_delegated_node(event_node_weakmap, e, e.target);
-            });
+            window.addEventListener(event_name, (e) => match_delegated_node(event_node_weakmap, e, e.target));
 
             return () => this.remove(event_name, node, func);
         }

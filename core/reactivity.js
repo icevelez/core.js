@@ -323,8 +323,6 @@ function wrap(obj) {
             return wrap(value);
         },
         set(target, key, new_value) {
-            // console.log('set', target, key, new_value);
-
             let unwrapped_value = new_value;
 
             if (isObject(new_value)) {

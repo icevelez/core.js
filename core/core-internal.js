@@ -35,7 +35,7 @@ export const onUnmountQueue = [];
  * @param {Set<Function>} onUnmountSet
  * @param {() => T} fn
  */
-export function scopedMountUnmountRun(onMountSet, onUnmountSet, fn) {
+export function runScopedMountUnmount(onMountSet, onUnmountSet, fn) {
     onUnmountQueue.push(onUnmountSet);
     onMountQueue.push(onMountSet);
     const value = fn();
