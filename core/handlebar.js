@@ -420,7 +420,7 @@ function preprocessNode(node) {
         const marker_type = node.dataset.directive;
         const marker_id = node.dataset.markerId;
         const payload = markedNodeCache.get(marker_id);
-        if (!payload) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
+        if (!payload) throw console.error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
         processes.push({ type: process_type_enum.markedBlocks, marker_type, payload });
         return processes;
     }
@@ -516,7 +516,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
             case process_type_enum.coreComponent: {
                 const component = ctx[process.component_name]?.default;
-                if (!component) throw new Error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
+                if (!component) throw console.error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
 
                 /** @type {{ [key:string] : any }} */
                 const props = {};
@@ -1027,10 +1027,10 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
  */
 function applyComponents(component, startNode, endNode, ctx) {
     const components = imported_components.get(component.import_id);
-    if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
+    if (!components) throw console.error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
     let componentFunc = components[component.tag];
-    if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
+    if (!componentFunc) throw console.error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
     /** @type {{ [key:string] : any }} */
     const props = {};
@@ -1102,8 +1102,8 @@ function applyEventListener(node, process, ctx) {
  */
 function applyDirectiveUse(node, process, ctx) {
     const func = ctx[process.func_name];
-    if (!func) throw new Error(`use: directive "${process.func_name}" not found.`);
-    if (typeof func !== "function") throw new Error(`function "${process.name}" is not a function`);
+    if (!func) throw console.error(`use: directive "${process.func_name}" not found.`);
+    if (typeof func !== "function") throw console.error(`function "${process.name}" is not a function`);
 
     const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     const onMountSet = onMountQueue[onMountQueue.length - 1];
