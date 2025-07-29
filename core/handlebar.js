@@ -607,26 +607,20 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
         data: blockData,
     };
 
-    let childCtx;
+    const childCtx = (eachConfig.blockVars.length > 0) ? {
+        ...ctx,
+        ...(eachConfig.blockVars.reduce((obj, key) => {
+            obj[key] = makeFuncSignal(() => blockData()[key]);
+            obj[key].set = (v) => blockData()[key] = v;
+            obj[key].update = (fn) => blockData()[key] = fn(blockData[key])
+            return obj;
+        }, {})),
+    } : {
+        ...ctx,
+        [eachConfig.blockVar]: blockData,
+    };
 
-    if (eachConfig.blockVars.length > 0) {
-        childCtx = {
-            ...ctx,
-            ...(eachConfig.blockVars.reduce((obj, key) => {
-                obj[key] = makeFuncSignal(() => blockData()[key]);
-                obj[key].set = (v) => blockData()[key] = v;
-                obj[key].update = (fn) => blockData()[key] = fn(blockData[key])
-                return obj;
-            }, {})),
-            ...(eachConfig.indexVar ? { [eachConfig.indexVar]() { return blockIndex() } } : {})
-        };
-    } else {
-        childCtx = {
-            ...ctx,
-            [eachConfig.blockVar]: blockData,
-            ...(eachConfig.indexVar ? { [eachConfig.indexVar]() { return blockIndex() } } : {})
-        };
-    }
+    if (eachConfig.indexVar) childCtx[eachConfig.indexVar] = () => blockIndex();
 
     cleanupEffect = untrackedEffect(() => {
         const mainBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(eachConfig.mainContent, childCtx));
