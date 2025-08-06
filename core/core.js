@@ -8,8 +8,7 @@ let isMounted = false;
 * @param {string} template_url
 */
 export async function load(template_url) {
-    const response = await fetch(template_url);
-    return response.text();
+    return fetch(template_url).then((response) => response.text());
 }
 
 /**
