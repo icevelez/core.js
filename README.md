@@ -4,7 +4,7 @@ A Framework built for the web
 
 ---
 
-Version: 0.2.5
+Version: 0.2.6
 
 License: MIT
 
