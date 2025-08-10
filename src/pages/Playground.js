@@ -4,12 +4,14 @@ import { createSignal } from "../../core/reactivity.js";
 
 import TestComponent from "../components/TestComponent.js";
 import ExampleSub from "../components/ExampleSub.js";
+import Comp from "../components/Comp.js";
 
 export default component({
     template: await load("src/pages/Playground.html"),
     components: {
         TestComponent,
         ExampleSub,
+        Comp,
     }
 }, class {
 
@@ -18,6 +20,11 @@ export default component({
 
     constructor() {
         setContext('root-app', 'not counter');
+
+        setTimeout(() => {
+            this.names().unshift("Bruh")
+            console.log("unshift")
+        }, 10000)
     }
 
     addName = (event) => {

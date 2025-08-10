@@ -14,9 +14,7 @@
 </div>
 <div>
     {{#each names() as name, i}}
-        <h1>{{ i()+1 }}. {{name().toUpperCase() }}</h1>
-        <button onclick="{{ () => { names().splice(i(), 1) } }}">Delete</button>
-        <input type="text" bind:value="names()[i()]">
+        <Comp names="{{ names }}" i="{{ i() }}" name="{{ name() }}"/>
     {{:empty}}
         <h1>Empty list</h1>
     {{/each}}

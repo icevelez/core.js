@@ -33,13 +33,6 @@ if (dev_mode_on) window.__corejs__ = {
 }
 
 /**
- * Used to store and keep track of components used in a tree to check for any circular dependency by finding if a component id is already in the stack.
- * If it detects its own id in the stack it means it was already called. See visualization below
- * @type {Set<number>}
- */
-let componentIdStack = new Set();
-
-/**
 * @param {{ template : string, components : Record<string, Function> }} options
 * @param {Object} Model anonymous class that encapsulate data and logic
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
@@ -55,9 +48,6 @@ export function component(options, Model = class { }) {
     if (Model && Model.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
-        if (componentIdStack.has(components_id)) throw new Error("cyclic component dependency detected!")
-        componentIdStack.add(components_id);
-
         const current_context = pushNewContext();
         let resetContext;
 
@@ -67,8 +57,6 @@ export function component(options, Model = class { }) {
         const processed_fragment = createFragment(fragment, ctx, render_slot_callbackfn);
 
         onMount(() => resetContext());
-
-        componentIdStack.delete(components_id);
 
         return processed_fragment;
     }
@@ -853,8 +841,6 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     /** @type {Set<Function>} */
     const onMountSet = new Set();
 
-    const componentIdStackCopy = new Set(componentIdStack);
-
     function unmount() {
         for (const unmount of onUnmountSet) unmount();
         onUnmountSet.clear();
@@ -891,13 +877,9 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         removeNodesBetween(startNode, endNode);
         if (!awaitConfig.then.match) return;
 
-        const originalComponentIdStack = componentIdStack
-        componentIdStack = componentIdStackCopy;
-
         const resetContextQueue = setContextQueue(contextQueue);
         const nodes = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(awaitConfig.then.content, awaitConfig.then.var ? { ...ctx, [awaitConfig.then.var]: result } : ctx))
         resetContextQueue();
-        componentIdStack = originalComponentIdStack;
 
         endNode.before(nodes);
 
@@ -909,13 +891,9 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         removeNodesBetween(startNode, endNode);
         if (!awaitConfig.catch.match) return;
 
-        const originalComponentIdStack = componentIdStack
-        componentIdStack = componentIdStackCopy;
-
         const resetContextQueue = setContextQueue(contextQueue);
         const nodes = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(awaitConfig.catch.content, awaitConfig.catch.var ? { ...ctx, [awaitConfig.catch.var]: error } : ctx));
         resetContextQueue();
-        componentIdStack = originalComponentIdStack;
 
         endNode.before(nodes);
 
@@ -1031,21 +1009,50 @@ function applyComponents(component, startNode, endNode, ctx) {
     const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
     let match;
 
+    /** @type {{ key:string, value:string }[]} */
+    let dynamicProps = [];
+
     while ((match = regex.exec(component.attrStr)) !== null) {
         const [_, key, value] = match;
-        props[key] = value && value.startsWith('{{') ? evaluate(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : value;
+        if (value && value.startsWith('{{')) {
+            dynamicProps.push({ key, value: value.match(/^{{\s*(.+?)\s*}}$/)[1] });
+        } else {
+            props[key] = value;
+        }
     }
 
-    let componentBlock;
+    /** @type {Set<Function>} */
+    const onUnmountSet = new Set();
+    /** @type {Set<Function>} */
+    const onMountSet = new Set();
 
-    if (component.slot_node) {
-        const renderSlotCallbackfn = () => createFragment(component.slot_node, ctx);
-        componentBlock = componentFunc(props, renderSlotCallbackfn)
-    } else {
-        componentBlock = componentFunc(props);
+    function unmount() {
+        for (const unmount of onUnmountSet) unmount();
+        onUnmountSet.clear();
+    };
+
+    function mount() {
+        for (const mount of onMountSet) mount();
+        onMountSet.clear();
     }
 
-    endNode.before(componentBlock);
+    effect(() => {
+        unmount();
+        removeNodesBetween(startNode, endNode);
+
+        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = evaluate(dynamicProp.value, ctx)
+
+        let componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
+            return componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null);
+        })
+
+        endNode.before(componentBlock);
+
+        if (core_context.is_mounted_to_the_DOM) return mount();
+
+        core_context.onMountSet.add(mount)
+        core_context.onUnmountSet.add(unmount)
+    })
 }
 
 /**
