@@ -294,12 +294,10 @@ function processComponents(template, imported_component_id) {
     template = template.replace(componentRegex, (match, tag, attrStr, _, slot_content) => {
         if (match.startsWith("<Core:slot")) return `<template data-directive="slot"></template>`;
         if (match.startsWith("<Core:component")) {
-            if (slot_content) {
-                const slot_id = `slot-${makeId(6)}`;
-                slotCache.set(slot_id, createNodes(slot_content || ""))
-                return `<template data-directive="core-component" data-slot-id="${slot_id}" ${attrStr.slice(10)}></template>`;
-            }
-            return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
+            if (!slot_content) return `<template data-directive="core-component" ${attrStr.slice(10)}></template>`;
+            const slot_id = `slot-${makeId(6)}`;
+            slotCache.set(slot_id, createNodes(slot_content || ""))
+            return `<template data-directive="core-component" data-slot-id="${slot_id}" ${attrStr.slice(10)}></template>`;
         }
 
         const marker_id = `${directive}-${makeId(8)}`;
@@ -363,7 +361,6 @@ const process_type_enum = {
 * @param {Node} node
 */
 function preprocessNode(node) {
-    /** @type {((node:Node, ctx:any, render_slot_callbackfn:Function) => void)[]} */
     const processes = [];
 
     const isStyle = node instanceof HTMLStyleElement;
@@ -416,17 +413,15 @@ function preprocessNode(node) {
     if (node.attributes) {
         for (const attr of node.attributes) {
             const attrName = attr.name.toLowerCase();
-            const attrValue = attr.value;
 
             if (attrName.startsWith('use:')) {
-                const match = attrValue.match(/^{{\s*(.+?)\s*}}$/);
+                const match = attr.value.match(/^{{\s*(.+?)\s*}}$/);
                 const func_name = attrName.slice(4);
                 const func_attr = !match ? "" : match[1];
 
                 processes.push({ type: process_type_enum.directiveUse, func_name, func_attr });
                 node.removeAttribute(attrName);
             } else if (attrName.startsWith('bind:')) {
-
                 const input_type = attrName.slice(5);
                 const event_type_dic = {
                     "checked": node.type === "date" ? "change" : "click",
@@ -434,20 +429,19 @@ function preprocessNode(node) {
                 };
                 const matched_event_type = event_type_dic[input_type] ? event_type_dic[input_type] : input_type;
 
-                processes.push({ type: process_type_enum.directiveBind, event_type: matched_event_type, input_type, value: attrValue });
+                processes.push({ type: process_type_enum.directiveBind, event_type: matched_event_type, input_type, value: attr.value });
                 node.removeAttribute(attrName);
             } else if (attrName.startsWith('on')) {
-                const match = attrValue.match(/^{{\s*(.+?)\s*}}$/);
+                const match = attr.value.match(/^{{\s*(.+?)\s*}}$/);
                 const expr = !match ? "" : match[1];
                 const event_type = attrName.slice(2);
 
                 processes.push({ type: process_type_enum.eventListener, event_type, expr });
                 node.removeAttribute(attrName);
-            } else if (attrValue.includes('{{')) {
-                let matches = [];
-                let exprs = [];
-                attrValue.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
-                processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attrValue });
+            } else if (attr.value.includes('{{')) {
+                let matches = [], exprs = [];
+                attr.value.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
+                processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attr.value });
             }
         };
     }
@@ -461,7 +455,7 @@ function preprocessNode(node) {
         processes.push({ type: process_type_enum.children, processes: sub_process, child_node_index: i });
     }
 
-    // the `.reverse()` is important to keep node index in sync when applying the processes
+    // the `.reverse()` is important to keep node index in sync when applying processes
     return processes.reverse();
 }
 
