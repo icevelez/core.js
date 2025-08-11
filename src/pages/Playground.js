@@ -24,7 +24,7 @@ export default component({
         setTimeout(() => {
             this.names().unshift("Bruh")
             console.log("unshift")
-        }, 10000)
+        }, 6000)
     }
 
     addName = (event) => {

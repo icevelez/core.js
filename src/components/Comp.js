@@ -4,13 +4,17 @@ import { component } from "../../core/handlebar.js";
 
 export default component({
     template: `
-    <h1>{{ i+1 }}. {{name.toUpperCase() }}</h1>
-    <button onclick="{{ () => { names().splice(i, 1); } }}">Delete</button>
-    <input type="text" bind:value="name">
+    <div>
+        <h1>{{ i()+1 }}. {{name().toUpperCase() }}</h1>
+        <button onclick="{{ () => { names().splice(i(), 1); } }}">Delete</button>
+        <input type="text" bind:value="names()[i()]">
+    </div>
     `
 }, class {
 
     constructor(props) {
+        console.log("render comp");
+
         this.names = props.names;
         this.i = props.i;
         this.name = props.name;

@@ -229,7 +229,7 @@ function parseAwait(awaitBlock) {
 
             const catchMatch = block.match(catchRegex);
             if (catchMatch) {
-                const [_, catchVar, catchContent] = thenMatch;
+                const [_, catchVar, catchContent] = catchMatch;
                 awaitConfig.catch = { match: true, var: catchVar, content: createNodes(catchContent || "") };
             }
 

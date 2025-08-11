@@ -14,7 +14,7 @@
 </div>
 <div>
     {{#each names() as name, i}}
-        <Comp names="{{ names }}" i="{{ i() }}" name="{{ name() }}"/>
+        <Comp names="{{ names }}" i="{{ i }}" name="{{ name }}"/>
     {{:empty}}
         <h1>Empty list</h1>
     {{/each}}
