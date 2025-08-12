@@ -9,7 +9,7 @@ let is_notifying_subscribers = false;
 * @param {Set<Function>} subscribers
 */
 function notifySubscribers(subscribers) {
-    for (let subscriber of subscribers) {
+    for (const subscriber of subscribers) {
         if (subscriber_queue.has(subscriber)) continue;
         subscriber_queue.add(subscriber);
     }
@@ -18,7 +18,7 @@ function notifySubscribers(subscribers) {
     is_notifying_subscribers = true;
 
     queueMicrotask(() => {
-        for (let subscriber of subscriber_queue) subscriber();
+        for (const subscriber of subscriber_queue) subscriber();
         subscriber_queue.clear();
         is_notifying_subscribers = false;
     });
@@ -45,7 +45,7 @@ export function isSignal(input) {
     return input && typeof input === "function" && input[IS_SIGNAL];
 }
 
-const objectSubscriberCache = new WeakMap();
+// const objectSubscriberCache = new WeakMap();
 
 /**
  * @template {any} T
@@ -57,7 +57,7 @@ export function createSignal(initial_value = undefined) {
     const subscribers = new Set();
 
     if (isObject(initial_value)) {
-        objectSubscriberCache.set(initial_value, subscribers);
+        // objectSubscriberCache.set(initial_value, subscribers);
         value = createDeepProxy(initial_value)
     } else {
         value = initial_value;
@@ -341,9 +341,6 @@ function wrap(obj) {
 
             const subscribers = SUBSCRIBERS.getSet(target, key);
             if (subscribers.size > 0) notifySubscribers(subscribers);
-
-            const parentSubscribers = objectSubscriberCache.get(target);
-            if (parentSubscribers && parentSubscribers.size > 0) notifySubscribers(parentSubscribers);
 
             return true;
         },

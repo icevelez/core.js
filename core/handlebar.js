@@ -720,8 +720,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
         // FIND EXISTING BLOCK WITH THE SAME VALUE, UPDATE EXISTING BLOCK WITH NEW VALUE, or CREATE NEW BLOCKS
         for (let index = 0; index < blockDatas.length; index++) {
+            const renderedBlock = renderedBlocks[index];
             let block = renderedBlockMap.get(blockDatas[index]);
-            let renderedBlock = renderedBlocks[index];
 
             if (block && block.data() === blockDatas[index]) {
                 if (block.index() !== index) block.index.set(index);
@@ -898,24 +898,19 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     let lastPromiseId;
 
     effect(() => {
-        try {
-            const currentPromiseId = makeId(6);
-            lastPromiseId = currentPromiseId;
-            const promise = evaluate(awaitConfig.promiseExpr, ctx);
+        const currentPromiseId = makeId(6);
+        lastPromiseId = currentPromiseId;
+        const promise = evaluate(awaitConfig.promiseExpr, ctx);
 
-            if (promise instanceof Promise) {
-                showLoading();
-                promise.then((result) => {
-                    if (lastPromiseId == currentPromiseId) showThen(result);
-                }).catch(showCatch);
-            } else {
-                if (lastPromiseId !== currentPromiseId) return;
-                showThen(promise);
-            }
-        } catch (err) {
-            showCatch(err);
-            console.trace(err);
+        if (!(promise instanceof Promise)) {
+            if (lastPromiseId === currentPromiseId) showThen(promise);
+            return;
         }
+
+        showLoading();
+        promise.then((result) => {
+            if (lastPromiseId == currentPromiseId) showThen(result);
+        }).catch(showCatch);
     })
 }
 
@@ -1036,7 +1031,7 @@ function applyComponents(component, startNode, endNode, ctx) {
 
         for (const dynamicProp of dynamicProps) props[dynamicProp.key] = evaluate(dynamicProp.value, ctx)
 
-        let componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
+        const componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
             return componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null);
         })
 
@@ -1058,8 +1053,7 @@ function applyTextInterpolation(node, process, ctx) {
     let prevContent;
     effect(() => {
         let textContent = evaluate(process.expr, ctx);
-        if (prevContent === textContent) return;
-        node.textContent = prevContent = textContent;
+        if (prevContent !== textContent) node.textContent = prevContent = textContent;
     })
 }
 
@@ -1073,8 +1067,7 @@ function applyAttributeInterpolation(node, process, ctx) {
     effect(() => {
         let new_attr = process.value;
         for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
-        if (prevAttr === new_attr) return;
-        node.setAttribute(process.attr_name, new_attr);
+        if (prevAttr !== new_attr) node.setAttribute(process.attr_name, new_attr);
     })
 }
 
@@ -1215,7 +1208,6 @@ export const coreEventListener = Object.freeze({
         }
 
         funcs.add(func);
-
         return () => this.remove(event_name, node, func);
     },
     /**
