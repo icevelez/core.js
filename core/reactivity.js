@@ -337,7 +337,17 @@ function wrap(obj) {
                 SUBSCRIBERS.getMap(target).delete(key);
             }
 
+            let arrLen;
+            if (Array.isArray(target) && target[key] === undefined) arrLen = target.length;
+
             target[key] = unwrapped_value;
+
+            // trigger subscribers of an array when mutating an index that has undefined value
+            // like `arr = []; arr[1] = "new_value";` trigger the array as if it was a `arr.push("new_value")`
+            if (Array.isArray(target) && arrLen >= 0 && arrLen !== target.length) {
+                const parentArrSubscribers = SUBSCRIBERS.getSet(target, 'length');
+                if (parentArrSubscribers.size > 0) notifySubscribers(parentArrSubscribers);
+            }
 
             const subscribers = SUBSCRIBERS.getSet(target, key);
             if (subscribers.size > 0) notifySubscribers(subscribers);

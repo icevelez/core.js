@@ -21,10 +21,10 @@ export default component({
     constructor() {
         setContext('root-app', 'not counter');
 
-        setTimeout(() => {
-            this.names().unshift("Bruh")
-            console.log("unshift")
-        }, 6000)
+        // setTimeout(() => {
+        //     this.names().unshift("Bruh")
+        //     console.log("unshift")
+        // }, 6000)
     }
 
     addName = (event) => {

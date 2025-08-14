@@ -69,7 +69,7 @@ export function removeNodesBetween(startNode, endNode) {
     }
 }
 
-const use_comment = true;
+const use_comment = false;
 
 export function createStartEndNode(name = 'item') {
     const blockStart = use_comment ? document.createComment(`${name}-start`) : document.createTextNode("");

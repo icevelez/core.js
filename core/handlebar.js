@@ -1,6 +1,6 @@
 import { core_context, onMountQueue, onUnmountQueue, runScopedMountUnmount, copyContextQueue, setContextQueue, pushNewContext } from "./core-internal.js";
 import { effect, untrackedEffect, isSignal, makeFuncSignal, createSignal } from "./reactivity.js";
-import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks } from "./helper-functions.js";
+import { createStartEndNode, makeId, removeNodesBetween, parseOuterBlocks, isObject } from "./helper-functions.js";
 import { onMount } from "./core.js";
 
 const dev_mode_on = true;
@@ -573,7 +573,7 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
         onMountSet.clear();
     }
 
-    const [nodeStart, nodeEnd] = createStartEndNode('each-block');
+    const [nodeStart, nodeEnd] = createStartEndNode('each-block-' + index);
 
     currentNode.before(nodeStart, nodeEnd);
 
@@ -616,6 +616,8 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
 
     return block;
 }
+
+const eachBlockKey = (obj, i) => isObject(obj) ? obj : i;
 
 /**
  * @param {EachConfig} eachConfig
@@ -709,7 +711,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             for (let index = 0; index < blockDatas.length; index++) {
                 const block = createEachBlock(eachConfig, blockDatas, index, ctx, currentNode);
                 renderedBlocks.push(block);
-                renderedBlockMap.set(blockDatas[index], block);
+                renderedBlockMap.set(eachBlockKey(blockDatas[index], index), block);
                 currentNode = block.nodeEnd.nextSibling;
             }
             return;
@@ -721,7 +723,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         // FIND EXISTING BLOCK WITH THE SAME VALUE, UPDATE EXISTING BLOCK WITH NEW VALUE, or CREATE NEW BLOCKS
         for (let index = 0; index < blockDatas.length; index++) {
             const renderedBlock = renderedBlocks[index];
-            let block = renderedBlockMap.get(blockDatas[index]);
+            let block = renderedBlockMap.get(eachBlockKey(blockDatas[index], index));
 
             if (block && block.data() === blockDatas[index]) {
                 if (block.index() !== index) block.index.set(index);
@@ -733,7 +735,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             }
 
             newRenderedBlocks.push(block);
-            newRenderedBlockMap.set(blockDatas[index], block);
+            newRenderedBlockMap.set(eachBlockKey(blockDatas[index], index), block);
             currentNode = block.nodeEnd.nextSibling;
         }
 
@@ -746,7 +748,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
         for (let i = 0; i < renderedBlocks.length; i++) {
             const renderBlock = renderedBlocks[i];
 
-            if (newRenderedBlockMap.get(renderBlock.data())) {
+            if (newRenderedBlockMap.get(eachBlockKey(renderBlock.data(), i))) {
                 if (!nodeStart && !nodeEnd) continue;
                 removeNodesBetween(nodeStart, nodeEnd);
                 nodeStart.remove();
@@ -760,6 +762,14 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
             if (!nodeStart) nodeStart = renderBlock.nodeStart;
             nodeEnd = renderBlock.nodeEnd;
+        }
+
+        if (nodeStart && nodeEnd) {
+            removeNodesBetween(nodeStart, nodeEnd);
+            nodeStart.remove();
+            nodeEnd.remove();
+            nodeStart = null;
+            nodeEnd = null;
         }
 
         renderedBlockMap.clear();
