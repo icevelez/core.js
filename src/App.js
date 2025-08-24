@@ -17,6 +17,7 @@ export default component({
     name = createSignal('User');
 
     constructor() {
+        console.log("render app");
         setContext('root-app', this.counter);
     }
 });

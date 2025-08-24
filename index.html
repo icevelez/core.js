@@ -1,10 +1,26 @@
 <html>
     <head>
         <title>App</title>
-        <!-- <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script> -->
         <script type="module" src="index.js" defer></script>
-        <!-- <script type="module" src="./testing/play.js" defer></script> -->
-        <!-- <script type="module" src="./core/experimental/depth-parser.js" defer></script> -->
+        <!-- <script type="module">
+            import { createSignal, effect } from "./core/reactivity.js";
+
+            const app = document.getElementById("app");
+            const input = document.createElement("input");
+            const header = document.createElement("h1");
+            app.append(input, header);
+
+            const message = createSignal("");
+
+            input.addEventListener('input', (event) => {
+                message.set(event.target.value);
+            })
+
+            effect(() => {
+                header.innerText = `${message()}`;
+            })
+        </script> -->
+        <!-- <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script> -->
     </head>
     <body>
         <div id="app"></div>

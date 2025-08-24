@@ -1,4 +1,4 @@
-import { getContext, load, onMount, onUnmount, setContext } from "../../core/core.js";
+import { getContext, load, setContext } from "../../core/core.js";
 import { component } from "../../core/handlebar.js";
 import { createSignal } from "../../core/reactivity.js";
 
@@ -19,12 +19,8 @@ export default component({
     names = createSignal(['ice', 'ian', 'takeru', 'piox']);
 
     constructor() {
+        console.log("render playground");
         setContext('root-app', 'not counter');
-
-        // setTimeout(() => {
-        //     this.names().unshift("Bruh")
-        //     console.log("unshift")
-        // }, 6000)
     }
 
     addName = (event) => {
