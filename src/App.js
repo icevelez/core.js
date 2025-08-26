@@ -1,4 +1,4 @@
-import { load, setContext } from "../core/core.js";
+import { load, onMount, setContext } from "../core/core.js";
 import { component } from "../core/handlebar.js";
 import { createDerived, createSignal } from "../core/reactivity.js";
 
@@ -17,7 +17,11 @@ export default component({
     name = createSignal('User');
 
     constructor() {
-        console.log("render app");
-        setContext('root-app', this.counter);
+        setContext('counter', this.counter);
+        setContext('name', this.name);
+
+        onMount(() => {
+            console.log("render app");
+        })
     }
 });

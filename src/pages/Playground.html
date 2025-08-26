@@ -2,6 +2,12 @@
     <p>Counter from Parent Component: {{ counter() }}</p>
     <button onclick="{{ () => counter.set(counter()+1) }}">Click Me</button>
     <br><br>
+    <p>Name state from the Parent Component: {{ name() }}</p>
+    <div>
+        <label>Input name</label>
+        <input type="test" bind:value="name"/>
+    </div>
+    <br><br>
 </div>
 <div>
     <label>Add Name</label>

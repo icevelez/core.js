@@ -1,4 +1,4 @@
-import { getContext, onMount, onUnmount, setContext } from "../../core/core.js";
+import { onMount } from "../../core/core.js";
 import { createSignal, effect } from "../../core/reactivity.js";
 import { component } from "../../core/handlebar.js";
 
@@ -11,6 +11,10 @@ export default component({
 
     name = createSignal("TestComponent");
 
-    constructor() { }
+    constructor() {
+        onMount(() => {
+            console.log("render test-component");
+        })
+    }
 
 });

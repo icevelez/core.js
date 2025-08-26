@@ -12,6 +12,10 @@ export default component({
     name = createSignal("");
 
     constructor() {
-        this.name.set(getContext('root-app'));
+        this.name.set(getContext('name'));
+
+        onMount(() => {
+            console.log("render example-sub");
+        })
     }
 });

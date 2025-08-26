@@ -1,5 +1,5 @@
 /ssl
-/src/unused
+.unused
 go.mod
 go.sum
 .index.css

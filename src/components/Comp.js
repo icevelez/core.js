@@ -1,4 +1,4 @@
-import { getContext } from "../../core/core.js";
+import { getContext, onMount } from "../../core/core.js";
 import { createSignal } from "../../core/reactivity.js";
 import { component } from "../../core/handlebar.js";
 
@@ -13,10 +13,12 @@ export default component({
 }, class {
 
     constructor(props) {
-        console.log("render comp");
-
         this.names = props.names;
         this.i = props.i;
         this.name = props.name;
+
+        onMount(() => {
+            console.log("render comp");
+        });
     }
 });
