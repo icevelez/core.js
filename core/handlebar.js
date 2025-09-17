@@ -411,7 +411,7 @@ function preprocessNode(node) {
     }
 
     if (node.attributes) {
-        for (const attr of node.attributes) {
+        for (const attr of Array.from(node.attributes)) {
             const attrName = attr.name.toLowerCase();
 
             if (attrName.startsWith('use:')) {
@@ -1081,6 +1081,32 @@ function applyAttributeInterpolation(node, process, ctx) {
     })
 }
 
+const nonBubblingEvents = new Set([
+    // Focus
+    "focus",
+    "blur",
+    // Mouse
+    "mouseenter",
+    "mouseleave",
+    // Resource loading
+    "load",
+    "unload",
+    "error",
+    "abort",
+    // Scrolling
+    "scroll",
+    // Media
+    "play",
+    "playing",
+    "pause",
+    "ended",
+    // Animation/Transition
+    "animationstart",
+    "animationend",
+    "animationiteration",
+    "transitionend"
+]);
+
 /**
  * @param {Node} node
  * @param {{ expr : string, event_type : string }} process
@@ -1089,6 +1115,10 @@ function applyAttributeInterpolation(node, process, ctx) {
 function applyEventListener(node, process, ctx) {
     effect(() => {
         const func = evaluate(process.expr, ctx);
+        if (nonBubblingEvents.has(process.event_type)) {
+            node.addEventListener(process.event_type, func);
+            return () => node.removeEventListener(process.event_type, func);
+        }
         return coreEventListener.add(process.event_type, node, func);
     })
 }
@@ -1181,18 +1211,18 @@ export function evaluate(expr, ctx) {
 }
 
 /**
- * NOTE: this will create a single global listener but that global listener will stay persistent through out the app life-cycle,
- * it will not be dispose of even if there are no node listener because it's using a `WeakMap`
- * there's no way of knowing if there's zero nodes listening, so there's no way of disposing the global listener
+ * NOTE: this will create a single global listener of a specific event (like 'click' or 'keyup')
+ * but that global listener will stay persistent through out the app life-cycle,
+ * it will not be dispose of even if there are no node listener
  *
- * I want to dispose the global listener if there's zero nodes listening but there's no way of doing that so that's the drawback for now
- * until I come up with another solution
+ * with the exception for 'onerror' event
  */
 export const coreEventListener = Object.freeze({
     /**
      * @param {string} event_name
      * @param {Node} node
      * @param {Function} func
+     * @returns {() => void} dispose event listener
      */
     add: function (event_name, node, func) {
         if (typeof func !== "function") throw new Error("func is not a function");
