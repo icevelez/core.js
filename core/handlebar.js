@@ -507,12 +507,8 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                     props[attr.name] = attr.value && attr.value.startsWith("{{") ? evaluate(attr.value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attr.value;
                 }
 
-                if (process.slot_nodes) {
-                    const renderSlotCallbackfn = () => createFragment(process.slot_nodes, ctx);
-                    parent.replaceChild(component(props, renderSlotCallbackfn), node);
-                } else {
-                    parent.replaceChild(component(props), node);
-                }
+                const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
+                parent.replaceChild(component(props, renderSlotCallbackfn), node);
                 break;
             }
             case process_type_enum.markedBlocks: {
@@ -520,14 +516,19 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 const fragment = document.createDocumentFragment();
                 fragment.append(nodeStart, nodeEnd);
 
-                if (process.marker_type === "await") {
-                    applyAwaitBlock(process.payload, nodeStart, nodeEnd, ctx);
-                } else if (process.marker_type === "if") {
-                    applyIfBlock(process.payload, nodeStart, nodeEnd, ctx);
-                } else if (process.marker_type === "each") {
-                    applyEachBlock(process.payload, nodeStart, nodeEnd, ctx)
-                } else if (process.marker_type === "component") {
-                    applyComponents(process.payload, nodeStart, nodeEnd, ctx);
+                switch (process.marker_type) {
+                    case "await":
+                        applyAwaitBlock(process.payload, nodeStart, nodeEnd, ctx);
+                        break;
+                    case "if":
+                        applyIfBlock(process.payload, nodeStart, nodeEnd, ctx);
+                        break;
+                    case "each":
+                        applyEachBlock(process.payload, nodeStart, nodeEnd, ctx);
+                        break;
+                    case "component":
+                        applyComponents(process.payload, nodeStart, nodeEnd, ctx);
+                        break;
                 }
 
                 parent.replaceChild(fragment, node);
@@ -1211,11 +1212,8 @@ export function evaluate(expr, ctx) {
 }
 
 /**
- * NOTE: this will create a single global listener of a specific event (like 'click' or 'keyup')
- * but that global listener will stay persistent through out the app life-cycle,
- * it will not be dispose of even if there are no node listener
- *
- * with the exception for 'onerror' event
+ * NOTE: this will create a single global listener of a specific event(like 'click' or 'keyup'
+ * but that global listener will stay persistent through out the app life-cycle, it will not be dispose of
  */
 export const coreEventListener = Object.freeze({
     /**
