@@ -493,6 +493,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             case process_type_enum.slotInjection: {
                 if (!render_slot_callbackfn) break;
                 const parent = node.parentNode;
+                node.innerHTML = "";
                 parent.replaceChild(render_slot_callbackfn(), node);
                 break;
             }
@@ -508,6 +509,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 }
 
                 const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
+                node.innerHTML = "";
                 parent.replaceChild(component(props, renderSlotCallbackfn), node);
                 break;
             }
@@ -531,6 +533,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                         break;
                 }
 
+                node.innerHTML = "";
                 parent.replaceChild(fragment, node);
                 break;
             }
@@ -688,8 +691,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
             currentNode.before(nodeStart, nodeEnd);
 
-            const eamptyBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(eachConfig.emptyContent, ctx))
-            nodeEnd.before(eamptyBlock);
+            const emptyBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => createFragment(eachConfig.emptyContent, ctx))
+            nodeEnd.before(emptyBlock);
 
             onUnmountSet.add(() => {
                 removeNodesBetween(nodeStart, nodeEnd);
@@ -1126,9 +1129,10 @@ const nonBubblingEvents = new Set([
  * @param {any} ctx
  */
 function applyEventListener(node, process, ctx) {
+    const isNonBubbling = nonBubblingEvents.has(process.event_type);
     effect(() => {
         const func = evaluate(process.expr, ctx);
-        if (nonBubblingEvents.has(process.event_type)) {
+        if (isNonBubbling) {
             node.addEventListener(process.event_type, func);
             return () => node.removeEventListener(process.event_type, func);
         }
