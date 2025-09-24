@@ -11,6 +11,8 @@ export default component({
 
     Router = Router;
 
+    isDisabled = createSignal(true);
+
     counter = createSignal(0);
     double = createDerived(() => this.counter() * 2);
 

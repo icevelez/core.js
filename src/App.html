@@ -25,4 +25,7 @@
         <a href="#/benchmark">Go to benchmark page</a>
         <a href="#/playground">Go to playground page</a>
     </div>
+    <input value="{{ counter() }}">
+    <button onclick="{{() => isDisabled.set(!isDisabled()) }}">Click Me</button>
+    <button disabled="{{ isDisabled() }}">Am I disabled</button>
 {{/if}}
