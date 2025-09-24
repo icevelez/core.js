@@ -38,14 +38,14 @@ if (dev_mode_on) window.__corejs__ = {
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Model = class { }) {
+    if (Model && !Model.toString().startsWith("class")) throw new Error("context is not a class instance");
+
     const components_id = makeId(6);
 
     let template = processComponents(options.template, components_id);
     if (options.components && Object.keys(options.components).length > 0) imported_components.set(components_id, options.components);
 
     const fragment = createNodes(parseTemplate(template));
-
-    if (Model && Model.toString().substring(0, 5) !== "class") throw new Error("context is not a class instance");
 
     return function (props, render_slot_callbackfn) {
         const current_context = pushNewContext();
