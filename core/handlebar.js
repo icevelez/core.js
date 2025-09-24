@@ -20,7 +20,7 @@ const markedNodeCache = new Map();
 /** @type {Map<number, Record<string, Function>>} */
 const imported_components = new Map();
 
-/** @type {WeakMap<Node, ((node:Node, ctx:any, render_slot_callbackfn:(() => DocumentFragment)) => void)>} */
+/** @type {WeakMap<Node, Record<string, any>[]>} */
 const cacheNodeProcesses = new WeakMap();
 
 if (dev_mode_on) window.__corejs__ = {
@@ -361,6 +361,7 @@ const process_type_enum = {
 * @param {Node} node
 */
 function preprocessNode(node) {
+    /** @type {Record<string, any>[]} */
     const processes = [];
 
     const isStyle = node instanceof HTMLStyleElement;
