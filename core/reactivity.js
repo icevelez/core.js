@@ -45,8 +45,6 @@ export function isSignal(input) {
     return input && typeof input === "function" && input[IS_SIGNAL];
 }
 
-// const objectSubscriberCache = new WeakMap();
-
 /**
  * @template {any} T
  * @param {T} initial_value
@@ -57,7 +55,6 @@ export function createSignal(initial_value = undefined) {
     const subscribers = new Set();
 
     if (isObject(initial_value)) {
-        // objectSubscriberCache.set(initial_value, subscribers);
         value = createDeepProxy(initial_value)
     } else {
         value = initial_value;
@@ -69,9 +66,7 @@ export function createSignal(initial_value = undefined) {
         const currentEffect = effectStack[effectStack.length - 1];
         subscribers.add(currentEffect);
 
-        currentEffect.dependencies.add(() => {
-            subscribers.delete(currentEffect);
-        });
+        currentEffect.dependencies.add(() => subscribers.delete(currentEffect));
 
         return value;
     }
@@ -119,7 +114,9 @@ export function createSignal(initial_value = undefined) {
  * @param {() => T} callbackfn
  */
 export function createDerived(callbackfn) {
-    const signal = createSignal();
+    /** @type {T} */
+    const value = undefined;
+    const signal = createSignal(value);
 
     function read() {
         return signal();

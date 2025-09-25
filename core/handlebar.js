@@ -1084,17 +1084,12 @@ function applyAttributeInterpolation(node, process, ctx) {
         for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
         if (prevAttr === new_attr) return;
 
-        if (process.attr_name === "value") {
+        if (process.attr_name === "value")
             node.value = new_attr;
-            return;
-        }
-
-        if (new_attr === 'false' || new_attr === '') {
+        else if (new_attr === 'false' || new_attr === '')
             node.removeAttribute(process.attr_name);
-            return;
-        }
-
-        node.setAttribute(process.attr_name, new_attr === 'true' ? '' : new_attr)
+        else
+            node.setAttribute(process.attr_name, new_attr === 'true' ? '' : new_attr)
     })
 }
 
