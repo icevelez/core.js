@@ -668,13 +668,17 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     let renderedBlockMap = new Map();
     let isEmptyBlockMounted = false;
 
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const func = evaluateRaw(eachConfig.expression, ctxKeys);
+
     effect(() => {
         let currentNode = endNode;
 
         /** @type {EachBlock[]} */
         const newRenderedBlocks = [];
         /** @type {any[]} */
-        const blockDatas = evaluate(eachConfig.expression, ctx) || [];
+        const blockDatas = func(...ctxValues) || [];
 
         if (blockDatas.length <= 0 && !isEmptyBlockMounted) {
             isEmptyBlockMounted = true;
@@ -912,10 +916,14 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     /** @type {string} */
     let lastPromiseId;
 
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const func = evaluateRaw(awaitConfig.promiseExpr, ctxKeys);
+
     effect(() => {
         const currentPromiseId = makeId(6);
         lastPromiseId = currentPromiseId;
-        const promise = evaluate(awaitConfig.promiseExpr, ctx);
+        const promise = func(...ctxValues);
 
         if (!(promise instanceof Promise)) {
             if (lastPromiseId === currentPromiseId) showThen(promise);
@@ -960,13 +968,22 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     /** @type {{ block: string; condition: string; }} */
     let previousCondition;
 
+    const segmentFuncs = [];
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+
+    for (const segment of segments) {
+        segmentFuncs.push(evaluateRaw(segment.condition, ctxKeys));
+    }
+
     effect(() => {
         /** @type {{ block: string; condition: string; }} */
         let condition;
 
-        for (const segment of segments) {
-            if (!evaluate(segment.condition, ctx)) continue;
-            condition = segment;
+        for (let i = 0; i < segmentFuncs.length; i++) {
+            const func = segmentFuncs[i];
+            if (!func(...ctxValues)) continue;
+            condition = segments[i];
             break;
         }
 
@@ -1040,11 +1057,20 @@ function applyComponents(component, startNode, endNode, ctx) {
         onMountSet.clear();
     }
 
+    /** @type {Record<string, Function>} */
+    const dynamicPropFuncs = {};
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+
+    for (const dynamicProp of dynamicProps) {
+        dynamicPropFuncs[dynamicProp.key] = evaluateRaw(dynamicProp.value, ctxKeys);
+    }
+
     effect(() => {
         unmount();
         removeNodesBetween(startNode, endNode);
 
-        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = evaluate(dynamicProp.value, ctx)
+        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = dynamicPropFuncs[dynamicProp.key](...ctxValues);
 
         const componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
             return componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null);
@@ -1066,8 +1092,11 @@ function applyComponents(component, startNode, endNode, ctx) {
  */
 function applyTextInterpolation(node, process, ctx) {
     let prevContent;
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const func = evaluateRaw(process.expr, ctxKeys)
     effect(() => {
-        let textContent = evaluate(process.expr, ctx);
+        let textContent = func(...ctxValues);
         if (prevContent !== textContent) node.textContent = prevContent = textContent;
     })
 }
@@ -1126,13 +1155,17 @@ const nonBubblingEvents = new Set([
  */
 function applyEventListener(node, process, ctx) {
     const isNonBubbling = nonBubblingEvents.has(process.event_type);
+
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const func = evaluateRaw(process.expr, ctxKeys)
+
     effect(() => {
-        const func = evaluate(process.expr, ctx);
         if (isNonBubbling) {
-            node.addEventListener(process.event_type, func);
-            return () => node.removeEventListener(process.event_type, func);
+            node.addEventListener(process.event_type, func(...ctxValues));
+            return () => node.removeEventListener(process.event_type, func(...ctxValues));
         }
-        return coreEventListener.add(process.event_type, node, func);
+        return coreEventListener.add(process.event_type, node, func(...ctxValues));
     })
 }
 
@@ -1196,6 +1229,21 @@ function applyDirectiveBind(node, process, ctx) {
 
         node[process.input_type] = value;
     })
+}
+
+/**
+* @param {string} expr
+* @param {string[]} ctx_keys
+*/
+export function evaluateRaw(expr, ctx_keys) {
+    if (!expr || typeof expr !== "string") throw new Error("expr is not a string or empty");
+    const funcMapKey = `${expr}::${ctx_keys.join(',')}`;
+    let evalFunc = evaluationCache.get(funcMapKey);
+    if (!evalFunc) {
+        evalFunc = new Function(...ctx_keys, `return ${expr};`);
+        evaluationCache.set(funcMapKey, evalFunc);
+    }
+    return evalFunc;
 }
 
 /**
