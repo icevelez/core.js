@@ -506,7 +506,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 const props = {};
 
                 for (const attr of node.attributes) {
-                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? evaluate(attr.value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attr.value;
+                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? evaluate(attr.value.substring(2, attr.value.length - 2), ctx) : attr.value;
                 }
 
                 const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
@@ -624,6 +624,8 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
 
 const eachBlockKey = (obj, i) => isObject(obj) ? obj : i;
 
+const processEachWeakMap = new WeakMap();
+
 /**
  * @param {EachConfig} eachConfig
  * @param {Node} startNode
@@ -670,7 +672,11 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    const func = evaluateRaw(eachConfig.expression, ctxKeys);
+    let func = processEachWeakMap.get(eachConfig);
+    if (!func) {
+        func = evaluateRaw(eachConfig.expression, ctxKeys);
+        processEachWeakMap.set(eachConfig, func);
+    }
 
     effect(() => {
         let currentNode = endNode;
@@ -1085,6 +1091,9 @@ function applyComponents(component, startNode, endNode, ctx) {
     })
 }
 
+/** @type {WeakMap<any, Function[]>} */
+const processTextWeakMap = new WeakMap();
+
 /**
  * @param {Node} node
  * @param {{ expr : string }} process
@@ -1094,12 +1103,20 @@ function applyTextInterpolation(node, process, ctx) {
     let prevContent;
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    const func = evaluateRaw(process.expr, ctxKeys)
+    let func = processTextWeakMap.get(process);
+    if (!func) {
+        func = evaluateRaw(process.expr, ctxKeys);
+        processTextWeakMap.set(process, func);
+    }
+
     effect(() => {
         let textContent = func(...ctxValues);
         if (prevContent !== textContent) node.textContent = prevContent = textContent;
     })
 }
+
+/** @type {WeakMap<any, Function[]>} */
+const processAttrWeakMap = new WeakMap();
 
 /**
  * @param {Node} node
@@ -1108,9 +1125,25 @@ function applyTextInterpolation(node, process, ctx) {
  */
 function applyAttributeInterpolation(node, process, ctx) {
     let prevAttr;
+
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+
+    let new_attr_funcs = processAttrWeakMap.get(process);
+    if (!new_attr_funcs) {
+        new_attr_funcs = [];
+
+        for (let i = 0; i < process.matches.length; i++) {
+            new_attr_funcs.push(evaluateRaw(process.exprs[i], ctxKeys));
+        }
+
+        processAttrWeakMap.set(process, new_attr_funcs);
+    }
+
     effect(() => {
         let new_attr = process.value;
-        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
+        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], new_attr_funcs[i](...ctxValues));
+
         if (prevAttr === new_attr) return;
 
         if (process.attr_name === "value")
@@ -1148,6 +1181,9 @@ const nonBubblingEvents = new Set([
     "transitionend"
 ]);
 
+/** @type {WeakMap<any, Function[]>} */
+const processEventWeakMap = new WeakMap();
+
 /**
  * @param {Node} node
  * @param {{ expr : string, event_type : string }} process
@@ -1158,7 +1194,11 @@ function applyEventListener(node, process, ctx) {
 
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    const func = evaluateRaw(process.expr, ctxKeys)
+    let func = processEventWeakMap.get(process);
+    if (!func) {
+        func = evaluateRaw(process.expr, ctxKeys);
+        processEventWeakMap.set(process, func);
+    }
 
     effect(() => {
         if (isNonBubbling) {
