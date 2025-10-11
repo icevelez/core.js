@@ -95,19 +95,6 @@ function createFragment(fragment, ctx, render_slot_callbackfn) {
     const clone_fragment = fragment.cloneNode(true);
     const processes = cacheNodeProcesses.get(fragment);
     if (!processes) return clone_fragment;
-
-    if (!cacheCtxValues.has(ctx)) {
-        let ctxKeys = cacheCtxKeys.get(ctx);
-        if (!ctxKeys) {
-            ctxKeys = Object.keys(ctx);
-            cacheCtxKeys.set(ctx, ctxKeys);
-        }
-
-        const ctxValues = [];
-        for (const k of ctxKeys) ctxValues.push(ctx[k]);
-        cacheCtxValues.set(ctx, ctxValues);
-    }
-
     return applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
 }
 
@@ -459,6 +446,7 @@ function preprocessNode(node) {
                 let matches = [], exprs = [];
                 attr.value.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
                 processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attr.value });
+                node.removeAttribute(attrName);
             }
         };
     }
@@ -520,8 +508,8 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
 
                 /** @type {{ [key:string] : any }} */
                 const props = {};
-                const ctxKeys = cacheCtxKeys.get(ctx);
-                const ctxValues = cacheCtxValues.get(ctx);
+                const ctxKeys = Object.keys(ctx);
+                const ctxValues = ctxKeys.map(k => ctx[k]);
 
                 for (const attr of node.attributes) {
                     const func = evaluateRaw(attr.value.substring(2, attr.value.length - 2), ctxKeys)
@@ -690,8 +678,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     let renderedBlockMap = new Map();
     let isEmptyBlockMounted = false;
 
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
     let func = processEachWeakMap.get(eachConfig);
     if (!func) {
         func = evaluateRaw(eachConfig.expression, ctxKeys);
@@ -942,8 +930,8 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     /** @type {string} */
     let lastPromiseId;
 
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
     const func = evaluateRaw(awaitConfig.promiseExpr, ctxKeys);
 
     effect(() => {
@@ -995,8 +983,8 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     let previousCondition;
 
     const segmentFuncs = [];
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
 
     for (const segment of segments) {
         segmentFuncs.push(evaluateRaw(segment.condition, ctxKeys));
@@ -1085,8 +1073,8 @@ function applyComponents(component, startNode, endNode, ctx) {
 
     /** @type {Record<string, Function>} */
     const dynamicPropFuncs = {};
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map((k) => ctx[k]);
 
     for (const dynamicProp of dynamicProps) {
         dynamicPropFuncs[dynamicProp.key] = evaluateRaw(dynamicProp.value, ctxKeys);
@@ -1121,8 +1109,8 @@ const processTextWeakMap = new WeakMap();
  */
 function applyTextInterpolation(node, process, ctx) {
     let prevContent;
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
     let func = processTextWeakMap.get(process);
     if (!func) {
         func = evaluateRaw(process.expr, ctxKeys);
@@ -1146,8 +1134,8 @@ const processAttrWeakMap = new WeakMap();
 function applyAttributeInterpolation(node, process, ctx) {
     let prevAttr;
 
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
 
     let new_attr_funcs = processAttrWeakMap.get(process);
     if (!new_attr_funcs) {
@@ -1206,8 +1194,8 @@ const processEventWeakMap = new WeakMap();
  */
 function applyEventListener(node, process, ctx) {
     const isNonBubbling = nonBubblingEvents.has(process.event_type);
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
     let func = processEventWeakMap.get(process);
     if (!func) {
         func = evaluateRaw(process.expr, ctxKeys);
@@ -1235,8 +1223,8 @@ function applyDirectiveUse(node, process, ctx) {
 
     const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     const onMountSet = onMountQueue[onMountQueue.length - 1];
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
     const ctxFunc = evaluateRaw(process.func_attr, ctxKeys);
 
     onMountSet.add(() => {
@@ -1251,8 +1239,8 @@ function applyDirectiveUse(node, process, ctx) {
  * @param {any} ctx
  */
 function applyDirectiveBind(node, process, ctx) {
-    const ctxKeys = cacheCtxKeys.get(ctx);
-    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
 
     const binding = evaluateRaw(`(v, c, s) => {
         try {
