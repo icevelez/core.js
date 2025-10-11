@@ -23,12 +23,16 @@ const imported_components = new Map();
 /** @type {WeakMap<Node, Record<string, any>[]>} */
 const cacheNodeProcesses = new WeakMap();
 
+/** @type {WeakMap<any, Function | Function[]>} */
+const cacheAppliedProcesses = new WeakMap();
+
 if (dev_mode_on) window.__corejs__ = {
     evaluationCache,
     markedNodeCache,
     slotCache,
     imported_components,
     cacheNodeProcesses,
+    cacheAppliedProcesses,
     delegated_events,
 }
 
@@ -632,8 +636,6 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
 
 const eachBlockKey = (obj, i) => isObject(obj) ? obj : i;
 
-const processEachWeakMap = new WeakMap();
-
 /**
  * @param {EachConfig} eachConfig
  * @param {Node} startNode
@@ -680,10 +682,10 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    let func = processEachWeakMap.get(eachConfig);
+    let func = cacheAppliedProcesses.get(eachConfig);
     if (!func) {
         func = evaluateRaw(eachConfig.expression, ctxKeys);
-        processEachWeakMap.set(eachConfig, func);
+        cacheAppliedProcesses.set(eachConfig, func);
     }
 
     effect(() => {
@@ -982,12 +984,14 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     /** @type {{ block: string; condition: string; }} */
     let previousCondition;
 
-    const segmentFuncs = [];
+    let segmentFuncs = cacheAppliedProcesses.get(segments);
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
 
-    for (const segment of segments) {
-        segmentFuncs.push(evaluateRaw(segment.condition, ctxKeys));
+    if (!segmentFuncs) {
+        segmentFuncs = [];
+        for (const segment of segments) segmentFuncs.push(evaluateRaw(segment.condition, ctxKeys));
+        cacheAppliedProcesses.set(segments, segmentFuncs);
     }
 
     effect(() => {
@@ -1099,9 +1103,6 @@ function applyComponents(component, startNode, endNode, ctx) {
     })
 }
 
-/** @type {WeakMap<any, Function[]>} */
-const processTextWeakMap = new WeakMap();
-
 /**
  * @param {Node} node
  * @param {{ expr : string }} process
@@ -1111,10 +1112,10 @@ function applyTextInterpolation(node, process, ctx) {
     let prevContent;
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    let func = processTextWeakMap.get(process);
+    let func = cacheAppliedProcesses.get(process);
     if (!func) {
         func = evaluateRaw(process.expr, ctxKeys);
-        processTextWeakMap.set(process, func);
+        cacheAppliedProcesses.set(process, func);
     }
 
     effect(() => {
@@ -1184,9 +1185,6 @@ const nonBubblingEvents = new Set([
     "transitionend"
 ]);
 
-/** @type {WeakMap<any, Function[]>} */
-const processEventWeakMap = new WeakMap();
-
 /**
  * @param {Node} node
  * @param {{ expr : string, event_type : string }} process
@@ -1196,10 +1194,10 @@ function applyEventListener(node, process, ctx) {
     const isNonBubbling = nonBubblingEvents.has(process.event_type);
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    let func = processEventWeakMap.get(process);
+    let func = cacheAppliedProcesses.get(process);
     if (!func) {
         func = evaluateRaw(process.expr, ctxKeys);
-        processEventWeakMap.set(process, func);
+        cacheAppliedProcesses.set(process, func);
     }
 
     effect(() => {
@@ -1225,7 +1223,12 @@ function applyDirectiveUse(node, process, ctx) {
     const onMountSet = onMountQueue[onMountQueue.length - 1];
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-    const ctxFunc = evaluateRaw(process.func_attr, ctxKeys);
+
+    let ctxFunc = cacheAppliedProcesses.get(process);
+    if (!ctxFunc) {
+        ctxFunc = evaluateRaw(process.func_attr, ctxKeys);
+        cacheAppliedProcesses.set(process, func);
+    }
 
     onMountSet.add(() => {
         const cleanup = func(node, process.func_attr ? ctxFunc(...ctxValues) : undefined);
