@@ -87,9 +87,6 @@ function createNodes(template) {
     return fragment;
 }
 
-const cacheCtxKeys = new WeakMap();
-const cacheCtxValues = new WeakMap();
-
 /**
 * @param {DocumentFragment} fragment
 * @param {Record<string, any>} ctx
@@ -326,19 +323,17 @@ function preprocessTextNodes(node) {
     if (!isText) {
         const childNodes = Array.from(node.childNodes);
         for (const child_node of childNodes) preprocessTextNodes(child_node);
-        return node;
+        return;
     }
 
     const expression = node.textContent;
     const parts = expression.split(/({{[^}]+}})/g);
+    if (parts.length <= 1) return;
 
     const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
     if (!has_handlebars) return;
 
-    if (parts.length <= 1) return node;
-
     node.textContent = "";
-
     const parent = node.parentNode;
 
     for (const part of parts) {
@@ -375,17 +370,16 @@ function preprocessNode(node) {
     if (isStyle) return processes;
 
     const isText = node.nodeType === Node.TEXT_NODE;
-
     if (isText) {
         const expression = node.textContent;
-        const regex = /{{\s*([^#\/][^}]*)\s*}}/g;
         const parts = expression.split(/({{[^}]+}})/g);
-
         const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
         if (!has_handlebars) return processes;
 
+        node.textContent = "";
+
         let match, expr;
-        expression.replace(regex, (m, e) => { match = m; expr = e; });
+        expression.replace(/{{\s*([^#\/][^}]*)\s*}}/g, (m, e) => { match = m; expr = e; });
         processes.push({ type: process_type_enum.textInterpolation, match, expr, full_expr: expression });
         return processes;
     }
@@ -413,7 +407,7 @@ function preprocessNode(node) {
         const marker_type = node.dataset.directive;
         const marker_id = node.dataset.markerId;
         const payload = markedNodeCache.get(marker_id);
-        if (!payload) throw console.error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
+        if (!payload) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
         processes.push({ type: process_type_enum.markedBlocks, marker_type, payload });
         return processes;
     }
@@ -508,7 +502,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
             case process_type_enum.coreComponent: {
                 const component = ctx[process.component_name]?.default;
-                if (!component) throw console.error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
+                if (!component) throw new Error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
 
                 /** @type {{ [key:string] : any }} */
                 const props = {};
@@ -1038,10 +1032,10 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
  */
 function applyComponents(component, startNode, endNode, ctx) {
     const components = imported_components.get(component.import_id);
-    if (!components) throw console.error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
+    if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
     let componentFunc = components[component.tag];
-    if (!componentFunc) throw console.error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
+    if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map((k) => ctx[k]);
@@ -1214,8 +1208,8 @@ function applyEventListener(node, process, ctx) {
  */
 function applyDirectiveUse(node, process, ctx) {
     const func = ctx[process.func_name];
-    if (!func) throw console.error(`use: directive "${process.func_name}" not found.`);
-    if (typeof func !== "function") throw console.error(`function "${process.name}" is not a function`);
+    if (!func) throw new Error(`use: directive "${process.func_name}" not found.`);
+    if (typeof func !== "function") throw new Error(`function "${process.name}" is not a function`);
 
     const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     const onMountSet = onMountQueue[onMountQueue.length - 1];
