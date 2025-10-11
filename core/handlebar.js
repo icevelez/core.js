@@ -83,6 +83,9 @@ function createNodes(template) {
     return fragment;
 }
 
+const cacheCtxKeys = new WeakMap();
+const cacheCtxValues = new WeakMap();
+
 /**
 * @param {DocumentFragment} fragment
 * @param {Record<string, any>} ctx
@@ -91,8 +94,21 @@ function createNodes(template) {
 function createFragment(fragment, ctx, render_slot_callbackfn) {
     const clone_fragment = fragment.cloneNode(true);
     const processes = cacheNodeProcesses.get(fragment);
-    if (processes) applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
-    return clone_fragment;
+    if (!processes) return clone_fragment;
+
+    if (!cacheCtxValues.has(ctx)) {
+        let ctxKeys = cacheCtxKeys.get(ctx);
+        if (!ctxKeys) {
+            ctxKeys = Object.keys(ctx);
+            cacheCtxKeys.set(ctx, ctxKeys);
+        }
+
+        const ctxValues = [];
+        for (const k of ctxKeys) ctxValues.push(ctx[k]);
+        cacheCtxValues.set(ctx, ctxValues);
+    }
+
+    return applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
 }
 
 const eachRegex = /{{#each\s+(.+?)\s+as\s+((?:\w+|\{[\s\S]*?\}|\([\s\S]*?\)))\s*(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
@@ -504,9 +520,12 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
 
                 /** @type {{ [key:string] : any }} */
                 const props = {};
+                const ctxKeys = cacheCtxKeys.get(ctx);
+                const ctxValues = cacheCtxValues.get(ctx);
 
                 for (const attr of node.attributes) {
-                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? evaluate(attr.value.substring(2, attr.value.length - 2), ctx) : attr.value;
+                    const func = evaluateRaw(attr.value.substring(2, attr.value.length - 2), ctxKeys)
+                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? func(...ctxValues) : attr.value;
                 }
 
                 const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
@@ -545,6 +564,7 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
         }
     }
+    return node;
 }
 
 // make individual value of an array as a read-only Signal because for reason, the reacitivity can't propogate back to the original signal
@@ -670,8 +690,8 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     let renderedBlockMap = new Map();
     let isEmptyBlockMounted = false;
 
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
     let func = processEachWeakMap.get(eachConfig);
     if (!func) {
         func = evaluateRaw(eachConfig.expression, ctxKeys);
@@ -922,8 +942,8 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     /** @type {string} */
     let lastPromiseId;
 
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
     const func = evaluateRaw(awaitConfig.promiseExpr, ctxKeys);
 
     effect(() => {
@@ -975,8 +995,8 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     let previousCondition;
 
     const segmentFuncs = [];
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
 
     for (const segment of segments) {
         segmentFuncs.push(evaluateRaw(segment.condition, ctxKeys));
@@ -1065,8 +1085,8 @@ function applyComponents(component, startNode, endNode, ctx) {
 
     /** @type {Record<string, Function>} */
     const dynamicPropFuncs = {};
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
 
     for (const dynamicProp of dynamicProps) {
         dynamicPropFuncs[dynamicProp.key] = evaluateRaw(dynamicProp.value, ctxKeys);
@@ -1101,8 +1121,8 @@ const processTextWeakMap = new WeakMap();
  */
 function applyTextInterpolation(node, process, ctx) {
     let prevContent;
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
     let func = processTextWeakMap.get(process);
     if (!func) {
         func = evaluateRaw(process.expr, ctxKeys);
@@ -1126,24 +1146,19 @@ const processAttrWeakMap = new WeakMap();
 function applyAttributeInterpolation(node, process, ctx) {
     let prevAttr;
 
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
 
     let new_attr_funcs = processAttrWeakMap.get(process);
     if (!new_attr_funcs) {
         new_attr_funcs = [];
-
-        for (let i = 0; i < process.matches.length; i++) {
-            new_attr_funcs.push(evaluateRaw(process.exprs[i], ctxKeys));
-        }
-
+        for (let i = 0; i < process.matches.length; i++) new_attr_funcs.push(evaluateRaw(process.exprs[i], ctxKeys));
         processAttrWeakMap.set(process, new_attr_funcs);
     }
 
     effect(() => {
         let new_attr = process.value;
         for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], new_attr_funcs[i](...ctxValues));
-
         if (prevAttr === new_attr) return;
 
         if (process.attr_name === "value")
@@ -1191,9 +1206,8 @@ const processEventWeakMap = new WeakMap();
  */
 function applyEventListener(node, process, ctx) {
     const isNonBubbling = nonBubblingEvents.has(process.event_type);
-
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
     let func = processEventWeakMap.get(process);
     if (!func) {
         func = evaluateRaw(process.expr, ctxKeys);
@@ -1221,9 +1235,12 @@ function applyDirectiveUse(node, process, ctx) {
 
     const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     const onMountSet = onMountQueue[onMountQueue.length - 1];
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
+    const ctxFunc = evaluateRaw(process.func_attr, ctxKeys);
 
     onMountSet.add(() => {
-        const cleanup = func(node, process.func_attr ? evaluate(process.func_attr, ctx) : undefined);
+        const cleanup = func(node, process.func_attr ? ctxFunc(...ctxValues) : undefined);
         if (typeof cleanup === "function") onUnmountSet.add(cleanup);
     });
 }
@@ -1234,7 +1251,10 @@ function applyDirectiveUse(node, process, ctx) {
  * @param {any} ctx
  */
 function applyDirectiveBind(node, process, ctx) {
-    const binding = evaluate(`(v, c, s) => {
+    const ctxKeys = cacheCtxKeys.get(ctx);
+    const ctxValues = cacheCtxValues.get(ctx);
+
+    const binding = evaluateRaw(`(v, c, s) => {
         try {
             if (c(${process.value})) {
                 if (${process.value}[s]) throw new Error("signal is read-only");
@@ -1245,20 +1265,22 @@ function applyDirectiveBind(node, process, ctx) {
         } catch (error) {
             console.error(error);
         }
-    }`, ctx);
+    }`, ctxKeys);
 
     const eventListener = (event) => {
         const type = event.target.type;
-        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal, IS_READ_ONLY_SIGNAL);
-        return binding(event.target[process.input_type], isSignal, IS_READ_ONLY_SIGNAL);
+        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal, IS_READ_ONLY_SIGNAL)(...ctxValues);
+        return binding(event.target[process.input_type], isSignal, IS_READ_ONLY_SIGNAL)(...ctxValues);
     };
 
     const remove_listener = coreEventListener.add(process.event_type, node, eventListener);
     const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     unmountSet.add(remove_listener);
 
+    const func = evaluateRaw(process.value, ctxKeys);
+
     effect(() => {
-        let value = evaluate(process.value, ctx);
+        let value = func(...ctxValues);
         value = isSignal(value) ? value() : value;
 
         if (node.type === "date") {
@@ -1284,31 +1306,6 @@ export function evaluateRaw(expr, ctx_keys) {
         evaluationCache.set(funcMapKey, evalFunc);
     }
     return evalFunc;
-}
-
-/**
-* @param {string} expr
-* @param {any} ctx
-* @returns {any}
-*/
-export function evaluate(expr, ctx) {
-    if (!expr || typeof expr !== "string") return undefined;
-
-    const ctx_keys = Object.keys(ctx);
-    const key = `${expr}::${ctx_keys.join(',')}`;
-
-    let evalFunc = evaluationCache.get(key);
-    if (!evalFunc) {
-        evalFunc = new Function(...ctx_keys, `return ${expr};`);
-        evaluationCache.set(key, evalFunc);
-    }
-
-    try {
-        return evalFunc(...ctx_keys.map(k => ctx[k]));
-    } catch (error) {
-        console.warn(`Evaluation run-time error: ${expr}`, error, ctx);
-        return undefined;
-    }
 }
 
 /**
