@@ -1043,21 +1043,28 @@ function applyComponents(component, startNode, endNode, ctx) {
     let componentFunc = components[component.tag];
     if (!componentFunc) throw console.error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
 
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map((k) => ctx[k]);
+
     /** @type {{ [key:string] : any }} */
     const props = {};
-    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-    let match;
+    /** @type {{ key:string, func:Function }[]} */
+    let dynamicProps = cacheAppliedProcesses.get(component);
 
-    /** @type {{ key:string, value:string }[]} */
-    let dynamicProps = [];
+    if (!dynamicProps) {
+        const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
+        let match;
 
-    while ((match = regex.exec(component.attrStr)) !== null) {
-        const [_, key, value] = match;
-        if (value && value.startsWith('{{')) {
-            dynamicProps.push({ key, value: value.match(/^{{\s*(.+?)\s*}}$/)[1] });
-        } else {
-            props[key] = value;
+        dynamicProps = [];
+        while ((match = regex.exec(component.attrStr)) !== null) {
+            const [_, key, value] = match;
+            if (value && value.startsWith('{{')) {
+                dynamicProps.push({ key, func: evaluateRaw(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctxKeys) });
+            } else {
+                props[key] = value;
+            }
         }
+        cacheAppliedProcesses.set(component, dynamicProps);
     }
 
     /** @type {Set<Function>} */
@@ -1075,20 +1082,11 @@ function applyComponents(component, startNode, endNode, ctx) {
         onMountSet.clear();
     }
 
-    /** @type {Record<string, Function>} */
-    const dynamicPropFuncs = {};
-    const ctxKeys = Object.keys(ctx);
-    const ctxValues = ctxKeys.map((k) => ctx[k]);
-
-    for (const dynamicProp of dynamicProps) {
-        dynamicPropFuncs[dynamicProp.key] = evaluateRaw(dynamicProp.value, ctxKeys);
-    }
-
     effect(() => {
         unmount();
         removeNodesBetween(startNode, endNode);
 
-        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = dynamicPropFuncs[dynamicProp.key](...ctxValues);
+        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = dynamicProp.func(...ctxValues);
 
         const componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
             return componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null);
@@ -1244,7 +1242,6 @@ function applyDirectiveUse(node, process, ctx) {
 function applyDirectiveBind(node, process, ctx) {
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
-
     const binding = evaluateRaw(`(v, c, s) => {
         try {
             if (c(${process.value})) {
@@ -1256,12 +1253,12 @@ function applyDirectiveBind(node, process, ctx) {
         } catch (error) {
             console.error(error);
         }
-    }`, ctxKeys);
+    }`, ctxKeys)(...ctxValues);
 
     const eventListener = (event) => {
         const type = event.target.type;
-        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal, IS_READ_ONLY_SIGNAL)(...ctxValues);
-        return binding(event.target[process.input_type], isSignal, IS_READ_ONLY_SIGNAL)(...ctxValues);
+        if (type === "date") return binding(new Date(event.target[process.input_type]), isSignal, IS_READ_ONLY_SIGNAL);
+        return binding(event.target[process.input_type], isSignal, IS_READ_ONLY_SIGNAL);
     };
 
     const remove_listener = coreEventListener.add(process.event_type, node, eventListener);
