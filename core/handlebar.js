@@ -154,8 +154,7 @@ function parseIf(ifBlock) {
          * @param {string} firstBlock
          */
         function (_, firstCondition, firstBlock) {
-            let lastIndex = 0;
-            let match;
+            let lastIndex = 0, match;
 
             while ((match = ifElseregex.exec(firstBlock)) !== null) {
                 if (match.index > lastIndex) {
@@ -397,9 +396,20 @@ function preprocessNode(node) {
 
     if (isCoreComponentNode(node)) {
         const component_name = node.getAttribute("default");
+        const attrs = [...node.attributes], props = {}, dynamicProps = [];
         const slot_id = node.dataset.slotId;
         const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
-        processes.push({ type: process_type_enum.coreComponent, slot_id, slot_nodes, component_name })
+
+        for (const attr of attrs) {
+            node.removeAttribute(attr.name);
+            if (attr.value.startsWith("{{")) {
+                dynamicProps.push({ name: attr.name, value: attr.value });
+                continue;
+            }
+            props[attr.name] = attr.value;
+        }
+
+        processes.push({ type: process_type_enum.coreComponent, slot_nodes, component_name, props, dynamicProps });
         return processes;
     }
 
@@ -441,9 +451,8 @@ function preprocessNode(node) {
                 processes.push({ type: process_type_enum.eventListener, event_type, expr });
                 node.removeAttribute(attrName);
             } else if (attr.value.includes('{{')) {
-                let matches = [], exprs = [];
-                attr.value.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
-                processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attr.value });
+                const expr = `\`${attr.value.replace(/{{\s*(.+?)\s*}}/g, (_, e) => "${" + e + "}")}\``;
+                processes.push({ type: process_type_enum.attributeInterpolation, expr, attr_name: attrName });
                 node.removeAttribute(attrName);
             }
         };
@@ -496,7 +505,6 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             case process_type_enum.slotInjection: {
                 if (!render_slot_callbackfn) break;
                 const parent = node.parentNode;
-                node.innerHTML = "";
                 parent.replaceChild(render_slot_callbackfn(), node);
                 break;
             }
@@ -504,19 +512,13 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                 const component = ctx[process.component_name]?.default;
                 if (!component) throw new Error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
 
-                /** @type {{ [key:string] : any }} */
-                const props = {};
-                const ctxKeys = Object.keys(ctx);
-                const ctxValues = ctxKeys.map(k => ctx[k]);
+                const [nodeStart, nodeEnd] = createStartEndNode(process.marker_type);
+                const fragment = document.createDocumentFragment();
+                fragment.append(nodeStart, nodeEnd);
 
-                for (const attr of node.attributes) {
-                    const func = evaluateRaw(attr.value.substring(2, attr.value.length - 2), ctxKeys)
-                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? func(...ctxValues) : attr.value;
-                }
+                applyCoreComponent(component, process, nodeStart, nodeEnd, ctx);
 
-                const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
-                node.innerHTML = "";
-                parent.replaceChild(component(props, renderSlotCallbackfn), node);
+                parent.replaceChild(fragment, node);
                 break;
             }
             case process_type_enum.markedBlocks: {
@@ -539,7 +541,6 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                         break;
                 }
 
-                node.innerHTML = "";
                 parent.replaceChild(fragment, node);
                 break;
             }
@@ -553,7 +554,34 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
     return node;
 }
 
-// make individual value of an array as a read-only Signal because for reason, the reacitivity can't propogate back to the original signal
+/**
+ * @param {Function} component
+ * @param {{ slot_nodes : DocumentFragment, props : Record<string, string>, dynamicProps : { name : string, value : string, func : Function }[] }} process
+ * @param {Node} nodeStart
+ * @param {Node} nodeEnd
+ * @param {any} ctx
+ */
+function applyCoreComponent(component, process, nodeStart, nodeEnd, ctx) {
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const props = process.props;
+
+    if (process.dynamicProps.length > 0 && !process.dynamicProps[0].func) {
+        process.dynamicProps = process.dynamicProps.map((dynamicProp) => {
+            dynamicProp.func = evaluateRaw(dynamicProp.value.substring(2, dynamicProp.value.length - 2), ctxKeys)
+            return dynamicProp;
+        });
+    }
+
+    effect(() => {
+        removeNodesBetween(nodeStart, nodeEnd);
+        const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
+        for (const dynamicProp of process.dynamicProps) props[dynamicProp.name] = dynamicProp.func(...ctxValues);
+        nodeEnd.before(component(props, renderSlotCallbackfn));
+    })
+}
+
+// make individual value of an array as a read-only Signal because it messes up reactivity
 const IS_READ_ONLY_SIGNAL = Symbol("is_read_only_signal");
 
 /** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
@@ -1061,37 +1089,11 @@ function applyComponents(component, startNode, endNode, ctx) {
         cacheAppliedProcesses.set(component, dynamicProps);
     }
 
-    /** @type {Set<Function>} */
-    const onUnmountSet = new Set();
-    /** @type {Set<Function>} */
-    const onMountSet = new Set();
-
-    function unmount() {
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
-
-    function mount() {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
-    }
-
     effect(() => {
-        unmount();
         removeNodesBetween(startNode, endNode);
-
         for (const dynamicProp of dynamicProps) props[dynamicProp.key] = dynamicProp.func(...ctxValues);
-
-        const componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
-            return componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null);
-        })
-
+        const componentBlock = componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null)
         endNode.before(componentBlock);
-
-        if (core_context.is_mounted_to_the_DOM) return mount();
-
-        core_context.onMountSet.add(mount)
-        core_context.onUnmountSet.add(unmount)
     })
 }
 
@@ -1116,12 +1118,9 @@ function applyTextInterpolation(node, process, ctx) {
     })
 }
 
-/** @type {WeakMap<any, Function[]>} */
-const processAttrWeakMap = new WeakMap();
-
 /**
  * @param {Node} node
- * @param {{ value : string, matches : string[], exprs : string[], attr_name : string }} process
+ * @param {{ expr : string, attr_name : string }} process
  * @param {any} ctx
  */
 function applyAttributeInterpolation(node, process, ctx) {
@@ -1130,16 +1129,14 @@ function applyAttributeInterpolation(node, process, ctx) {
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
 
-    let new_attr_funcs = processAttrWeakMap.get(process);
-    if (!new_attr_funcs) {
-        new_attr_funcs = [];
-        for (let i = 0; i < process.matches.length; i++) new_attr_funcs.push(evaluateRaw(process.exprs[i], ctxKeys));
-        processAttrWeakMap.set(process, new_attr_funcs);
+    let func = cacheAppliedProcesses.get(process);
+    if (!func) {
+        func = evaluateRaw(process.expr, ctxKeys);
+        cacheAppliedProcesses.set(process, func);
     }
 
     effect(() => {
-        let new_attr = process.value;
-        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], new_attr_funcs[i](...ctxValues));
+        const new_attr = func(...ctxValues);
         if (prevAttr === new_attr) return;
 
         if (process.attr_name === "value")
