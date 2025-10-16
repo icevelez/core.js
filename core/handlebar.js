@@ -42,7 +42,7 @@ if (dev_mode_on) window.__corejs__ = {
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Model = class { }) {
-    if (Model && !Model.toString().startsWith("class")) throw new Error("context is not a class instance");
+    if (Model && !Model.toString().startsWith("class")) throw new Error("context is not a class");
 
     const components_id = makeId(6);
 
@@ -959,7 +959,7 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     const func = evaluateRaw(awaitConfig.promiseExpr, ctxKeys);
 
     effect(() => {
-        const currentPromiseId = makeId(6);
+        const currentPromiseId = Math.random();
         lastPromiseId = currentPromiseId;
         const promise = func(...ctxValues);
 
@@ -1103,7 +1103,6 @@ function applyComponents(component, startNode, endNode, ctx) {
  * @param {any} ctx
  */
 function applyTextInterpolation(node, process, ctx) {
-    let prevContent;
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
     let func = cacheAppliedProcesses.get(process);
@@ -1114,7 +1113,7 @@ function applyTextInterpolation(node, process, ctx) {
 
     effect(() => {
         let textContent = func(...ctxValues);
-        if (prevContent !== textContent) node.textContent = prevContent = textContent;
+        if (node.__cacheText !== textContent) node.textContent = node.__cacheText = textContent;
     })
 }
 
@@ -1124,8 +1123,6 @@ function applyTextInterpolation(node, process, ctx) {
  * @param {any} ctx
  */
 function applyAttributeInterpolation(node, process, ctx) {
-    let prevAttr;
-
     const ctxKeys = Object.keys(ctx);
     const ctxValues = ctxKeys.map(k => ctx[k]);
 
@@ -1137,7 +1134,8 @@ function applyAttributeInterpolation(node, process, ctx) {
 
     effect(() => {
         const new_attr = func(...ctxValues);
-        if (prevAttr === new_attr) return;
+        if (node.__cacheAttr === new_attr) return;
+        node.__cacheAttr = new_attr;
 
         if (process.attr_name === "value")
             node.value = new_attr;
@@ -1190,11 +1188,9 @@ function applyEventListener(node, process, ctx) {
     }
 
     effect(() => {
-        if (isNonBubbling) {
-            node.addEventListener(process.event_type, func(...ctxValues));
-            return () => node.removeEventListener(process.event_type, func(...ctxValues));
-        }
-        return coreEventListener.add(process.event_type, node, func(...ctxValues));
+        if (!isNonBubbling) return coreEventListener.add(process.event_type, node, func(...ctxValues));
+        node.addEventListener(process.event_type, func(...ctxValues));
+        return () => node.removeEventListener(process.event_type, func(...ctxValues));
     })
 }
 
@@ -1278,7 +1274,7 @@ function applyDirectiveBind(node, process, ctx) {
 */
 export function evaluateRaw(expr, ctx_keys) {
     if (!expr || typeof expr !== "string") throw new Error("expr is not a string or empty");
-    const funcMapKey = `${expr}::${ctx_keys.join(',')}`;
+    const funcMapKey = `${expr}${ctx_keys.join('')}`;
     let evalFunc = evaluationCache.get(funcMapKey);
     if (!evalFunc) {
         evalFunc = new Function(...ctx_keys, `return ${expr};`);
