@@ -76,8 +76,6 @@ function createNodes(template) {
     const templateElement = document.createElement("template");
     templateElement.innerHTML = template;
 
-    for (const childNode of Array.from(templateElement.content.childNodes)) preprocessTextNodes(childNode);
-
     const fragment = templateElement.content;
     const processes = preprocessNode(fragment);
     if (processes.length <= 0) return fragment;
@@ -313,37 +311,6 @@ function processComponents(template, imported_component_id) {
     return template;
 }
 
-/**
-* The purpose of this function is to search for text and split them into individual text nodes for finer text interpolation
-* @param {Node} node
-*/
-function preprocessTextNodes(node) {
-    const isText = node.nodeType === Node.TEXT_NODE;
-    if (!isText) {
-        const childNodes = Array.from(node.childNodes);
-        for (const child_node of childNodes) preprocessTextNodes(child_node);
-        return;
-    }
-
-    const expression = node.textContent;
-    const parts = expression.split(/({{[^}]+}})/g);
-    if (parts.length <= 1) return;
-
-    const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
-    if (!has_handlebars) return;
-
-    node.textContent = "";
-    const parent = node.parentNode;
-
-    for (const part of parts) {
-        const textNode = document.createTextNode("");
-        textNode.textContent = part;
-        parent.insertBefore(textNode, node);
-    };
-
-    node.remove();
-}
-
 const process_type_enum = {
     "textInterpolation": 1,
     "attributeInterpolation": 2,
@@ -377,9 +344,8 @@ function preprocessNode(node) {
 
         node.textContent = "";
 
-        let match, expr;
-        expression.replace(/{{\s*([^#\/][^}]*)\s*}}/g, (m, e) => { match = m; expr = e; });
-        processes.push({ type: process_type_enum.textInterpolation, match, expr, full_expr: expression });
+        const expr = `\`${expression.replace(/{{\s*(.+?)\s*}}/g, (_, e) => "${" + e + "}")}\``;
+        processes.push({ type: process_type_enum.textInterpolation, expr });
         return processes;
     }
 
@@ -468,7 +434,7 @@ function preprocessNode(node) {
     }
 
     // the `.reverse()` is important to keep node index in sync when applying processes
-    return processes.reverse();
+    return processes;
 }
 
 /**
@@ -504,7 +470,6 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
             case process_type_enum.slotInjection: {
                 if (!render_slot_callbackfn) break;
-                const parent = node.parentNode;
                 parent.replaceChild(render_slot_callbackfn(), node);
                 break;
             }
@@ -608,7 +573,10 @@ function createEachBlock(eachConfig, blockDatas, index, ctx, currentNode) {
     };
 
     function mount() {
-        for (const mount of onMountSet) mount();
+        for (const mount of onMountSet) {
+            const unmount = mount();
+            if (typeof unmount === "function") onUnmountSet.add(unmount);
+        }
         onMountSet.clear();
     }
 
@@ -679,7 +647,10 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     };
 
     function mount() {
-        for (const mount of onMountSet) mount();
+        for (const mount of onMountSet) {
+            const unmount = mount();
+            if (typeof unmount === "function") onUnmountSet.add(unmount);
+        }
         onMountSet.clear();
     }
 
@@ -898,7 +869,10 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     };
 
     function mount() {
-        for (const mount of onMountSet) mount();
+        for (const mount of onMountSet) {
+            const unmount = mount();
+            if (typeof unmount === "function") onUnmountSet.add(unmount);
+        }
         onMountSet.clear();
     }
 
@@ -971,7 +945,10 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         showLoading();
         promise.then((result) => {
             if (lastPromiseId == currentPromiseId) showThen(result);
-        }).catch(showCatch);
+        }).catch((error) => {
+            console.error(error);
+            showCatch(error);
+        });
     })
 }
 
@@ -996,7 +973,10 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     };
 
     function mount() {
-        for (const mount of onMountSet) mount();
+        for (const mount of onMountSet) {
+            const unmount = mount();
+            if (typeof unmount === "function") onUnmountSet.add(unmount);
+        }
         onMountSet.clear();
     }
 
@@ -1277,7 +1257,7 @@ export function evaluateRaw(expr, ctx_keys) {
     const funcMapKey = `${expr}${ctx_keys.join('')}`;
     let evalFunc = evaluationCache.get(funcMapKey);
     if (!evalFunc) {
-        evalFunc = new Function(...ctx_keys, `return ${expr};`);
+        evalFunc = new Function(...ctx_keys, `try { return ${expr}; } catch (error) { console.error(error); return undefined; }`);
         evaluationCache.set(funcMapKey, evalFunc);
     }
     return evalFunc;

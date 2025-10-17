@@ -1,4 +1,4 @@
-import { onMountQueue, onUnmountQueue, core_context, contextQueue } from "./core-internal.js";
+import { onMountQueue, onUnmountQueue, core_context, contextQueue, runScopedMountUnmount } from "./core-internal.js";
 import { effect } from "./reactivity.js";
 import { isObject } from "./helper-functions.js";
 
@@ -29,18 +29,13 @@ export function mount(component, options) {
 
     const cleanup = effect(() => {
 
-        onUnmountQueue.push(onUnmountSet);
-        onMountQueue.push(onMountSet);
-
-        const fragment = component();
-        if (!(fragment instanceof DocumentFragment)) throw new Error("component is not a DocumentFragment");
-        options.target.appendChild(fragment);
-
-        onMountQueue.pop();
-        onUnmountQueue.pop();
+        runScopedMountUnmount(onMountSet, onUnmountSet, () => {
+            const fragment = component();
+            if (!(fragment instanceof DocumentFragment)) throw new Error("component is not a DocumentFragment");
+            options.target.appendChild(fragment);
+        })
 
         for (const mount of onMountSet) mount();
-
         core_context.is_mounted_to_the_DOM = true;
         for (const mount of core_context.onMountSet) mount();
         core_context.onMountSet.clear();
