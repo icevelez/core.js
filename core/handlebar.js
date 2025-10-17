@@ -434,7 +434,7 @@ function preprocessNode(node) {
     }
 
     // the `.reverse()` is important to keep node index in sync when applying processes
-    return processes;
+    return processes.reverse();
 }
 
 /**
