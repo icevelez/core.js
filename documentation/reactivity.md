@@ -88,7 +88,7 @@ import { createSignal, createDerived, createAsyncDerived, effect } from "/core/r
 const page = createSignal(1);
 const page_size = createSignal(2);
 const pokemon_request = createDerived(() => fetch(`/api/v1/pokemons?page=${page()}&page_size=${page_size()}`));
-const pokemons = createAsyncDerived(() => network_request());
+const pokemons = createAsyncDerived(() => pokemon_request());
 
 effect(() => {
   console.log("List of pokemons:", pokemons());
