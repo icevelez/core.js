@@ -941,7 +941,10 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
         showLoading();
         promise.then((result) => {
             if (lastPromiseId == currentPromiseId) showThen(result);
-        }).catch(showCatch);
+        }).catch((error) => {
+            console.error(error);
+            showCatch(error);
+        });
     })
 }
 
