@@ -57,10 +57,7 @@ const user = getContext('user');
 ## Use Cases
 
 * Dependency injection
-* Theme management
-* Localization (i18n)
-* Shared reactive stores or services
-* Logging or feature flags
+* Shared scope reactive stores or services
 
 ---
 

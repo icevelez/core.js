@@ -1,6 +1,7 @@
 import { load } from "../../core/core.js";
 import { component } from "../../core/handlebar.js";
-import { createSignal, effect } from "../../core/reactivity.js";
+import { makeId } from "../../core/helper-functions.js";
+import { createDerived, createSignal, effect } from "../../core/reactivity.js";
 
 let rowId = 1;
 
@@ -82,22 +83,11 @@ export default component({
     components: {}
 }, class {
 
-    // count = createSignal(0);
-    // getName = () => {
-    //     console.log("get name")
-    //     return "Jonas"
-    // }
-
     constructor() {
         setTimeout(() => {
             this.runLots();
             console.log("X");
         }, 2000)
-
-        // setTimeout(() => {
-        //     this.count.set(this.count()+1);
-        //     console.log("count update");
-        // }, 1000);
     }
 
     data = createSignal([]);

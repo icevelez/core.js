@@ -54,7 +54,7 @@ Expressions can be embedded inside HTML attributes.
 
 ## 3. Loops
 
-> Accessing individual values from an array requires using the getter as a function `()` property and setting a new value requires using `.set()` or `.update()`. This API decision is due to the limitation of JavaScript with closures where re-assigning a value `item = new_item` will not trigger reactivity.
+> Accessing individual values from an array requires using the variable as a function `()` and setting a new value requires using `.set()` or `.update()`. This API decision is due to the limitation of JavaScript with scope and closures where re-assigning a value `item = new_item` will not trigger reactivity.
 
 ### ✅ `each` block
 ```html
@@ -198,7 +198,7 @@ export default component(..., class {
 
 ### Caveat!
 
-> due to HTML specification, HTML attributes are case insensitive so function names used in this directive cannot be pascal Case
+> due to HTML specification, HTML attributes are case insensitive so function names used in this directive cannot be in Pascal case
 
 ### ✅ Correct usage
 ```html

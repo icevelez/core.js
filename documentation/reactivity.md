@@ -67,6 +67,36 @@ effect(() => {
 a.set(3); // Console logs: "Sum is: 5"
 ```
 
+## 2.5 Async Derived
+
+It behaves similarly to `createDerived` but focuses only getting the latest Promise of a Signal or Derived
+
+### Constructor
+
+```js
+createAsyncDerived<T>(computeFn: () => new Promise<T>)
+```
+```
+Properties
+    () => Promise<T>
+    Automatically re-evaluated when dependencies change.
+```
+### Example
+```js
+import { createSignal, createDerived, createAsyncDerived, effect } from "/core/reactvity.js";
+
+const page = createSignal(1);
+const page_size = createSignal(2);
+const pokemon_request = createDerived(() => fetch(`/api/v1/pokemons?page=${page()}&page_size=${page_size()}`));
+const pokemons = createAsyncDerived(() => network_request());
+
+effect(() => {
+  console.log("List of pokemons:", pokemons());
+    // First log: "List of pokemons: undefined"
+    // Second log (when fetch receives data from server): "List of pokemons: [...an array of pokemons]"
+});
+```
+
 ---
 
 ## 3. Effect
@@ -114,8 +144,8 @@ untrackedEffect(fn: () => void): () => void
 ## Dependency Tracking
 
 - Effects are tracked in a global `effectStack` array.
-- When a `State` or proxied object property is accessed, the current effect is subscribed to it.
-- When a value changes, the `State` or proxy calls `notifySubscribers` queuing all subscribers to re-run in a microtask.
+- When a `Signal` or proxied object property is accessed, the current effect is subscribed to it.
+- When a value changes, the `Signal` or proxy calls `notifySubscribers` queuing all subscribers to re-run in a microtask.
 
 ## Deep Proxy
 
