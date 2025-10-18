@@ -23,12 +23,16 @@ const imported_components = new Map();
 /** @type {WeakMap<Node, Record<string, any>[]>} */
 const cacheNodeProcesses = new WeakMap();
 
+/** @type {WeakMap<any, Function | Function[]>} */
+const cacheAppliedProcesses = new WeakMap();
+
 if (dev_mode_on) window.__corejs__ = {
     evaluationCache,
     markedNodeCache,
     slotCache,
     imported_components,
     cacheNodeProcesses,
+    cacheAppliedProcesses,
     delegated_events,
 }
 
@@ -38,7 +42,7 @@ if (dev_mode_on) window.__corejs__ = {
 * @returns {(props:Record<string, any>, render_slot_callbackfn:() => DocumentFragment) => DocumentFragment}
 */
 export function component(options, Model = class { }) {
-    if (Model && !Model.toString().startsWith("class")) throw new Error("context is not a class instance");
+    if (Model && !Model.toString().startsWith("class")) throw new Error("context is not a class");
 
     const components_id = makeId(6);
 
@@ -91,8 +95,8 @@ function createNodes(template) {
 function createFragment(fragment, ctx, render_slot_callbackfn) {
     const clone_fragment = fragment.cloneNode(true);
     const processes = cacheNodeProcesses.get(fragment);
-    if (processes) applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
-    return clone_fragment;
+    if (!processes) return clone_fragment;
+    return applyProcess(clone_fragment, processes, ctx, render_slot_callbackfn);
 }
 
 const eachRegex = /{{#each\s+(.+?)\s+as\s+((?:\w+|\{[\s\S]*?\}|\([\s\S]*?\)))\s*(?:,\s*(\w+))?}}([\s\S]*?){{\/each}}/g;
@@ -150,8 +154,7 @@ function parseIf(ifBlock) {
          * @param {string} firstBlock
          */
         function (_, firstCondition, firstBlock) {
-            let lastIndex = 0;
-            let match;
+            let lastIndex = 0, match;
 
             while ((match = ifElseregex.exec(firstBlock)) !== null) {
                 if (match.index > lastIndex) {
@@ -319,19 +322,17 @@ function preprocessTextNodes(node) {
     if (!isText) {
         const childNodes = Array.from(node.childNodes);
         for (const child_node of childNodes) preprocessTextNodes(child_node);
-        return node;
+        return;
     }
 
     const expression = node.textContent;
     const parts = expression.split(/({{[^}]+}})/g);
+    if (parts.length <= 1) return;
 
     const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
     if (!has_handlebars) return;
 
-    if (parts.length <= 1) return node;
-
     node.textContent = "";
-
     const parent = node.parentNode;
 
     for (const part of parts) {
@@ -368,17 +369,16 @@ function preprocessNode(node) {
     if (isStyle) return processes;
 
     const isText = node.nodeType === Node.TEXT_NODE;
-
     if (isText) {
         const expression = node.textContent;
-        const regex = /{{\s*([^#\/][^}]*)\s*}}/g;
         const parts = expression.split(/({{[^}]+}})/g);
-
         const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
         if (!has_handlebars) return processes;
 
+        node.textContent = "";
+
         let match, expr;
-        expression.replace(regex, (m, e) => { match = m; expr = e; });
+        expression.replace(/{{\s*([^#\/][^}]*)\s*}}/g, (m, e) => { match = m; expr = e; });
         processes.push({ type: process_type_enum.textInterpolation, match, expr, full_expr: expression });
         return processes;
     }
@@ -396,9 +396,20 @@ function preprocessNode(node) {
 
     if (isCoreComponentNode(node)) {
         const component_name = node.getAttribute("default");
+        const attrs = [...node.attributes], props = {}, dynamicProps = [];
         const slot_id = node.dataset.slotId;
         const slot_nodes = slot_id ? slotCache.get(slot_id) : null;
-        processes.push({ type: process_type_enum.coreComponent, slot_id, slot_nodes, component_name })
+
+        for (const attr of attrs) {
+            node.removeAttribute(attr.name);
+            if (attr.value.startsWith("{{")) {
+                dynamicProps.push({ name: attr.name, value: attr.value });
+                continue;
+            }
+            props[attr.name] = attr.value;
+        }
+
+        processes.push({ type: process_type_enum.coreComponent, slot_nodes, component_name, props, dynamicProps });
         return processes;
     }
 
@@ -406,7 +417,7 @@ function preprocessNode(node) {
         const marker_type = node.dataset.directive;
         const marker_id = node.dataset.markerId;
         const payload = markedNodeCache.get(marker_id);
-        if (!payload) throw console.error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
+        if (!payload) throw new Error(`processed template type "${process_type}" with marker id "${marker_id}" does not exists`);
         processes.push({ type: process_type_enum.markedBlocks, marker_type, payload });
         return processes;
     }
@@ -440,9 +451,9 @@ function preprocessNode(node) {
                 processes.push({ type: process_type_enum.eventListener, event_type, expr });
                 node.removeAttribute(attrName);
             } else if (attr.value.includes('{{')) {
-                let matches = [], exprs = [];
-                attr.value.replace(/{{\s*(.+?)\s*}}/g, (m, e) => { matches.push(m); exprs.push(e); });
-                processes.push({ type: process_type_enum.attributeInterpolation, matches, exprs, attr_name: attrName, value: attr.value });
+                const expr = `\`${attr.value.replace(/{{\s*(.+?)\s*}}/g, (_, e) => "${" + e + "}")}\``;
+                processes.push({ type: process_type_enum.attributeInterpolation, expr, attr_name: attrName });
+                node.removeAttribute(attrName);
             }
         };
     }
@@ -494,24 +505,20 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             case process_type_enum.slotInjection: {
                 if (!render_slot_callbackfn) break;
                 const parent = node.parentNode;
-                node.innerHTML = "";
                 parent.replaceChild(render_slot_callbackfn(), node);
                 break;
             }
             case process_type_enum.coreComponent: {
                 const component = ctx[process.component_name]?.default;
-                if (!component) throw console.error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
+                if (!component) throw new Error(`Core component "${process.component_name}" is undefined. Check if the component has a default export`);
 
-                /** @type {{ [key:string] : any }} */
-                const props = {};
+                const [nodeStart, nodeEnd] = createStartEndNode(process.marker_type);
+                const fragment = document.createDocumentFragment();
+                fragment.append(nodeStart, nodeEnd);
 
-                for (const attr of node.attributes) {
-                    props[attr.name] = attr.value && attr.value.startsWith("{{") ? evaluate(attr.value.match(/^{{\s*(.+?)\s*}}$/)[1], ctx) : attr.value;
-                }
+                applyCoreComponent(component, process, nodeStart, nodeEnd, ctx);
 
-                const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
-                node.innerHTML = "";
-                parent.replaceChild(component(props, renderSlotCallbackfn), node);
+                parent.replaceChild(fragment, node);
                 break;
             }
             case process_type_enum.markedBlocks: {
@@ -534,7 +541,6 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
                         break;
                 }
 
-                node.innerHTML = "";
                 parent.replaceChild(fragment, node);
                 break;
             }
@@ -545,9 +551,37 @@ function applyProcess(node, processes, ctx, render_slot_callbackfn) {
             }
         }
     }
+    return node;
 }
 
-// make individual value of an array as a read-only Signal because for reason, the reacitivity can't propogate back to the original signal
+/**
+ * @param {Function} component
+ * @param {{ slot_nodes : DocumentFragment, props : Record<string, string>, dynamicProps : { name : string, value : string, func : Function }[] }} process
+ * @param {Node} nodeStart
+ * @param {Node} nodeEnd
+ * @param {any} ctx
+ */
+function applyCoreComponent(component, process, nodeStart, nodeEnd, ctx) {
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const props = process.props;
+
+    if (process.dynamicProps.length > 0 && !process.dynamicProps[0].func) {
+        process.dynamicProps = process.dynamicProps.map((dynamicProp) => {
+            dynamicProp.func = evaluateRaw(dynamicProp.value.substring(2, dynamicProp.value.length - 2), ctxKeys)
+            return dynamicProp;
+        });
+    }
+
+    effect(() => {
+        removeNodesBetween(nodeStart, nodeEnd);
+        const renderSlotCallbackfn = !process.slot_nodes ? null : () => createFragment(process.slot_nodes, ctx);
+        for (const dynamicProp of process.dynamicProps) props[dynamicProp.name] = dynamicProp.func(...ctxValues);
+        nodeEnd.before(component(props, renderSlotCallbackfn));
+    })
+}
+
+// make individual value of an array as a read-only Signal because it messes up reactivity
 const IS_READ_ONLY_SIGNAL = Symbol("is_read_only_signal");
 
 /** @typedef {{ expression: string; mainContent: DocumentFragment; emptyContent: DocumentFragment; blockVar: string; blockVars: string[]; indexVar: string; }} EachConfig */
@@ -668,13 +702,21 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
     let renderedBlockMap = new Map();
     let isEmptyBlockMounted = false;
 
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    let func = cacheAppliedProcesses.get(eachConfig);
+    if (!func) {
+        func = evaluateRaw(eachConfig.expression, ctxKeys);
+        cacheAppliedProcesses.set(eachConfig, func);
+    }
+
     effect(() => {
         let currentNode = endNode;
 
         /** @type {EachBlock[]} */
         const newRenderedBlocks = [];
         /** @type {any[]} */
-        const blockDatas = evaluate(eachConfig.expression, ctx) || [];
+        const blockDatas = func(...ctxValues) || [];
 
         if (blockDatas.length <= 0 && !isEmptyBlockMounted) {
             isEmptyBlockMounted = true;
@@ -912,10 +954,14 @@ function applyAwaitBlock(awaitConfig, startNode, endNode, ctx) {
     /** @type {string} */
     let lastPromiseId;
 
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const func = evaluateRaw(awaitConfig.promiseExpr, ctxKeys);
+
     effect(() => {
-        const currentPromiseId = makeId(6);
+        const currentPromiseId = Math.random();
         lastPromiseId = currentPromiseId;
-        const promise = evaluate(awaitConfig.promiseExpr, ctx);
+        const promise = func(...ctxValues);
 
         if (!(promise instanceof Promise)) {
             if (lastPromiseId === currentPromiseId) showThen(promise);
@@ -960,13 +1006,24 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
     /** @type {{ block: string; condition: string; }} */
     let previousCondition;
 
+    let segmentFuncs = cacheAppliedProcesses.get(segments);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+
+    if (!segmentFuncs) {
+        segmentFuncs = [];
+        for (const segment of segments) segmentFuncs.push(evaluateRaw(segment.condition, ctxKeys));
+        cacheAppliedProcesses.set(segments, segmentFuncs);
+    }
+
     effect(() => {
         /** @type {{ block: string; condition: string; }} */
         let condition;
 
-        for (const segment of segments) {
-            if (!evaluate(segment.condition, ctx)) continue;
-            condition = segment;
+        for (let i = 0; i < segmentFuncs.length; i++) {
+            const func = segmentFuncs[i];
+            if (!func(...ctxValues)) continue;
+            condition = segments[i];
             break;
         }
 
@@ -1003,59 +1060,40 @@ function applyIfBlock(segments, startNode, endNode, ctx) {
  */
 function applyComponents(component, startNode, endNode, ctx) {
     const components = imported_components.get(component.import_id);
-    if (!components) throw console.error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
+    if (!components) throw new Error(`You currently have no component imported. Unable to find "<${component.tag}>". Import component before proceeding`);
 
     let componentFunc = components[component.tag];
-    if (!componentFunc) throw console.error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
+    if (!componentFunc) throw new Error(`Component "<${component.tag}>" does not exist. Importing it will fix this issue`);
+
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map((k) => ctx[k]);
 
     /** @type {{ [key:string] : any }} */
     const props = {};
-    const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
-    let match;
+    /** @type {{ key:string, func:Function }[]} */
+    let dynamicProps = cacheAppliedProcesses.get(component);
 
-    /** @type {{ key:string, value:string }[]} */
-    let dynamicProps = [];
+    if (!dynamicProps) {
+        const regex = /([:@\w-]+)(?:\s*=\s*"([^"]*)")?/g;
+        let match;
 
-    while ((match = regex.exec(component.attrStr)) !== null) {
-        const [_, key, value] = match;
-        if (value && value.startsWith('{{')) {
-            dynamicProps.push({ key, value: value.match(/^{{\s*(.+?)\s*}}$/)[1] });
-        } else {
-            props[key] = value;
+        dynamicProps = [];
+        while ((match = regex.exec(component.attrStr)) !== null) {
+            const [_, key, value] = match;
+            if (value && value.startsWith('{{')) {
+                dynamicProps.push({ key, func: evaluateRaw(value.match(/^{{\s*(.+?)\s*}}$/)[1], ctxKeys) });
+            } else {
+                props[key] = value;
+            }
         }
-    }
-
-    /** @type {Set<Function>} */
-    const onUnmountSet = new Set();
-    /** @type {Set<Function>} */
-    const onMountSet = new Set();
-
-    function unmount() {
-        for (const unmount of onUnmountSet) unmount();
-        onUnmountSet.clear();
-    };
-
-    function mount() {
-        for (const mount of onMountSet) mount();
-        onMountSet.clear();
+        cacheAppliedProcesses.set(component, dynamicProps);
     }
 
     effect(() => {
-        unmount();
         removeNodesBetween(startNode, endNode);
-
-        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = evaluate(dynamicProp.value, ctx)
-
-        const componentBlock = runScopedMountUnmount(onMountSet, onUnmountSet, () => {
-            return componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null);
-        })
-
+        for (const dynamicProp of dynamicProps) props[dynamicProp.key] = dynamicProp.func(...ctxValues);
+        const componentBlock = componentFunc(props, (component.slot_node) ? () => createFragment(component.slot_node, ctx) : null)
         endNode.before(componentBlock);
-
-        if (core_context.is_mounted_to_the_DOM) return mount();
-
-        core_context.onMountSet.add(mount)
-        core_context.onUnmountSet.add(unmount)
     })
 }
 
@@ -1065,24 +1103,39 @@ function applyComponents(component, startNode, endNode, ctx) {
  * @param {any} ctx
  */
 function applyTextInterpolation(node, process, ctx) {
-    let prevContent;
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    let func = cacheAppliedProcesses.get(process);
+    if (!func) {
+        func = evaluateRaw(process.expr, ctxKeys);
+        cacheAppliedProcesses.set(process, func);
+    }
+
     effect(() => {
-        let textContent = evaluate(process.expr, ctx);
-        if (prevContent !== textContent) node.textContent = prevContent = textContent;
+        let textContent = func(...ctxValues);
+        if (node.__cacheText !== textContent) node.textContent = node.__cacheText = textContent;
     })
 }
 
 /**
  * @param {Node} node
- * @param {{ value : string, matches : string[], exprs : string[], attr_name : string }} process
+ * @param {{ expr : string, attr_name : string }} process
  * @param {any} ctx
  */
 function applyAttributeInterpolation(node, process, ctx) {
-    let prevAttr;
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+
+    let func = cacheAppliedProcesses.get(process);
+    if (!func) {
+        func = evaluateRaw(process.expr, ctxKeys);
+        cacheAppliedProcesses.set(process, func);
+    }
+
     effect(() => {
-        let new_attr = process.value;
-        for (let i = 0; i < process.matches.length; i++) new_attr = new_attr.replace(process.matches[i], evaluate(process.exprs[i], ctx));
-        if (prevAttr === new_attr) return;
+        const new_attr = func(...ctxValues);
+        if (node.__cacheAttr === new_attr) return;
+        node.__cacheAttr = new_attr;
 
         if (process.attr_name === "value")
             node.value = new_attr;
@@ -1126,13 +1179,18 @@ const nonBubblingEvents = new Set([
  */
 function applyEventListener(node, process, ctx) {
     const isNonBubbling = nonBubblingEvents.has(process.event_type);
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    let func = cacheAppliedProcesses.get(process);
+    if (!func) {
+        func = evaluateRaw(process.expr, ctxKeys);
+        cacheAppliedProcesses.set(process, func);
+    }
+
     effect(() => {
-        const func = evaluate(process.expr, ctx);
-        if (isNonBubbling) {
-            node.addEventListener(process.event_type, func);
-            return () => node.removeEventListener(process.event_type, func);
-        }
-        return coreEventListener.add(process.event_type, node, func);
+        if (!isNonBubbling) return coreEventListener.add(process.event_type, node, func(...ctxValues));
+        node.addEventListener(process.event_type, func(...ctxValues));
+        return () => node.removeEventListener(process.event_type, func(...ctxValues));
     })
 }
 
@@ -1143,14 +1201,22 @@ function applyEventListener(node, process, ctx) {
  */
 function applyDirectiveUse(node, process, ctx) {
     const func = ctx[process.func_name];
-    if (!func) throw console.error(`use: directive "${process.func_name}" not found.`);
-    if (typeof func !== "function") throw console.error(`function "${process.name}" is not a function`);
+    if (!func) throw new Error(`use: directive "${process.func_name}" not found.`);
+    if (typeof func !== "function") throw new Error(`function "${process.name}" is not a function`);
 
     const onUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     const onMountSet = onMountQueue[onMountQueue.length - 1];
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+
+    let ctxFunc = cacheAppliedProcesses.get(process);
+    if (!ctxFunc) {
+        ctxFunc = evaluateRaw(process.func_attr, ctxKeys);
+        cacheAppliedProcesses.set(process, func);
+    }
 
     onMountSet.add(() => {
-        const cleanup = func(node, process.func_attr ? evaluate(process.func_attr, ctx) : undefined);
+        const cleanup = func(node, process.func_attr ? ctxFunc(...ctxValues) : undefined);
         if (typeof cleanup === "function") onUnmountSet.add(cleanup);
     });
 }
@@ -1161,7 +1227,9 @@ function applyDirectiveUse(node, process, ctx) {
  * @param {any} ctx
  */
 function applyDirectiveBind(node, process, ctx) {
-    const binding = evaluate(`(v, c, s) => {
+    const ctxKeys = Object.keys(ctx);
+    const ctxValues = ctxKeys.map(k => ctx[k]);
+    const binding = evaluateRaw(`(v, c, s) => {
         try {
             if (c(${process.value})) {
                 if (${process.value}[s]) throw new Error("signal is read-only");
@@ -1172,7 +1240,7 @@ function applyDirectiveBind(node, process, ctx) {
         } catch (error) {
             console.error(error);
         }
-    }`, ctx);
+    }`, ctxKeys)(...ctxValues);
 
     const eventListener = (event) => {
         const type = event.target.type;
@@ -1184,8 +1252,10 @@ function applyDirectiveBind(node, process, ctx) {
     const unmountSet = onUnmountQueue[onUnmountQueue.length - 1];
     unmountSet.add(remove_listener);
 
+    const func = evaluateRaw(process.value, ctxKeys);
+
     effect(() => {
-        let value = evaluate(process.value, ctx);
+        let value = func(...ctxValues);
         value = isSignal(value) ? value() : value;
 
         if (node.type === "date") {
@@ -1200,27 +1270,17 @@ function applyDirectiveBind(node, process, ctx) {
 
 /**
 * @param {string} expr
-* @param {any} ctx
-* @returns {any}
+* @param {string[]} ctx_keys
 */
-export function evaluate(expr, ctx) {
-    if (!expr || typeof expr !== "string") return undefined;
-
-    const ctx_keys = Object.keys(ctx);
-    const key = `${expr}::${ctx_keys.join(',')}`;
-
-    let evalFunc = evaluationCache.get(key);
+export function evaluateRaw(expr, ctx_keys) {
+    if (!expr || typeof expr !== "string") throw new Error("expr is not a string or empty");
+    const funcMapKey = `${expr}${ctx_keys.join('')}`;
+    let evalFunc = evaluationCache.get(funcMapKey);
     if (!evalFunc) {
         evalFunc = new Function(...ctx_keys, `return ${expr};`);
-        evaluationCache.set(key, evalFunc);
+        evaluationCache.set(funcMapKey, evalFunc);
     }
-
-    try {
-        return evalFunc(...ctx_keys.map(k => ctx[k]));
-    } catch (error) {
-        console.warn(`Evaluation run-time error: ${expr}`, error, ctx);
-        return undefined;
-    }
+    return evalFunc;
 }
 
 /**

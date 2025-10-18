@@ -1,4 +1,4 @@
-import { isObject } from "./helper-functions.js";
+import { isObject, makeId } from "./helper-functions.js";
 
 /** @type {Set<Function>} */
 const subscriber_queue = new Set();
@@ -123,6 +123,39 @@ export function createDerived(callbackfn) {
     }
 
     read.dispose = effect(() => signal.set(callbackfn()));
+
+    return read;
+}
+
+/**
+ * @template {any} T
+ * @param {() => Promise<T>} promise_callbackfn
+ */
+export function createAsyncDerived(promise_callbackfn) {
+    /** @type {T} */
+    const value = undefined;
+    const signal = createSignal(value);
+
+    function read() {
+        return signal();
+    }
+
+    let currentPromiseId;
+
+    read.dispose = effect(() => {
+        const promiseId = makeId(6);
+        currentPromiseId = promiseId;
+
+        promise_callbackfn()
+            .then((value) => {
+                if (currentPromiseId !== promiseId) return;
+                signal.set(value);
+            })
+            .catch((error) => {
+                if (currentPromiseId !== promiseId) return;
+                signal.set(error);
+            })
+    });
 
     return read;
 }
@@ -291,7 +324,7 @@ function wrap(obj) {
                     if (args.length <= 0) return return_value;
                     if (SETTERGETTERCONST.includes(key) && args.length <= 1) return return_value;
 
-                    console.warn(`object property "${key}" is a function, assuming it is to update some state, looping through all property of this object and notifying all effect subscribers`);
+                    // console.warn(`object property "${key}" is a function, assuming it is to update some state, looping through all property of this object and notifying all effect subscribers`);
 
                     const subscriberMap = SUBSCRIBERS.getMap(target);
 
