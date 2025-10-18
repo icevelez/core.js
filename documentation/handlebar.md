@@ -54,13 +54,13 @@ Expressions can be embedded inside HTML attributes.
 
 ## 3. Loops
 
-> Accessing individual values from an array requires using the variable as a function `()` and setting a new value requires using `.set()` or `.update()`. This API decision is due to the limitation of JavaScript with scope and closures where re-assigning a value `item = new_item` will not trigger reactivity.
+> Accessing values of an array in an `{{#each}}` block requires using the variable as a function like the example below
 
 ### ✅ `each` block
 ```html
 <ul>
-  {{#each items() as item, i}}
-    <li>{{ i }}. {{ item().name }}</li>
+  {{#each items() as item}}
+    <li>{{ item().name }}</li>
   {{/each}}
 </ul>
 ```
@@ -78,18 +78,21 @@ Expressions can be embedded inside HTML attributes.
 
 ### ✅ With index
 ```html
-{{#each items as product, i}}
+{{#each items() as product, i}}
   <div>{{ i() }}. {{ product().name }}</div>
 {{/each}}
 ```
 
-> The second alias (`i`) is optional. You can name it anything but it is also used as a getter function to access its value
+> The second alias (`i`) is optional. You can name it anything but it is also used as a function to access its value
 
 ---
 
 ## 4. Awaiting Promises
 
 ### ✅ Basic await
+```js
+const userPromise = fetch("...")
+````
 ```html
 {{#await userPromise}}
   <p>Loading...</p>
@@ -99,6 +102,9 @@ Expressions can be embedded inside HTML attributes.
 ```
 
 ### ✅ Await with error handling
+```js
+const dataPromise = fetch("...")
+````
 ```html
 {{#await dataPromise}}
   <p>Loading data...</p>
@@ -215,14 +221,17 @@ export default component(..., class {
 <input use:myaction="{{ 'Enter your name' }}" />
 ```
 
-### ✅ Action Function Signature
-Each action should be a function with the signature:
+### Function Signature
 ```js
+/**
+ * @param {Node} node
+ * @param {any} parameter
+ */
 function myaction(node, parameter) {
   // Setup logic
 
   return () => {
-      // clean up logic for when the node is destroyed
+      // clean up logic for when the node is destroyed (optional)
   }
 }
 ```
