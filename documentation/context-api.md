@@ -65,6 +65,5 @@ const user = getContext('user');
 
 * Context is not inherently reactive unless combined with a reactive system.
 * Only works within component trees.
-* `setContext()` and `getContext()` only works inside a component
 
 ---

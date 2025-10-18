@@ -21,17 +21,19 @@ export default component({
 });
 ```
 
-### ✅  Adding in context and logic to your component
+### ✅  Adding in data and logic to your component
 ```js
 import { component } from "/core/handlebar.js";
+import { createSignal } from "/core/reactivity.js";
 
 export default component({
     template: `
         <h1>Hello {{ name }}</h1>
+        <button onclick="{{() => count.set(count() + 1)}}">Count: {{ count }}</button>
     `
 }, class {
-    // all component logic lives here
     name = "Viewer"
+    count = createSignal(0);
 
     constructor() {}
 });
@@ -44,9 +46,6 @@ import { component } from "/core/handlebar.js";
 
 export default component({
     template: await load("src/App.html")
-}, class {
-    // all component logic lives here
-
 });
 ```
 
@@ -66,7 +65,7 @@ export default component({
         CustomComponent,
         AnotherComponent
     }
-}, ...);
+});
 ```
 
 ## 3 Using imported Component
