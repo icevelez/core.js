@@ -252,12 +252,7 @@ function subscriberMap() {
         * @returns {Set<Function>}
         */
         getSet(target, key) {
-            let keyMap = map.get(target);
-            if (!keyMap) {
-                keyMap = new Map();
-                map.set(target, keyMap);
-            }
-
+            const keyMap = this.getMap(target);
             let set = keyMap.get(key);
             if (!set) {
                 set = new Set();

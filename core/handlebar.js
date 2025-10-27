@@ -653,7 +653,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
 
     function unmountEachBlock() {
         for (const renderBlock of renderedBlocks) renderBlock.unmount();
-        renderedBlocks = [];
+        renderedBlocks.length = 0;
     };
 
     const parentOnUnmountSet = onUnmountQueue[onUnmountQueue.length - 1];
@@ -690,7 +690,7 @@ function applyEachBlock(eachConfig, startNode, endNode, ctx) {
             if (renderedBlocks.length > 0) {
                 for (const block of renderedBlocks) block.unmount();
                 removeNodesBetween(startNode, endNode);
-                renderedBlocks = [];
+                renderedBlocks.length = 0;
                 renderedBlockMap.clear();
             }
 
