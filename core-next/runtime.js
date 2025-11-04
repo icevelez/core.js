@@ -1,13 +1,17 @@
-import { coreEventListener } from "../core/handlebar.js";
-import { effect } from "../core/reactivity.js";
+import { escapeTemplateLiteral } from "./helper-functions.js";
+import { createSignal, effect, untrackedEffect } from "./reactivity.js";
 
-export const $ = Object.freeze({
+const $ = Object.freeze({
     /** @type {DocumentFragment[]} */
     fragment_cache: [],
     /** @type {Map<string, ({ fns : Function[], exprs : string[] } | { fn : Function, expr : string } | { pending_fn : Function, then_fn?: Function, catch_fn?: Function, expr : string })[]>} */
     block_cache: new Map(),
+    /** @type {Map<string, Function>} */
+    imported_components: new Map(),
     /** @type {WeakMap<DocumentFragment, []>} */
     fn_cache: new WeakMap(),
+    /** @type {Map<string, WeakMap<Node, Set<Function>>>} */
+    delegated_events: new Map(),
     eval: function (expr, keys) {
         return new Function(...keys, `return ${expr};`);
     },
@@ -28,7 +32,32 @@ export const $ = Object.freeze({
         }
     },
     effect: effect,
-    delegate: coreEventListener.add,
+    delegate: function (event_name, node, func) {
+        if (typeof func !== "function") throw new Error("func is not a function");
+        let event_node_weakmap = $.delegated_events.get(event_name);
+
+        if (!event_node_weakmap) {
+            event_node_weakmap = new WeakMap();
+            const funcs = new Set();
+            funcs.add(func);
+
+            event_node_weakmap.set(node, funcs);
+            $.delegated_events.set(event_name, event_node_weakmap);
+
+            window.addEventListener(event_name, (e) => match_delegated_node(event_node_weakmap, e, e.target));
+
+            return () => funcs.delete(func);
+        }
+
+        let funcs = event_node_weakmap.get(node);
+        if (!funcs) {
+            funcs = new Set();
+            event_node_weakmap.set(node, funcs);
+        }
+
+        funcs.add(func);
+        return () => funcs.delete(func);
+    },
     is_signal: function (signal) {
         return typeof signal === "function" && typeof signal.set === "function";
     },
@@ -68,22 +97,23 @@ export const $ = Object.freeze({
     },
     each: function (node, fn, else_fn, sub_ctx_value_fn, sub_ctx_key, sub_ctx_keys, index_key, ctx, ctxValues) {
         let is_empty_block_mounted = false;
-        let else_block_cleanup;
+        let else_block_cleanup, blocks = [];
 
-        let blocks = [];
         const fragment = document.createDocumentFragment();
-
         const anchor = new Text("");
         node.parentNode.replaceChild(anchor, node);
 
         return effect(() => {
+            fragment.textContent = "";
+
             const arr = sub_ctx_value_fn(...ctxValues);
 
-            if (else_fn && arr.length <= 0 && !is_empty_block_mounted) {
-                is_empty_block_mounted = true;
-
-                for (const block_cleanup of blocks) block_cleanup();
+            if (arr.length <= 0) {
+                for (const block of blocks) block.cleanup();
                 blocks.length = 0;
+
+                if (!else_fn || is_empty_block_mounted) return;
+                is_empty_block_mounted = true;
 
                 else_block_cleanup = else_fn(fragment, ctx);
                 anchor.before(fragment);
@@ -93,26 +123,34 @@ export const $ = Object.freeze({
             if (else_block_cleanup) else_block_cleanup();
             is_empty_block_mounted = false;
 
-            let i = 0;
-
             const new_blocks = [];
 
+            let i = -1;
             for (const ar of arr) {
-                const sub_ctx = { ...ctx };
-                if (sub_ctx_keys) {
-                    for (const sub_ctx_key of sub_ctx_keys) sub_ctx[sub_ctx_key] = ar[sub_ctx_key];
-                } else {
-                    sub_ctx[sub_ctx_key] = ar;
+                i++;
+
+                if (blocks[i]) {
+                    if (blocks[i].data() !== ar) blocks[i].data.set(ar);
+                    new_blocks.push(blocks[i]);
+                    continue;
                 }
-                if (index_key) sub_ctx[index_key] = i++;
-                new_blocks.push(fn(fragment, sub_ctx));
+
+                const data = createSignal(ar), sub_ctx = { ...ctx };
+
+                if (sub_ctx_keys && sub_ctx_keys.length > 0) {
+                    for (const sub_ctx_key of sub_ctx_keys) sub_ctx[sub_ctx_key] = () => data()[sub_ctx_key];
+                } else {
+                    sub_ctx[sub_ctx_key] = data;
+                }
+                if (index_key) sub_ctx[index_key] = i;
+
+                const cleanup = untrackedEffect(() => fn(fragment, sub_ctx));
+                new_blocks.push({ data, cleanup });
             }
 
-            for (let i = new_blocks.length; i < blocks.length; i++) {
-                const block_cleanup = blocks[i];
-                block_cleanup();
-            }
+            for (let i = new_blocks.length; i < blocks.length; i++) blocks[i].cleanup();
 
+            blocks.length = 0;
             blocks = new_blocks;
             anchor.before(fragment);
         })
@@ -139,14 +177,14 @@ export const $ = Object.freeze({
             }
 
             promise_cleanup_fn = pending_fn(fragment, ctx);
-            anchor.before(fragment);
 
             promise.then((value) => {
                 if (latest_promise_id !== current_promise_id) return;
                 final_cleanup_fn = then_fn(fragment, { ...ctx, [then_key]: value });
             }).catch((error) => {
                 if (latest_promise_id !== current_promise_id) return;
-                final_cleanup_fn = catch_fn(fragment, { ...ctx, [catch_key]: error });
+                if (catch_fn) final_cleanup_fn = catch_fn(fragment, { ...ctx, [catch_key]: error });
+                console.error(error);
             }).finally(() => {
                 if (latest_promise_id !== current_promise_id) return;
                 promise_cleanup_fn();
@@ -157,16 +195,36 @@ export const $ = Object.freeze({
             return cleanup_fn;
         });
     },
+    core_component: function (anchor, fn, props) {
+        const fragment = document.createDocumentFragment();
+        const cleanup = fn.default(fragment, props)
+        anchor.before(fragment);
+        return cleanup;
+    }
 });
 
-/** @typedef {{ children : number[][], text_funcs : { child_index : number, expr : string }[], attr_funcs : { child_index : number, expr : string, property : string }[], bindings : { child_index : number, var : string, property : string, event_type : string }[], events : { child_index : number, event_type : string, expr : string }[], blocks : { child_index : number, type : string, id : string }[] }} Processes */
+/**
+ * @param {WeakMap<Node, Set<Function>>} event_node_weakmap
+ * @param {Event} event
+ * @param {Node} target
+ */
+function match_delegated_node(event_node_weakmap, event, target) {
+    const funcs = event_node_weakmap.get(target);
+    if (!funcs) {
+        if (!target.parentNode) return;
+        return match_delegated_node(event_node_weakmap, event, target.parentNode);
+    }
+    for (const func of funcs) func(event);
+}
+
+/** @typedef {{ children : number[][], text_funcs : { child_index : number, expr : string }[], attr_funcs : { child_index : number, expr : string, property : string }[], bindings : { child_index : number, var : string, property : string, event_type : string }[], events : { child_index : number, event_type : string, expr : string }[], blocks : { child_index : number, type : string, id : string }[], core_component_blocks : { child_index : number, component_name : string, props : { [key:string] : string }, dynamicProps : { name : string, expr : string }[] } }} Processes */
 
 /**
  * @param {Node} node
  * @param {number[]} node_index
  * @param {Processes} processes
  */
-function processNode(node, node_index = [], processes = { children: [], events: [], bindings: [], attr_funcs: [], text_funcs: [], blocks: [], core_components: [] }) {
+function processNode(node, node_index = [], processes = { children: [], events: [], bindings: [], attr_funcs: [], text_funcs: [], blocks: [], core_component_blocks: [] }) {
     const isStyle = node instanceof HTMLStyleElement;
     if (isStyle) return processes;
 
@@ -189,20 +247,11 @@ function processNode(node, node_index = [], processes = { children: [], events: 
 
     const isCoreComponentNode = (node) => Boolean(node.dataset && node.dataset.block === "core-component");
     if (isCoreComponentNode(node)) {
-        const props = {}, dynamicProps = [], component_name = node.getAttribute("default");
-        node.removeAttribute("default");
-
-        for (const attr of [...node.attributes]) {
-            node.removeAttribute(attr.name);
-            if (attr.value.startsWith("{{")) {
-                dynamicProps.push({ name: attr.name, expr: attr.value });
-                continue;
-            }
-            props[attr.name] = attr.value;
-        }
-
+        const component = node.dataset.component;
+        if (!component) throw new Error("no default component found");
+        const props_id = node.dataset.blockPropsId;
         processes.children.push(node_index);
-        processes.core_components.push({ child_index: processes.children.length - 1, component_name, props, dynamicProps });
+        processes.core_component_blocks.push({ child_index: processes.children.length - 1, component, props_id });
         return processes;
     }
 
@@ -253,14 +302,24 @@ function processNode(node, node_index = [], processes = { children: [], events: 
     return processes;
 }
 
-/**
- * @param {string} template
- */
-export function compileTemplate(template) {
-    const templateEl = document.createElement("template");
-    templateEl.innerHTML = template;
+export function addComponentImports(key, components) {
+    $.imported_components.set(key, components);
+}
 
-    const fragment = templateEl.content;
+export function addBlockToCache(key, block) {
+    $.block_cache.set(key, block);
+}
+
+/**
+ * @param {DocumentFragment | string} fragment
+ */
+export function compileTemplate(fragment) {
+    if (typeof fragment === "string") {
+        const templateEl = document.createElement("template");
+        templateEl.innerHTML = fragment;
+        fragment = templateEl.content;
+    }
+
     fragment.insertBefore(new Text(""), fragment.firstChild);
     fragment.append(new Text(""));
 
@@ -290,28 +349,43 @@ export function compileTemplate(template) {
         ${(processes.text_funcs.length > 0 || processes.attr_funcs.length > 0) ? `// ONE-WAY DATA BINDING\n        const cleanup_effect = $.effect(() => {
             ${processes.text_funcs.map((func, i) => {
         ctxCacheIndex++;
-        return `${i === 0 ? '' : '            '}$.set_text(child${func.child_index}, (fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = $.eval("${func.expr.replaceAll("\"", "\\\"")}", ctxKeys)))(...ctxValues));`
-    }).join("\n")}${processes.attr_funcs.length <= 0 ? "" : processes.attr_funcs.map((attr, i) => {
+        return `${i === 0 ? '' : '            '}$.set_text(child${func.child_index}, (fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = $.eval(\`${escapeTemplateLiteral(func.expr)}\`, ctxKeys)))(...ctxValues));`
+    }).join("\n")}${processes.attr_funcs.length <= 0 ? "" : ("\n            " + processes.attr_funcs.map((attr, i) => {
         ctxCacheIndex++;
-        return `${i === 0 ? '' : '            '}$.set_attr(child${attr.child_index}, (fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] =  $.eval("${attr.expr.replaceAll("\"", "\\\"")}", ctxKeys)))(...ctxValues), ${attr.property});`
-    }).join("\n")}
+        return `${i === 0 ? '' : '            '}$.set_attr(child${attr.child_index}, (fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] =  $.eval(\`${escapeTemplateLiteral(attr.expr)}\`, ctxKeys)))(...ctxValues), "${attr.property}");`
+    }).join("\n"))}
         })` : ""}
             ${processes.bindings.length <= 0 ? '' : ("\n        // TWO-WAY DATA BINDING\n        const bind_listeners = [];\n        " + processes.bindings.map((bind, i) => {
         return `${i === 0 ? '' : '        '}child${bind.child_index}.${bind.property} = $.is_signal(ctx.${bind.var}) ? ctx.${bind.var}() : ctx.${bind.var};\n        $.delegate("${bind.event_type}", child${bind.child_index}, $.is_signal(ctx.${bind.var}) ? (event) => ctx.${bind.var}.set(event.target.${bind.property}) : (event) => ctx.${bind.var} = event.target.${bind.property})`
     }).join("\n") + "\n")}
-        ${processes.events.length <= 0 ? '' : "// EVENT DELEGATION\n        " + processes.events.map((event, i) => {
-        ctxCacheIndex++;
-        return `${i === 0 ? '' : '        '}$.delegate("${event.event_type}", child${event.child_index}, (fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = $.eval("${event.expr.replaceAll("\"", "\\\"")}", ctxKeys)))(...ctxValues));`
-    }).join("\n")}
 
         const cleanups = [];
 
+        ${processes.events.length <= 0 ? '' : "// EVENT DELEGATION\n        " + processes.events.map((event, i) => {
+        ctxCacheIndex++;
+        return `${i === 0 ? '' : '        '}const delegate${i}_cleanup = $.delegate("${event.event_type}", child${event.child_index}, (fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = $.eval(\`${escapeTemplateLiteral(event.expr)}\`, ctxKeys)))(...ctxValues));\n        cleanups.push(delegate${i}_cleanup);`
+    }).join("\n")}
+
         ${processes.blocks.length <= 0 ? '' : (processes.blocks.map((block, i) => {
         ctxCacheIndex++;
-        return block.type === "if" ? `const if${i} = $.block_cache.get("${block.id}")\n        const if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues));\n        cleanups.push(if${i}_cleanup);` :
+        return block.type === "if" ? `const if${i} = $.block_cache.get("${block.id}")\n        const if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues);\n        cleanups.push(if${i}_cleanup);` :
             block.type === "each" ? `const each${i} = $.block_cache.get("${block.id}")\n        const each${i}_cleanup = $.each(child${block.child_index}, each${i}.fn, each${i}.else_fn, fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = $.eval(each${i}.expr, ctxKeys)), each${i}.key, each${i}.keys, each${i}.index_key, ctx, ctxValues);\n        cleanups.push(each${i}_cleanup);` :
                 block.type === "await" ? `const await${i} = $.block_cache.get("${block.id}")\n        const await${i}_cleanup = $.await(child${block.child_index}, await${i}.pending_fn, await${i}.then_fn, await${i}.then_key, await${i}.catch_fn, await${i}.catch_key, fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = $.eval(await${i}.expr, ctxKeys)), ctx, ctxValues);\n        cleanups.push(await${i}_cleanup);` : ""
     }).join("\n"))}
+
+        ${processes.core_component_blocks.length <= 0 ? '' : processes.core_component_blocks.map((block, i) => {
+        ctxCacheIndex++;
+        return `const cc${i} = $.block_cache.get("${block.props_id}");
+        const cc${i}_dynamic_props = fnCache[${ctxCacheIndex}] || (fnCache[${ctxCacheIndex}] = cc${i}.dynamic_props.map((prop) => ({ key : prop.key, fn : $.eval(prop.expr, ctxKeys) })))
+        const cc${i}_anchor = new Text("");
+        child${block.child_index}.parentNode.replaceChild(cc${i}_anchor, child${block.child_index});
+
+        const cc${i}_cleanup = $.effect(() => {
+            for (const dynamic_prop of cc${i}_dynamic_props) cc${i}.props[dynamic_prop.key] = dynamic_prop.fn(...ctxValues);
+            return $.core_component(cc${i}_anchor, ctx.${block.component}, cc${i}.props)
+        })
+        cleanups.push(cc${i}_cleanup);`
+    })}
 
         anchor.append(fragment);
 
@@ -328,10 +402,10 @@ export function compileTemplate(template) {
         };`)
 }
 
-function resolveChildNode(i, more_levels = []) {
+function resolveChildNode(i, i_arr = []) {
     let x = `.childNodes[${i}]`;
-    if (more_levels.length <= 0) return x;
-    return x + resolveChildNode(more_levels.splice(0, 1), more_levels);
+    if (i_arr.length <= 0) return x;
+    return x + resolveChildNode(i_arr.splice(0, 1), i_arr);
 }
 
-window.__core__ = $; // please do not touch this
+window.__core__ = $;

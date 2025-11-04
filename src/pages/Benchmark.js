@@ -1,7 +1,7 @@
-import { load } from "../../core/core.js";
-import { component } from "../../core/handlebar.js";
-import { makeId } from "../../core/helper-functions.js";
-import { createDerived, createSignal, effect } from "../../core/reactivity.js";
+import { load } from "../../core-next/core.js";
+import { component } from "../../core-next/parser/handlebar.js";
+import { makeId } from "../../core-next/helper-functions.js";
+import { createDerived, createSignal, effect } from "../../core-next/reactivity.js";
 
 let rowId = 1;
 
@@ -157,7 +157,7 @@ export default component({
         tmp[1] = tmp[998];
         tmp[998] = a;
 
-        this.data.set(tmp);
+        // this.data.set(tmp);
     };
 
 });
