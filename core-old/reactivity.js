@@ -210,22 +210,20 @@ let is_in_untrack_from_parent_effect_scope = [];
 /**
 * Effect that is detached from any parent effect.
 * It is used in `template-engine/handlerbar.js` for processing an item inside an array of an `{{#each}}` block
-* @template {any} T
 * @param {Function} callbackfn
-* @returns {[T, Function]}
 */
 export function untrackedEffect(callbackfn) {
     if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
 
     is_in_untrack_from_parent_effect_scope.push(new Set());
 
-    const cleanup = callbackfn();
+    callbackfn();
+
     const dependencies = is_in_untrack_from_parent_effect_scope.pop();
 
     return () => {
         dependencies.forEach((dependency) => dependency());
         dependencies.clear();
-        cleanup();
     };
 }
 

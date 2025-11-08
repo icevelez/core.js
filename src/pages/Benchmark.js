@@ -1,7 +1,6 @@
-import { load } from "../../core-next/core.js";
-import { component } from "../../core-next/parser/handlebar.js";
-import { makeId } from "../../core-next/helper-functions.js";
-import { createDerived, createSignal, effect } from "../../core-next/reactivity.js";
+import { load } from "../../core/core.js";
+import { component } from "../../core/parser/handlebar.js";
+import { createSignal } from "../../core/reactivity.js";
 
 let rowId = 1;
 

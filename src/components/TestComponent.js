@@ -1,6 +1,6 @@
 import { onMount } from "../../core/core.js";
 import { createSignal, effect } from "../../core/reactivity.js";
-import { component } from "../../core/handlebar.js";
+import { component } from "../../core/parser/handlebar.js";
 
 export default component({
     template: `

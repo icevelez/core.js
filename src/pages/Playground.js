@@ -1,5 +1,5 @@
 import { getContext, load, onMount, setContext } from "../../core/core.js";
-import { component } from "../../core/handlebar.js";
+import { component } from "../../core/parser/handlebar.js";
 import { createSignal } from "../../core/reactivity.js";
 
 import TestComponent from "../components/TestComponent.js";
@@ -20,6 +20,8 @@ export default component({
     names = createSignal(['ice', 'ian', 'takeru', 'piox']);
 
     constructor() {
+        console.log("HELLO");
+
         setContext('name', 'new name set by playground component');
 
         onMount(() => {

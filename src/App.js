@@ -1,6 +1,6 @@
-import { load, onMount, setContext } from "../core-next/core.js";
-import { component } from "../core-next/parser/handlebar.js";
-import { createDerived, createSignal } from "../core-next/reactivity.js";
+import { load, onMount, setContext } from "../core/core.js";
+import { component } from "../core/parser/handlebar.js";
+import { createDerived, createSignal } from "../core/reactivity.js";
 
 import { Router } from "./common/router.js";
 

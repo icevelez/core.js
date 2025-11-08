@@ -1,4 +1,4 @@
-import { createSignal } from "../../core-next/reactivity.js";
+import { createSignal } from "../../core/reactivity.js";
 
 class RouterInstance {
 

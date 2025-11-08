@@ -1,3 +1,10 @@
+/**
+* @param {string} template_url
+*/
+export async function load(template_url) {
+    return fetch(template_url).then((response) => response.text());
+}
+
 /** @type {Set<Function>[]} */
 export const onMountQueue = [];
 /** @type {Set<Function>[]} */
@@ -29,22 +36,37 @@ export function onUnmount(callback) {
 
 /**
  * @param {Function} cb
- * @returns {[any, Function]}
  */
 export function mountWrapper(cb) {
-    onMountQueue.push(new Set())
-    const value = cb();
+    onMountQueue.push(new Set());
+    onUnmountQueue.push(new Set());
+
+    const cleanup = cb();
     const onMountFns = onMountQueue.pop();
-    const unmount_cleanup = [];
-    for (const mount of onMountFns) {
-        const unmount = mount();
-        if (typeof unmount === "function") unmount_cleanup.push(unmount)
-    };
-    const unmount = () => {
-        for (const unmount of unmount_cleanup) unmount();
-        unmount_cleanup.length = 0;
+    const onUnountFns = onMountQueue.pop();
+
+    const mount = () => {
+        if (!onMountFns) return;
+        for (const mount of onMountFns) {
+            const unmount = mount();
+            if (typeof unmount === "function") onUnountFns.add(unmount)
+        };
     }
-    return [value, unmount];
+
+    const parentOnMountQueue = onMountQueue[onMountQueue.length - 1];
+    if (parentOnMountQueue) parentOnMountQueue.add(mount); else mount();
+
+    const unmount = () => {
+        if (onUnountFns) {
+            for (const unmount of onUnountFns) unmount();
+            onUnountFns.clear();
+        }
+        if (cleanup) cleanup();
+    }
+
+    const parentOnUnmountQueue = onUnmountQueue[onUnmountQueue.length - 1];
+    parentOnUnmountQueue.add(unmount);
+    return unmount;
 }
 
 /**
@@ -75,10 +97,18 @@ export function getContext(key) {
  */
 export function contextWrapper(cb) {
     const previous_context = contextQueue;
-    contextQueue.push(new Map());
-    const current_context = [...contextQueue]
-    onMount(() => contextQueue = current_context);
+    contextQueue = [...contextQueue, new Map()];
     const value = cb();
-    onMount(() => contextQueue = previous_context);
+    contextQueue = previous_context
     return value;
+}
+
+export function copyContext() {
+    return [...contextQueue];
+}
+
+export function setNewContext(context) {
+    const previous_context = contextQueue;
+    contextQueue = context;
+    return () => contextQueue = previous_context;
 }

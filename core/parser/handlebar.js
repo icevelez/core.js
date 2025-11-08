@@ -16,15 +16,7 @@ export function component(options, Ctx = class { }) {
 
     if (options.components && Object.keys(options.components).length > 0) addComponentImports(components_id, options.components);
 
-    console.log(template_fn);
-
-    return function (anchor, props) {
-        const [cleanup, unmount] = mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props))))
-        return () => {
-            unmount();
-            cleanup();
-        };
-    }
+    return (anchor, props) => mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props))))
 }
 
 function parseHandlebar(source) {
@@ -70,6 +62,7 @@ const RE = {
     then: /\{\{:then(?:\s+(\w+))?\}\}([\s\S]*?)(?={{:|$)/,
     catch: /\{\{:catch(?:\s+(\w+))?\}\}([\s\S]*?)(?={{:|$)/,
     blockSplit: /{{:then[\s\S]*?}}|{{:catch[\s\S]*?}}/,
+    component: /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g,
 };
 
 const parse = {
@@ -149,10 +142,9 @@ const parse = {
 * @param {number} imported_component_id
 */
 function processComponents(template, imported_component_id) {
-    const componentRegex = /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g;
-
-    template = template.replace(componentRegex, (match, tag, attrStr, _) => {
-        const props = {}, dynamic_props = [];
+    RE.component.lastIndex = 0;
+    return template.replace(RE.component, (match, tag, attrStr, _) => {
+        const props = {}, dynamic_props = [], props_id = `props-${makeId(8)}`;
 
         attrStr.replace(/([\w:@-]+)(?:\s*=\s*"([^"]*)")?/g, (_, key, value) => {
             if (value && value.startsWith('{{')) {
@@ -162,7 +154,6 @@ function processComponents(template, imported_component_id) {
             }
         })
 
-        const props_id = `props-${makeId(8)}`;
         addBlockToCache(props_id, { props, dynamic_props });
 
         if (match.startsWith("<Core:component")) {
@@ -173,6 +164,4 @@ function processComponents(template, imported_component_id) {
 
         return `<template data-block="component" data-component-tag="${tag}" data-component-id="${imported_component_id}" data-block-props-id="${props_id}"></template>`;
     })
-
-    return template;
 }
