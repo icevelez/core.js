@@ -36,6 +36,7 @@ export function onUnmount(callback) {
 
 /**
  * @param {Function} cb
+ * @returns {() => void} cleanup function
  */
 export function mountWrapper(cb) {
     onMountQueue.push(new Set());
@@ -46,7 +47,6 @@ export function mountWrapper(cb) {
     const onUnountFns = onUnmountQueue.pop();
 
     const mount = () => {
-        if (!onMountFns) return;
         for (const mount of onMountFns) {
             const unmount = mount();
             if (typeof unmount === "function") onUnountFns.add(unmount)
@@ -57,10 +57,8 @@ export function mountWrapper(cb) {
     if (parentOnMountQueue) parentOnMountQueue.add(mount); else mount();
 
     const unmount = () => {
-        if (onUnountFns) {
-            for (const unmount of onUnountFns) unmount();
-            onUnountFns.clear();
-        }
+        for (const unmount of onUnountFns) unmount();
+        onUnountFns.clear();
         if (cleanup) cleanup();
     }
 
@@ -94,24 +92,27 @@ export function getContext(key) {
 /**
  * @template {any} T
  * @param {() => T} cb
- * @returns {T}
  */
 export function contextWrapper(cb) {
     const previous_context = contextQueue;
     contextQueue = [...contextQueue, new Map()];
     const cleanup = cb();
-    onUnmount(() => {
-        contextQueue = previous_context;
-        cleanup();
-    })
+    onUnmount(() => contextQueue = previous_context)
+    return cleanup;
 }
+
+// These two function below is used as a manual way of collecting the current context and re-using it asynchronously for {{#await}}
 
 export function copyContext() {
     return [...contextQueue];
 }
 
+/**
+ * @param {Map<string, any[]>} context
+ * @returns {() => void} revert back to the old context queue
+ */
 export function setNewContext(context) {
     const previous_context = contextQueue;
     contextQueue = context;
-    return () => contextQueue = previous_context;
+    return () => { contextQueue = previous_context; };
 }

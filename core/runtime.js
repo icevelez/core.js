@@ -1,4 +1,4 @@
-import { escapeTemplateLiteral } from "./helper-functions.js";
+import { escapeTemplateLiteral, makeId } from "./helper-functions.js";
 import { copyContext, setNewContext } from "./internal.js";
 import { createSignal, effect, isSignal, untrackedEffect } from "./reactivity.js";
 
@@ -59,6 +59,7 @@ const $ = Object.freeze({
         funcs.add(func);
         return () => funcs.delete(func);
     },
+    make_id: makeId,
     is_signal: isSignal,
     remove_nodes_between: function (startNode, endNode) {
         if (startNode.nextSibling === endNode) return;
@@ -70,13 +71,12 @@ const $ = Object.freeze({
         }
     },
     if: function (node, fns, condtion_fns, ctx, ctxValues) {
-        let prev_fn, unmount;
+        let prev_fn;
 
         const fragment = document.createDocumentFragment(), anchor = new Text("");
         node.parentNode.replaceChild(anchor, node);
 
         return effect(() => {
-            if (unmount) unmount();
             let curr_fn;
 
             for (let i = 0; i < condtion_fns.length; i++) {
@@ -89,8 +89,9 @@ const $ = Object.freeze({
             prev_fn = curr_fn;
             if (!curr_fn) return;
 
-            unmount = curr_fn(fragment, ctx);
+            const unmount = curr_fn(fragment, ctx);
             anchor.before(fragment);
+            return unmount;
         })
     },
     each: function (node, fn, else_fn, sub_ctx_value_fn, sub_ctx_key, sub_ctx_keys, index_key, ctx, ctxValues) {
@@ -231,10 +232,8 @@ function processNode(node, node_index = [], processes = { children: [], events: 
         if (!has_handlebars) return processes;
 
         node.textContent = "";
-        const expr = `\`${expression.replace(/{{\s*(.+?)\s*}}/g, (_, e) => "${" + e + "}")}\``;
-
         processes.children.push(node_index);
-        processes.text_funcs.push({ child_index: processes.children.length - 1, expr });
+        processes.text_funcs.push({ child_index: processes.children.length - 1, expr: `\`${expression.replace(/{{\s*(.+?)\s*}}/g, (_, e) => "${" + e + "}")}\`` });
         return processes;
     }
 
@@ -366,7 +365,7 @@ export function compileTemplate(fragment) {
         const cleanups = [];
 
         ${processes.bindings.length <= 0 ? '' : ("\n\t\t// TWO-WAY DATA BINDING\n\t\t" + processes.bindings.map((bind, i) => {
-        return `${i === 0 ? '' : '\t\t\t'}const bind${i}_cleanup = $.effect(() => child${bind.child_index}.${bind.property} = (fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("window.__core__.is_signal(${bind.var}) ? ${bind.var}() : ${bind.var}", ctxKeys)))(...ctxValues));\n        cleanups.push(bind${i}_cleanup);\n        const bind${i}_delegate_cleanup = $.delegate("${bind.event_type}", child${bind.child_index}, fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("(event) => window.__core__.is_signal(${bind.var}) ? ${bind.var}.set(event.target.${bind.property}) : (${bind.var} = event.target.${bind.property})", ctxKeys)(...ctxValues)))\n        cleanups.push(bind${i}_delegate_cleanup);`
+        return `${i === 0 ? '' : '\t\t\t'}child${bind.child_index}.__binding_key = $.make_id(6);\n\t\tconst bind${i}_cleanup = $.effect(() => child${bind.child_index}.${bind.property} = (fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("window.__core__.is_signal(${bind.var}) ? ${bind.var}() : ${bind.var}", ctxKeys)))(...ctxValues));\n        cleanups.push(bind${i}_cleanup);\n        const bind${i}_delegate_cleanup = $.delegate("${bind.event_type}", child${bind.child_index}, fnCache[child${bind.child_index}.__binding_key] || (fnCache[child${bind.child_index}.__binding_key] = $.eval("(event) => window.__core__.is_signal(${bind.var}) ? ${bind.var}.set(event.target.${bind.property}) : (${bind.var} = event.target.${bind.property})", ctxKeys)(...ctxValues)))\n\t\tcleanups.push(() => { bind${i}_delegate_cleanup(); delete fnCache[child${bind.child_index}.__binding_key]; });`
     }).join("\n"))}
 
         ${processes.events.length <= 0 ? '' : "\n\t\t// EVENT DELEGATION\n        " + processes.events.map((event, i) => {
