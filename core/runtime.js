@@ -330,9 +330,9 @@ export function compileTemplate(fragment) {
     fragment.insertBefore(new Text(""), fragment.firstChild);
     fragment.append(new Text(""));
 
-    const processes = processNode(fragment);
-
     let ctxI = -1;
+
+    const processes = processNode(fragment);
     const fragment_cache_index = $.fragment_cache.length;
     $.fragment_cache.push(fragment);
 
@@ -356,31 +356,34 @@ export function compileTemplate(fragment) {
         ${(processes.text_funcs.length > 0 || processes.attr_funcs.length > 0) ? `// ONE-WAY DATA BINDING\n\t\tconst cleanup_effect = $.effect(() => {
             ${processes.text_funcs.map((func, i) => {
         ctxI++;
-        return `${i === 0 ? '' : '\t\t'}$.set_text(child${func.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(func.expr)}\`, ctxKeys)))(...ctxValues));`
+        return `${i === 0 ? '' : '\t\t\t'}$.set_text(child${func.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(func.expr)}\`, ctxKeys)))(...ctxValues));`
     }).join("\n")}${processes.attr_funcs.length <= 0 ? "" : ("\n            " + processes.attr_funcs.map((attr, i) => {
         ctxI++;
-        return `${i === 0 ? '' : '\t\t'}$.set_attr(child${attr.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] =  $.eval(\`${escapeTemplateLiteral(attr.expr)}\`, ctxKeys)))(...ctxValues), "${attr.property}");`
+        return `${i === 0 ? '' : '\t\t\t'}$.set_attr(child${attr.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] =  $.eval(\`${escapeTemplateLiteral(attr.expr)}\`, ctxKeys)))(...ctxValues), "${attr.property}");`
     }).join("\n"))}
         })` : ""}
+
         const cleanups = [];
-            ${processes.bindings.length <= 0 ? '' : ("\n\t\t// TWO-WAY DATA BINDING\n\t\t" + processes.bindings.map((bind, i) => {
-        return `${i === 0 ? '' : '\t\t'}const bind${i}_cleanup = $.effect(() => child${bind.child_index}.${bind.property} = (fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("window.__core__.is_signal(${bind.var}) ? ${bind.var}() : ${bind.var}", ctxKeys)))(...ctxValues));\n        cleanups.push(bind${i}_cleanup);\n        const bind${i}_delegate_cleanup = $.delegate("${bind.event_type}", child${bind.child_index}, fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("(event) => window.__core__.is_signal(${bind.var}) ? ${bind.var}.set(event.target.${bind.property}) : (${bind.var} = event.target.${bind.property})", ctxKeys)(...ctxValues)))\n        cleanups.push(bind${i}_delegate_cleanup);`
-    }).join("\n") + "\n")}
-        ${processes.events.length <= 0 ? '' : "// EVENT DELEGATION\n        " + processes.events.map((event, i) => {
+
+        ${processes.bindings.length <= 0 ? '' : ("\n\t\t// TWO-WAY DATA BINDING\n\t\t" + processes.bindings.map((bind, i) => {
+        return `${i === 0 ? '' : '\t\t\t'}const bind${i}_cleanup = $.effect(() => child${bind.child_index}.${bind.property} = (fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("window.__core__.is_signal(${bind.var}) ? ${bind.var}() : ${bind.var}", ctxKeys)))(...ctxValues));\n        cleanups.push(bind${i}_cleanup);\n        const bind${i}_delegate_cleanup = $.delegate("${bind.event_type}", child${bind.child_index}, fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("(event) => window.__core__.is_signal(${bind.var}) ? ${bind.var}.set(event.target.${bind.property}) : (${bind.var} = event.target.${bind.property})", ctxKeys)(...ctxValues)))\n        cleanups.push(bind${i}_delegate_cleanup);`
+    }).join("\n"))}
+
+        ${processes.events.length <= 0 ? '' : "\n\t\t// EVENT DELEGATION\n        " + processes.events.map((event, i) => {
         ctxI++;
         return `${i === 0 ? '' : '\t\t'}const delegate${i}_cleanup = $.delegate("${event.event_type}", child${event.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(event.expr)}\`, ctxKeys)))(...ctxValues));\n        cleanups.push(delegate${i}_cleanup);`
     }).join("\n")}
 
-        ${processes.blocks.length <= 0 ? '' : (processes.blocks.map((block, i) => {
+        ${processes.blocks.length <= 0 ? '' : ("\n\n" + processes.blocks.map((block, i) => {
         ctxI++;
-        return block.type === "if" ? `const if${i} = $.block_cache.get("${block.id}")\n\t\tconst if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxI}] || (fnCache[${ctxI}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues);\n        cleanups.push(if${i}_cleanup);` :
-            block.type === "each" ? `const each${i} = $.block_cache.get("${block.id}")\n\t\tconst each${i}_cleanup = $.each(child${block.child_index}, each${i}.fn, each${i}.else_fn, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(each${i}.expr, ctxKeys)), each${i}.key, each${i}.keys, each${i}.index_key, ctx, ctxValues);\n        cleanups.push(each${i}_cleanup);` :
-                block.type === "await" ? `const await${i} = $.block_cache.get("${block.id}")\n\t\tconst await${i}_cleanup = $.await(child${block.child_index}, await${i}.pending_fn, await${i}.then_fn, await${i}.then_key, await${i}.catch_fn, await${i}.catch_key, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(await${i}.expr, ctxKeys)), ctx, ctxValues);\n        cleanups.push(await${i}_cleanup);` : ""
+        return block.type === "if" ? `${i === 0 ? '\t\t' : ''}const if${i} = $.block_cache.get("${block.id}")\n\t\tconst if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxI}] || (fnCache[${ctxI}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues);\n        cleanups.push(if${i}_cleanup);` :
+            block.type === "each" ? `${i === 0 ? '\t\t' : ''}const each${i} = $.block_cache.get("${block.id}")\n\t\tconst each${i}_cleanup = $.each(child${block.child_index}, each${i}.fn, each${i}.else_fn, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(each${i}.expr, ctxKeys)), each${i}.key, each${i}.keys, each${i}.index_key, ctx, ctxValues);\n        cleanups.push(each${i}_cleanup);` :
+                block.type === "await" ? `${i === 0 ? '\t\t' : ''}const await${i} = $.block_cache.get("${block.id}")\n\t\tconst await${i}_cleanup = $.await(child${block.child_index}, await${i}.pending_fn, await${i}.then_fn, await${i}.then_key, await${i}.catch_fn, await${i}.catch_key, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(await${i}.expr, ctxKeys)), ctx, ctxValues);\n        cleanups.push(await${i}_cleanup);` : ""
     }).join("\n"))}
 
-        ${processes.core_component_blocks.length <= 0 ? '' : processes.core_component_blocks.map((block, i) => {
+        ${processes.core_component_blocks.length <= 0 ? '' : ("\n" + processes.core_component_blocks.map((block, i) => {
         ctxI++;
-        return `const cc${i} = $.block_cache.get("${block.props_id}");
+        return `${i === 0 ? '\t\t' : ''}const cc${i} = $.block_cache.get("${block.props_id}");
         const cc${i}_dynamic_props = fnCache[${ctxI}] || (fnCache[${ctxI}] = cc${i}.dynamic_props.map((prop) => ({ key : prop.key, fn : $.eval(prop.expr, ctxKeys) })))
         const cc${i}_anchor = new Text("");
         child${block.child_index}.parentNode.replaceChild(cc${i}_anchor, child${block.child_index});
@@ -389,9 +392,11 @@ export function compileTemplate(fragment) {
             for (const dynamic_prop of cc${i}_dynamic_props) cc${i}.props[dynamic_prop.key] = dynamic_prop.fn(...ctxValues);
             return $.core_component(cc${i}_anchor, ctx.${block.component}, cc${i}.props)
         })
+
         cleanups.push(cc${i}_cleanup);`
-    }).join("\n")}
-        ${processes.component_blocks.length <= 0 ? '' : processes.component_blocks.map((block, i) => {
+    }).join("\n"))}
+
+        ${processes.component_blocks.length <= 0 ? '' : ("\n" + processes.component_blocks.map((block, i) => {
         ctxI++;
         return `const comp${i} = $.block_cache.get("${block.props_id}");
         const comp${i}_cache = $.imported_components.get("${block.component_id}");
@@ -404,7 +409,7 @@ export function compileTemplate(fragment) {
             return $.core_component(comp${i}_anchor, comp${i}_cache.${block.component_tag}, comp${i}.props)
         })
         cleanups.push(comp${i}_cleanup);`
-    }).join("\n")}
+    }).join("\n"))}
 
         anchor.append(fragment);
 
@@ -416,7 +421,9 @@ export function compileTemplate(fragment) {
             $.remove_nodes_between(boundaryNodeStart, boundaryNodeEnd);
             boundaryNodeStart.remove();
             boundaryNodeEnd.remove();
-        };`)
+        };`);
+
+    // console.log(func);
 
     return func;
 }

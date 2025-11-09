@@ -43,7 +43,7 @@ export function mountWrapper(cb) {
 
     const cleanup = cb();
     const onMountFns = onMountQueue.pop();
-    const onUnountFns = onMountQueue.pop();
+    const onUnountFns = onUnmountQueue.pop();
 
     const mount = () => {
         if (!onMountFns) return;
@@ -65,7 +65,8 @@ export function mountWrapper(cb) {
     }
 
     const parentOnUnmountQueue = onUnmountQueue[onUnmountQueue.length - 1];
-    parentOnUnmountQueue.add(unmount);
+    if (parentOnUnmountQueue) parentOnUnmountQueue.add(unmount);
+
     return unmount;
 }
 
@@ -98,9 +99,11 @@ export function getContext(key) {
 export function contextWrapper(cb) {
     const previous_context = contextQueue;
     contextQueue = [...contextQueue, new Map()];
-    const value = cb();
-    contextQueue = previous_context
-    return value;
+    const cleanup = cb();
+    onUnmount(() => {
+        contextQueue = previous_context;
+        cleanup();
+    })
 }
 
 export function copyContext() {
