@@ -15,6 +15,13 @@ export default component({
     }
 }, class {
 
+    welcome = (message) => {
+        console.log(message);
+        return () => {
+            console.log("cleaning up welcome message");
+        }
+    }
+
     name = getContext('name');
     counter = getContext('counter');
     names = createSignal(['ice', 'ian', 'takeru', 'piox']);

@@ -213,14 +213,14 @@ function match_delegated_node(map, event, target) {
     for (const fn of fns) fn(event);
 }
 
-/** @typedef {{ children : number[][], text_funcs : { child_index : number, expr : string }[], attr_funcs : { child_index : number, expr : string, property : string }[], bindings : { child_index : number, var : string, property : string, event_type : string }[], events : { child_index : number, event_type : string, expr : string }[], blocks : { child_index : number, type : string, id : string }[], core_component_blocks : { child_index : number, component_name : string, props_id : string }, component_blocks : { child_index : number, component_id : number, component_tag : string, props_id : string }, slot_child_index : number  }} Processes */
+/** @typedef {{ children : number[][], text_funcs : { child_index : number, expr : string }[], attr_funcs : { child_index : number, expr : string, property : string }[], bindings : { child_index : number, var : string, property : string, event_type : string }[], events : { child_index : number, event_type : string, expr : string }[], blocks : { child_index : number, type : string, id : string }[], core_component_blocks : { child_index : number, component_name : string, props_id : string }, component_blocks : { child_index : number, component_id : number, component_tag : string, props_id : string }, use_directives : { child_index : number, func_name : string, expr : string }[] slot_child_index : number  }} Processes */
 
 /**
  * @param {Node} node
  * @param {number[]} node_index
  * @param {Processes} processes
  */
-function processNode(node, node_index = [], processes = { children: [], events: [], bindings: [], attr_funcs: [], text_funcs: [], blocks: [], core_component_blocks: [], component_blocks: [] }) {
+function processNode(node, node_index = [], processes = { children: [], events: [], bindings: [], attr_funcs: [], text_funcs: [], blocks: [], core_component_blocks: [], component_blocks: [], use_directives: [], slot_child_index: -1 }) {
     const isStyle = node instanceof HTMLStyleElement;
     if (isStyle) return processes;
 
@@ -275,7 +275,13 @@ function processNode(node, node_index = [], processes = { children: [], events: 
     if (node.attributes) {
         for (const attr of Array.from(node.attributes)) {
             const attrName = attr.name.toLowerCase();
-            if (attrName.startsWith('bind:')) {
+            if (attrName.startsWith('use:')) {
+                const func_name = attrName.slice(4);
+                if (!processes.children.includes(node_index)) processes.children.push(node_index);
+                processes.use_directives.push({ child_index: processes.children.length - 1, func_name, expr: attr.value.slice(2, attr.value.length - 2) });
+
+                node.removeAttribute(attrName);
+            } else if (attrName.startsWith('bind:')) {
                 const property = attrName.slice(5);
                 const event_type_dic = {
                     "checked": node.type === "date" ? "change" : "click",
@@ -419,7 +425,12 @@ export function compileTemplate(fragment) {
         cleanups.push(comp${i}_cleanup);`
     }).join("\n"))}
 
-        ${processes.slot_child_index ? `if (slot_fn) {
+        ${processes.use_directives.length <= 0 ? '' : processes.use_directives.map((use_directive, i) => {
+        return `const use_cleaup${i} = ctx.${use_directive.func_name}((fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(use_directive.expr)}\`, ctxKeys)))(...ctxValues));
+        cleanups.push(use_cleaup${i});`;
+    }).join("\n")}
+
+        ${processes.slot_child_index > -1 ? `if (slot_fn) {
             const slot_anchor = new Text("");
             const fragment = document.createDocumentFragment();
             child${processes.slot_child_index}.parentNode.replaceChild(slot_anchor, child${processes.slot_child_index});

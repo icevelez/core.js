@@ -1,4 +1,4 @@
-<div>
+<div use:welcome="{{ 'hello from expr' }}">
     <p>Counter from Parent Component: {{ counter() }}</p>
     <button onclick="{{ () => counter.set(counter()+1) }}">Click Me</button>
     <br><br>
