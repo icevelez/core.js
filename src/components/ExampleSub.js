@@ -5,7 +5,7 @@ import { component } from "../../core/parser/handlebar.js";
 export default component({
     template: `
         <h1>Hello from {{ name() }}</h1>
-        <!-- <Core:component default="child"/> -->
+        <Core:slot/>
     `
 }, class {
 

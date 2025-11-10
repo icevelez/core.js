@@ -16,7 +16,7 @@ export function component(options, Ctx = class { }) {
 
     if (options.components && Object.keys(options.components).length > 0) addComponentImports(components_id, options.components);
 
-    return (anchor, props) => mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props))))
+    return (anchor, props, slot_fn) => mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props), slot_fn)))
 }
 
 function parseHandlebar(source) {
@@ -143,7 +143,7 @@ const parse = {
 */
 function processComponents(template, imported_component_id) {
     RE.component.lastIndex = 0;
-    return template.replace(RE.component, (match, tag, attrStr, _) => {
+    return template.replace(RE.component, (match, tag, attrStr, _, inner_content) => {
         const props = {}, dynamic_props = [], props_id = `props-${makeId(8)}`;
 
         attrStr.replace(/([\w:@-]+)(?:\s*=\s*"([^"]*)")?/g, (_, key, value) => {
@@ -154,14 +154,22 @@ function processComponents(template, imported_component_id) {
             }
         })
 
+        let slot_id;
+
+        if (inner_content) {
+            slot_id = `slot-${makeId(8)}`;
+            addBlockToCache(slot_id, compileTemplate(inner_content));
+        }
+
         addBlockToCache(props_id, { props, dynamic_props });
 
+        if (match.startsWith("<Core:slot")) return `<template data-block="core-slot"></template>`;
         if (match.startsWith("<Core:component")) {
             const _default = props.default;
             delete props.default;
-            return `<template data-block="core-component" data-block-props-id="${props_id}" data-component="${_default}"></template>`;
+            return `<template data-block="core-component" data-block-props-id="${props_id}" data-component="${_default}" ${slot_id ? `data-slot-id="${slot_id}"` : ''}></template>`;
         }
 
-        return `<template data-block="component" data-component-tag="${tag}" data-component-id="${imported_component_id}" data-block-props-id="${props_id}"></template>`;
+        return `<template data-block="component" data-component-tag="${tag}" data-component-id="${imported_component_id}" data-block-props-id="${props_id}" ${slot_id ? `data-slot-id="${slot_id}"` : ''}></template>`;
     })
 }

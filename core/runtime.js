@@ -194,9 +194,9 @@ const $ = Object.freeze({
             return cleanup_fn;
         });
     },
-    core_component: function (anchor, fn, props) {
+    core_component: function (anchor, fn, props, slot_fn) {
         const fragment = document.createDocumentFragment();
-        const cleanup = fn.default ? fn.default(fragment, props) : fn(fragment, props);
+        const cleanup = fn.default ? fn.default(fragment, props, slot_fn) : fn(fragment, props, slot_fn);
         anchor.before(fragment);
         return cleanup;
     }
@@ -213,7 +213,7 @@ function match_delegated_node(map, event, target) {
     for (const fn of fns) fn(event);
 }
 
-/** @typedef {{ children : number[][], text_funcs : { child_index : number, expr : string }[], attr_funcs : { child_index : number, expr : string, property : string }[], bindings : { child_index : number, var : string, property : string, event_type : string }[], events : { child_index : number, event_type : string, expr : string }[], blocks : { child_index : number, type : string, id : string }[], core_component_blocks : { child_index : number, component_name : string, props_id : string }, component_blocks : { child_index : number, component_id : number, component_tag : string, props_id : string } }} Processes */
+/** @typedef {{ children : number[][], text_funcs : { child_index : number, expr : string }[], attr_funcs : { child_index : number, expr : string, property : string }[], bindings : { child_index : number, var : string, property : string, event_type : string }[], events : { child_index : number, event_type : string, expr : string }[], blocks : { child_index : number, type : string, id : string }[], core_component_blocks : { child_index : number, component_name : string, props_id : string }, component_blocks : { child_index : number, component_id : number, component_tag : string, props_id : string }, slot_child_index : number  }} Processes */
 
 /**
  * @param {Node} node
@@ -239,13 +239,19 @@ function processNode(node, node_index = [], processes = { children: [], events: 
 
     if (node.nodeType === Node.COMMENT_NODE) return processes;
 
+    const isCoreSlotNode = (node) => Boolean(node.dataset && node.dataset.block === "core-slot");
+    if (isCoreSlotNode(node)) {
+        processes.children.push(node_index);
+        processes.slot_child_index = processes.children.length - 1;
+        return processes;
+    }
+
     const isCoreComponentNode = (node) => Boolean(node.dataset && node.dataset.block === "core-component");
     if (isCoreComponentNode(node)) {
         const component = node.dataset.component;
         if (!component) throw new Error("no default component found");
-        const props_id = node.dataset.blockPropsId;
         processes.children.push(node_index);
-        processes.core_component_blocks.push({ child_index: processes.children.length - 1, component, props_id });
+        processes.core_component_blocks.push({ child_index: processes.children.length - 1, component, props_id: node.dataset.blockPropsId, slot_id: node.dataset.slotId });
         return processes;
     }
 
@@ -254,9 +260,8 @@ function processNode(node, node_index = [], processes = { children: [], events: 
         const component_id = node.dataset.componentId;
         const component_tag = node.dataset.componentTag;
         if (!component_id || !component_tag) throw new Error("component not found");
-        const props_id = node.dataset.blockPropsId;
         processes.children.push(node_index);
-        processes.component_blocks.push({ child_index: processes.children.length - 1, component_id, component_tag, props_id });
+        processes.component_blocks.push({ child_index: processes.children.length - 1, component_id, component_tag, props_id: node.dataset.blockPropsId, slot_id: node.dataset.slotId });
         return processes;
     }
 
@@ -335,7 +340,7 @@ export function compileTemplate(fragment) {
     const fragment_cache_index = $.fragment_cache.length;
     $.fragment_cache.push(fragment);
 
-    const func = new Function('anchor', 'ctx', `\t\tconst $ = window.__core__;
+    const func = new Function('anchor', 'ctx', 'slot_fn', `\t\tconst $ = window.__core__;
         const frag = $.fragment_cache[${fragment_cache_index}];
         const fragment = frag.cloneNode(true);
 
@@ -387,9 +392,11 @@ export function compileTemplate(fragment) {
         const cc${i}_anchor = new Text("");
         child${block.child_index}.parentNode.replaceChild(cc${i}_anchor, child${block.child_index});
 
+        const cc${i}_slot_fn = ${block.slot_id ? `$.block_cache.get("${block.slot_id}")` : 'undefined'};
+
         const cc${i}_cleanup = $.effect(() => {
             for (const dynamic_prop of cc${i}_dynamic_props) cc${i}.props[dynamic_prop.key] = dynamic_prop.fn(...ctxValues);
-            return $.core_component(cc${i}_anchor, ctx.${block.component}, cc${i}.props)
+            return $.core_component(cc${i}_anchor, ctx.${block.component}, cc${i}.props, cc${i}_slot_fn ? (anchor) => cc${i}_slot_fn(anchor, ctx) : null);
         })
 
         cleanups.push(cc${i}_cleanup);`
@@ -403,12 +410,23 @@ export function compileTemplate(fragment) {
         const comp${i}_anchor = new Text("");
         child${block.child_index}.parentNode.replaceChild(comp${i}_anchor, child${block.child_index});
 
+        const comp${i}_slot_fn = ${block.slot_id ? `$.block_cache.get("${block.slot_id}")` : 'undefined'};
+
         const comp${i}_cleanup = $.effect(() => {
             for (const dynamic_prop of comp${i}_dynamic_props) comp${i}.props[dynamic_prop.key] = dynamic_prop.fn(...ctxValues);
-            return $.core_component(comp${i}_anchor, comp${i}_cache.${block.component_tag}, comp${i}.props)
+            return $.core_component(comp${i}_anchor, comp${i}_cache.${block.component_tag}, comp${i}.props, comp${i}_slot_fn ? (anchor) => comp${i}_slot_fn(anchor, ctx) : null);
         })
         cleanups.push(comp${i}_cleanup);`
     }).join("\n"))}
+
+        ${processes.slot_child_index ? `if (slot_fn) {
+            const slot_anchor = new Text("");
+            const fragment = document.createDocumentFragment();
+            child${processes.slot_child_index}.parentNode.replaceChild(slot_anchor, child${processes.slot_child_index});
+            const slot_cleanup = slot_fn(fragment);
+            cleanups.push(slot_cleanup);
+            slot_anchor.before(fragment);
+        }` : ''}
 
         anchor.append(fragment);
 
