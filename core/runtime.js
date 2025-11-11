@@ -2,6 +2,34 @@ import { escapeTemplateLiteral, makeId } from "./helper-functions.js";
 import { copyContext, setNewContext } from "./internal.js";
 import { createSignal, effect, isSignal, untrackedEffect } from "./reactivity.js";
 
+const scheduled_nodes = new Set();
+let is_DOM_schedule_running = false;
+
+function scheuleDOM(node) {
+    if (scheduled_nodes.has(node)) return;
+    scheduled_nodes.add(node);
+    if (is_DOM_schedule_running) return;
+    is_DOM_schedule_running = true;
+    queueMicrotask(() => {
+        for (const node of scheduled_nodes) {
+            if (node.__cacheText && node.__cacheText !== node.textContent) node.textContent = node.__cacheText;
+            if (!node.__setAttr) continue;
+            const property = node.__setAttr[0];
+            const value = node.__setAttr[1];
+            if (property === "value") {
+                node.value = value;
+            } else if (value === "false" || !value) {
+                node.removeAttribute(property);
+            } else {
+                node.setAttribute(property, value === "true" ? "" : value);
+            }
+            node.__setAttr = null;
+        }
+        scheduled_nodes.clear();
+        is_DOM_schedule_running = false;
+    })
+}
+
 const $ = Object.freeze({
     /** @type {DocumentFragment[]} */
     fragment_cache: [],
@@ -18,19 +46,15 @@ const $ = Object.freeze({
     },
     set_text: function (node, text) {
         if (node.__cacheText === text) return;
-        node.__cacheText = node.textContent = text;
+        node.__cacheText = text;
+        scheuleDOM(node);
     },
-    set_attr: function (node, attr, property) {
+    set_attr: function (node, value, property) {
         if (!node.__cacheAttr) node.__cacheAttr = {};
-        if (node.__cacheAttr[property] === attr) return;
-        node.__cacheAttr[property] = attr;
-        if (property === "value") {
-            node.value = attr;
-        } else if (attr === "false" || !attr) {
-            node.removeAttribute(property);
-        } else {
-            node.setAttribute(property, attr === "true" ? "" : attr);
-        }
+        if (node.__cacheAttr[property] === value) return;
+        node.__cacheAttr[property] = value;
+        node.__setAttr = [property, value];
+        scheuleDOM(node);
     },
     effect: effect,
     delegate: function (event_name, node, func) {
