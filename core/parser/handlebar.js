@@ -1,6 +1,6 @@
-import { addBlockToCache, addComponentImports, compileTemplate } from "../runtime.js";
 import { makeId } from "../helper-functions.js";
 import { contextWrapper, mountWrapper } from "../internal.js";
+import { addBlockToCache, addComponentImports, compileTemplate, processComponents } from "../runtime.js";
 
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
@@ -62,7 +62,6 @@ const RE = {
     then: /\{\{:then(?:\s+(\w+))?\}\}([\s\S]*?)(?={{:|$)/,
     catch: /\{\{:catch(?:\s+(\w+))?\}\}([\s\S]*?)(?={{:|$)/,
     blockSplit: /{{:then[\s\S]*?}}|{{:catch[\s\S]*?}}/,
-    component: /<([A-Z][A-Za-z0-9]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)>(?:([\s\S]*?)<\/\1>)?/g,
 };
 
 const parse = {
@@ -134,42 +133,4 @@ const parse = {
             catch_key: catchMatch && catchMatch[1] || undefined,
         };
     },
-}
-
-/**
-* Replaces all custom HTML Tags with a placeholder element to be processed later
-* @param {string} template
-* @param {number} imported_component_id
-*/
-function processComponents(template, imported_component_id) {
-    RE.component.lastIndex = 0;
-    return template.replace(RE.component, (match, tag, attrStr, _, inner_content) => {
-        const props = {}, dynamic_props = [], props_id = `props-${makeId(8)}`;
-
-        attrStr.replace(/([\w:@-]+)(?:\s*=\s*"([^"]*)")?/g, (_, key, value) => {
-            if (value && value.startsWith('{{')) {
-                dynamic_props.push({ key, expr: value.match(/^{{\s*(.+?)\s*}}$/)[1] });
-            } else if (value) {
-                props[key] = value;
-            }
-        })
-
-        let slot_id;
-
-        if (inner_content) {
-            slot_id = `slot-${makeId(8)}`;
-            addBlockToCache(slot_id, compileTemplate(inner_content));
-        }
-
-        addBlockToCache(props_id, { props, dynamic_props });
-
-        if (match.startsWith("<Core:slot")) return `<template data-block="core-slot"></template>`;
-        if (match.startsWith("<Core:component")) {
-            const _default = props.default;
-            delete props.default;
-            return `<template data-block="core-component" data-block-props-id="${props_id}" data-component="${_default}" ${slot_id ? `data-slot-id="${slot_id}"` : ''}></template>`;
-        }
-
-        return `<template data-block="component" data-component-tag="${tag}" data-component-id="${imported_component_id}" data-block-props-id="${props_id}" ${slot_id ? `data-slot-id="${slot_id}"` : ''}></template>`;
-    })
 }
