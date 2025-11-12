@@ -1,7 +1,8 @@
 import { escapeTemplateLiteral, makeId } from "./helper-functions.js";
-import { copyContext, setNewContext } from "./internal.js";
+import { contextWrapper, copyContext, mountWrapper, setNewContext } from "./internal.js";
 import { createSignal, effect, isSignal, untrackedEffect } from "./reactivity.js";
 
+/** @type {Set<Node>} */
 const scheduled_nodes = new Set();
 let is_DOM_schedule_running = false;
 
@@ -13,17 +14,17 @@ function scheuleDOM(node) {
     queueMicrotask(() => {
         for (const node of scheduled_nodes) {
             if (node.__cacheText && node.__cacheText !== node.textContent) node.textContent = node.__cacheText;
-            if (!node.__setAttr) continue;
-            const property = node.__setAttr[0];
-            const value = node.__setAttr[1];
-            if (property === "value") {
-                node.value = value;
-            } else if (value === "false" || !value) {
-                node.removeAttribute(property);
-            } else {
-                node.setAttribute(property, value === "true" ? "" : value);
+            if (node.__setAttr) {
+                const property = node.__setAttr[0], value = node.__setAttr[1];
+                node.__setAttr = null;
+                if (property === "value") {
+                    node.value = value;
+                } else if (value === "false" || !value) {
+                    node.removeAttribute(property);
+                } else {
+                    node.setAttribute(property, value === "true" ? "" : value);
+                }
             }
-            node.__setAttr = null;
         }
         scheduled_nodes.clear();
         is_DOM_schedule_running = false;
@@ -41,9 +42,7 @@ const $ = Object.freeze({
     fn_cache: new WeakMap(),
     /** @type {Map<string, WeakMap<Node, Set<Function>>>} */
     delegated_events: new Map(),
-    eval: function (expr, keys) {
-        return new Function(...keys, `return ${expr};`);
-    },
+    eval: (expr, keys) => new Function(...keys, `return ${expr};`),
     set_text: function (node, text) {
         if (node.__cacheText === text) return;
         node.__cacheText = text;
@@ -118,14 +117,14 @@ const $ = Object.freeze({
             return unmount;
         })
     },
-    each: function (node, fn, else_fn, sub_ctx_value_fn, sub_ctx_key, sub_ctx_keys, index_key, ctx, ctxValues) {
+    each: function (node, fn, else_fn, arr_fn, sub_ctx_key, sub_ctx_keys, index_key, ctx, ctxValues) {
         let is_empty_block_mounted = false, else_block_cleanup, blocks = [];
 
         const fragment = document.createDocumentFragment(), anchor = new Text("");
         node.parentNode.replaceChild(anchor, node);
 
         return effect(() => {
-            const arr = sub_ctx_value_fn(...ctxValues);
+            const arr = arr_fn(...ctxValues);
 
             if (arr.length <= 0) {
                 for (const block of blocks) block.cleanup();
@@ -520,6 +519,24 @@ export function processComponents(template, imported_component_id) {
 
         return `<template data-block="component" data-component-tag="${tag}" data-component-id="${imported_component_id}" data-block-props-id="${props_id}" ${slot_id ? `data-slot-id="${slot_id}"` : ''}></template>`;
     })
+}
+
+/**
+* @param {{ template : string, components : Record<string, Function> }} options
+* @param {Object} Ctx anonymous class that encapsulate data and logic
+* @param {(template:string) => DocumentFragment} template_processor
+* @returns {(anchor:Node, props:Record<string, any>) => () => void}
+*/
+export function createComponent(options, Ctx, template_processor) {
+    if (Ctx && !Ctx.toString().startsWith("class")) throw new Error("context is not a class");
+
+    const components_id = makeId(6);
+    const template = processComponents(options.template, components_id);
+    const template_fn = compileTemplate(template_processor(template));
+
+    if (options.components && Object.keys(options.components).length > 0) addComponentImports(components_id, options.components);
+
+    return (anchor, props, slot_fn) => mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props), slot_fn)))
 }
 
 window.__core__ = $;

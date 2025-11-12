@@ -1,4 +1,5 @@
 import { load, onMount, setContext } from "../core/core.js";
+import { makeId } from "../core/helper-functions.js";
 import { component } from "../core/parser/handlebar.js";
 import { createDerived, createSignal } from "../core/reactivity.js";
 

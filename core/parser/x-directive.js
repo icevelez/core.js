@@ -1,6 +1,5 @@
 import { makeId } from "../helper-functions.js";
-import { contextWrapper, mountWrapper } from "../internal.js";
-import { addBlockToCache, addComponentImports, compileTemplate, processComponents } from "../runtime.js";
+import { addBlockToCache, compileTemplate, createComponent } from "../runtime.js";
 
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
@@ -8,27 +7,13 @@ import { addBlockToCache, addComponentImports, compileTemplate, processComponent
 * @returns {(anchor:Node, props:Record<string, any>) => () => void}
 */
 export function component(options, Ctx = class { }) {
-    if (Ctx && !Ctx.toString().startsWith("class")) throw new Error("context is not a class");
-
-    const components_id = makeId(6);
-    const template = processComponents(options.template, components_id);
-    const template_fn = compileTemplate(parseXDirective(template));
-
-    if (options.components && Object.keys(options.components).length > 0) addComponentImports(components_id, options.components);
-
-    return (anchor, props, slot_fn) => mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props), slot_fn)))
-}
-
-/**
- * @param {string} source
- * @returns {DocumentFragment}
- */
-function parseXDirective(source) {
-    const templateSource = document.createElement("template");
-    templateSource.innerHTML = source;
-    const node = templateSource.content.firstChild
-    collectBlocks(node);
-    return templateSource.content;
+    return createComponent(options, Ctx, function (source) {
+        const templateSource = document.createElement("template");
+        templateSource.innerHTML = source;
+        const node = templateSource.content.firstChild
+        collectBlocks(node);
+        return templateSource.content;
+    })
 }
 
 /**
@@ -47,7 +32,7 @@ function returnFragment(node) {
  * @param {string} block_type
  * @param {any} block
  */
-function createBlock(node, block_type, block) {
+function addBlock(node, block_type, block) {
     const block_id = `${block_type}-${makeId(6)}`;
     const blockEl = document.createElement("template");
     blockEl.dataset.block = block_type;
@@ -62,18 +47,13 @@ function createBlock(node, block_type, block) {
 function collectBlocks(node) {
     const firstChild = node.firstChild;
     if (firstChild) collectBlocks(firstChild);
-
     const nextNode = node.nextSibling;
     const isStyle = node instanceof HTMLStyleElement;
     const isText = node.nodeType === Node.TEXT_NODE;
-    if (isText || isStyle) {
-        if (nextNode) collectBlocks(nextNode)
-        return;
+    if (isText || isStyle) return nextNode ? collectBlocks(nextNode) : undefined;
+    for (const directive of ["x-if", "x-for", "x-await"]) {
+        if (node.hasAttribute(directive)) collectBlock(node, directive);
     }
-
-    if (node.getAttribute("x-if")) collectBlock(node, "x-if");
-    if (node.getAttribute("x-for")) collectBlock(node, "x-for");
-    if (node.getAttribute("x-await")) collectBlock(node, "x-await");
     if (nextNode) collectBlocks(nextNode);
 }
 
@@ -94,7 +74,7 @@ function collectBlock(node, directive, block) {
         };
 
         collectBlocks(fragment.firstChild);
-        createBlock(node, "if", if_block);
+        addBlock(node, "if", if_block);
 
         if (!nextNode || nextNode.nodeType === Node.TEXT_NODE) return;
         const directive = nextNode.getAttribute("x-else-if") || nextNode.getAttribute("x-else");
@@ -140,7 +120,7 @@ function collectBlock(node, directive, block) {
             index_key: node.getAttribute("x-index") || "",
         };
 
-        createBlock(node, "each", for_block);
+        addBlock(node, "each", for_block);
 
         if (!nextNode || nextNode.nodeType === Node.TEXT_NODE) return;
         const has_empty = nextNode.hasAttribute("x-empty");
@@ -170,6 +150,7 @@ function collectBlock(node, directive, block) {
         const nextNextNode = nextNode.nextSibling;
         if (nextNode.hasAttribute("x-then")) {
             const then_fragment = returnFragment(nextNode);
+            nextNode.remove();
             collectBlocks(then_fragment.firstChild);
             await_block.then_key = nextNode.getAttribute("x-then") || "";
             await_block.then_fn = compileTemplate(then_fragment);
@@ -178,6 +159,7 @@ function collectBlock(node, directive, block) {
         if (!nextNextNode || nextNextNode.nodeType === Node.TEXT_NODE) return;
         if (nextNextNode.hasAttribute("x-catch")) {
             const catch_fragment = returnFragment(nextNode);
+            nextNextNode.remove();
             collectBlocks(catch_fragment.firstChild);
             await_block.catch_key = nextNextNode.getAttribute("x-catch") || "";
             await_block.catch_fn = compileTemplate(catch_fragment);

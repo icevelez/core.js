@@ -1,6 +1,5 @@
 import { makeId } from "../helper-functions.js";
-import { contextWrapper, mountWrapper } from "../internal.js";
-import { addBlockToCache, addComponentImports, compileTemplate, processComponents } from "../runtime.js";
+import { addBlockToCache, compileTemplate, createComponent } from "../runtime.js";
 
 /**
 * @param {{ template : string, components : Record<string, Function> }} options
@@ -8,50 +7,37 @@ import { addBlockToCache, addComponentImports, compileTemplate, processComponent
 * @returns {(anchor:Node, props:Record<string, any>) => () => void}
 */
 export function component(options, Ctx = class { }) {
-    if (Ctx && !Ctx.toString().startsWith("class")) throw new Error("context is not a class");
+    return createComponent(options, Ctx, function (source) {
+        const blockPattern = /{{#(await|if|each)(\b[^}]*)?}}|{{\/(await|if|each)}}/g, stack = [], blocks = [];
+        let match;
 
-    const components_id = makeId(6);
-    const template = processComponents(options.template, components_id);
-    const template_fn = compileTemplate(parseHandlebar(template));
-
-    if (options.components && Object.keys(options.components).length > 0) addComponentImports(components_id, options.components);
-
-    return (anchor, props, slot_fn) => mountWrapper(() => contextWrapper(() => template_fn(anchor, !Ctx ? {} : new Ctx(props), slot_fn)))
-}
-
-function parseHandlebar(source) {
-    const blockPattern = /{{#(await|if|each)(\b[^}]*)?}}|{{\/(await|if|each)}}/g;
-    const stack = [], blocks = [];
-    let match;
-
-    while ((match = blockPattern.exec(source))) {
-        const [full, openName, openArgs, closeName] = match;
-        if (openName) {
-            stack.push({
-                name: openName,
-                start: match.index,
-                end: null
-            });
-        } else if (closeName) {
-            const last = stack.pop();
-            if (!last || last.name !== closeName) throw new Error(`Unbalanced block: expected {{/${last?.name}}} but found {{/${closeName}}}`);
-            last.end = match.index + full.length;
-            last.outer = source.slice(last.start, last.end);
-            blocks.push(last);
+        while ((match = blockPattern.exec(source))) {
+            const [full, openName, openArgs, closeName] = match;
+            if (openName) {
+                stack.push({ name: openName, start: match.index, end: null, outer: '', placeholder: '' });
+            } else if (closeName) {
+                const last = stack.pop();
+                if (!last || last.name !== closeName) throw new Error(`Unbalanced block: expected {{/${last?.name}}} but found {{/${closeName}}}`);
+                last.end = match.index + full.length;
+                last.outer = source.slice(last.start, last.end);
+                blocks.push(last);
+            }
         }
-    }
 
-    blocks.sort((a, b) => b.start - a.start);
+        blocks.sort((a, b) => b.start - a.start);
 
-    let html = source;
-    for (const block of blocks) {
-        const block_id = `${block.name}-${makeId(6)}`;
-        const placeholder = `<template data-block="${block.name}" data-block-id="${block_id}"></template>`;
-        html = html.slice(0, block.start) + placeholder + html.slice(block.end);
-        addBlockToCache(block_id, parse[block.name](block.outer));
-    }
+        let html = source;
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            const block_id = `${block.name}-${makeId(6)}`;
+            block.placeholder = `<template data-block="${block.name}" data-block-id="${block_id}"></template>`;
+            html = html.slice(0, block.start) + block.placeholder + html.slice(block.end);
+            for (let j = 0; j < i; j++) block.outer = block.outer.replace(blocks[j].outer, blocks[j].placeholder);
+            addBlockToCache(block_id, parse[block.name](block.outer));
+        }
 
-    return html;
+        return html;
+    });
 }
 
 const RE = {
@@ -76,7 +62,7 @@ const parse = {
         while ((m = RE.else.exec(firstBody))) {
             if (m.index > lastIndex) {
                 exprs.push(lastCond);
-                fns.push(compileTemplate(parseHandlebar(firstBody.slice(lastIndex, m.index))))
+                fns.push(compileTemplate(firstBody.slice(lastIndex, m.index)))
             }
             if (m[0].startsWith("{{:else if")) {
                 lastCond = m[1];
