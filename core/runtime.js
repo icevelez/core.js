@@ -23,7 +23,8 @@ const $ = Object.freeze({
         if (!node.__cacheAttr) node.__cacheAttr = {};
         if (node.__cacheAttr[property] === value) return;
         node.__cacheAttr[property] = value;
-        node.__setAttr = [property, value];
+        if (!node.__setAttr) node.__setAttr = [];
+        node.__setAttr.push([property, value]);
         scheuleDOM(node);
     },
     effect: effect,
@@ -209,15 +210,16 @@ function scheuleDOM(node) {
         for (const node of scheduled_nodes) {
             if (node.__cacheText && node.__cacheText !== node.textContent) node.textContent = node.__cacheText;
             if (node.__setAttr) {
-                const property = node.__setAttr[0], value = node.__setAttr[1];
-                node.__setAttr = null;
-                if (property === "value") {
-                    node.value = value;
-                } else if (value === "false" || !value) {
-                    node.removeAttribute(property);
-                } else {
-                    node.setAttribute(property, value === "true" ? "" : value);
+                for (const attr of node.__setAttr) {
+                    if (attr.property === "value") {
+                        node.value = attr.value;
+                    } else if (attr.value === "false" || !attr.value) {
+                        node.removeAttribute(attr.property);
+                    } else {
+                        node.setAttribute(attr.property, attr.value === "true" ? "" : attr.value);
+                    }
                 }
+                node.__setAttr.length = 0;
             }
         }
         scheduled_nodes.clear();
