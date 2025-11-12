@@ -3,6 +3,7 @@ import { contextWrapper, copyContext, mountWrapper, setNewContext } from "./inte
 import { createSignal, effect, isSignal, untrackedEffect } from "./reactivity.js";
 
 const $ = Object.freeze({
+    version: "0.3.1",
     /** @type {DocumentFragment[]} */
     fragment_cache: [],
     /** @type {Map<string, ({ fns : Function[], exprs : string[] } | { fn : Function, expr : string } | { pending_fn : Function, then_fn?: Function, catch_fn?: Function, expr : string })[]>} */
