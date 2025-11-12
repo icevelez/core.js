@@ -10,8 +10,7 @@ export function component(options, Ctx = class { }) {
     return createComponent(options, Ctx, function (source) {
         const templateSource = document.createElement("template");
         templateSource.innerHTML = source;
-        const node = templateSource.content.firstChild
-        collectBlocks(node);
+        collectBlocks(templateSource.content.firstChild);
         return templateSource.content;
     })
 }
@@ -24,7 +23,7 @@ function returnFragment(node) {
     if (node instanceof HTMLTemplateElement) return node.content;
     let fragment = document.createDocumentFragment();
     fragment.append(node);
-    return node;
+    return fragment;
 }
 
 /**
@@ -37,7 +36,7 @@ function addBlock(node, block_type, block) {
     const blockEl = document.createElement("template");
     blockEl.dataset.block = block_type;
     blockEl.dataset.blockId = block_id;
-    (node?.parentElement || node.parentNode).replaceChild(blockEl, node);
+    node.parentNode.replaceChild(blockEl, node);
     addBlockToCache(block_id, block);
 }
 

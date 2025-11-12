@@ -1,1 +1,0 @@
-export const isObject = e => e && "object" == typeof e; export const makeId = e => { let t = ""; const r = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"; for (var o = 0; o < e; o++)t += r.charAt(Math.floor(52 * Math.random())); return t }; export const escapeTemplateLiteral = e => e.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");

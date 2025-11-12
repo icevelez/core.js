@@ -1,22 +1,16 @@
-import { isObject, makeId } from "./helper-functions.js";
+import { isObject } from "./helper-functions.js";
 
 /** @type {Set<Function>} */
 const subscriber_queue = new Set();
-
 let is_notifying_subscribers = false;
 
 /**
 * @param {Set<Function>} subscribers
 */
 function notifySubscribers(subscribers) {
-    for (const subscriber of subscribers) {
-        if (subscriber_queue.has(subscriber)) continue;
-        subscriber_queue.add(subscriber);
-    }
-
+    for (const subscriber of subscribers) if (!subscriber_queue.has(subscriber)) subscriber_queue.add(subscriber);
     if (is_notifying_subscribers) return;
     is_notifying_subscribers = true;
-
     queueMicrotask(() => {
         for (const subscriber of subscriber_queue) subscriber();
         subscriber_queue.clear();
@@ -26,24 +20,8 @@ function notifySubscribers(subscribers) {
 
 const IS_SIGNAL = Symbol('is_signal');
 
-/**
- * @template {any} T
- * @param {() => T} func
- * @returns {{ () => T, set : (new_value:T) => void, update : ((callbackfn:(old_value:T) => T) => void, [IS_SIGNAL] : boolean }}
- */
-export function makeFuncSignal(func) {
-    if (typeof func !== "function") throw new Error("func is not a function");
-    func[IS_SIGNAL] = true;
-    return func;
-}
-
-/**
- * @param {any} input
- * @returns {boolean}
- */
-export function isSignal(input) {
-    return input && typeof input === "function" && input[IS_SIGNAL];
-}
+/** @type {(input:any) => Boolean} */
+export const isSignal = (input) => input && typeof input === "function" && input[IS_SIGNAL];
 
 /**
  * @template {any} T
@@ -51,21 +29,13 @@ export function isSignal(input) {
  */
 export function createSignal(initial_value = undefined) {
     /** @type {T} */
-    let value;
+    let value = isObject(initial_value) ? createDeepProxy(initial_value) : initial_value;
     const subscribers = new Set();
-
-    if (isObject(initial_value)) {
-        value = createDeepProxy(initial_value)
-    } else {
-        value = initial_value;
-    }
-
-    function read() {
+    const read = () => {
         if (effectStack.length <= 0) return value;
 
         const currentEffect = effectStack[effectStack.length - 1];
         subscribers.add(currentEffect);
-
         currentEffect.dependencies.add(() => subscribers.delete(currentEffect));
 
         return value;
@@ -74,7 +44,7 @@ export function createSignal(initial_value = undefined) {
     /**
      * @param {T} new_value
      */
-    function write(new_value) {
+    read.set = function (new_value) {
         if (new_value === value) return
 
         // Preserve subscriber map of this.#value by transferring it to new_value unproxy
@@ -95,15 +65,13 @@ export function createSignal(initial_value = undefined) {
     }
 
     /**
-     * @param {(old_value:T) => T} callbackfn
+     * @param {(old_value:T) => T} fn
      */
-    function update(callbackfn) {
-        if (typeof callbackfn !== "function") throw new Error("callbackfn is not a function");
-        write(callbackfn(value));
+    read.update = function (fn) {
+        if (typeof fn !== "function") throw new Error("callbackfn is not a function");
+        read.set(fn(value));
     }
 
-    read.set = write;
-    read.update = update;
     read[IS_SIGNAL] = true;
 
     return read;
@@ -117,13 +85,8 @@ export function createDerived(callbackfn) {
     /** @type {T} */
     const value = undefined;
     const signal = createSignal(value);
-
-    function read() {
-        return signal();
-    }
-
+    const read = () => signal();
     read.dispose = effect(() => signal.set(callbackfn()));
-
     return read;
 }
 
@@ -132,66 +95,57 @@ export function createDerived(callbackfn) {
  * @param {() => Promise<T>} promise_callbackfn
  */
 export function createAsyncDerived(promise_callbackfn) {
+    let last_promise_id;
     /** @type {T} */
     const value = undefined;
     const signal = createSignal(value);
-
-    function read() {
-        return signal();
-    }
-
-    let currentPromiseId;
-
+    const read = () => signal();
     read.dispose = effect(() => {
-        const promiseId = makeId(6);
-        currentPromiseId = promiseId;
-
+        const promise_id = Math.random();
+        last_promise_id = promise_id;
         promise_callbackfn()
             .then((value) => {
-                if (currentPromiseId !== promiseId) return;
-                signal.set(value);
+                if (last_promise_id === promise_id) signal.set(value);
             })
             .catch((error) => {
-                if (currentPromiseId !== promiseId) return;
-                signal.set(error);
+                if (last_promise_id === promise_id) signal.set(error);
             })
     });
-
     return read;
 }
 
 const effectStack = [];
 
-export function effect(callbackfn) {
-    if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
-
-    let untackedEffect;
-
-    if (is_in_untrack_from_parent_effect_scope.length > 0) {
-        untackedEffect = is_in_untrack_from_parent_effect_scope.pop();
-        untackedEffect.add(cleanupfn);
-    }
-
-    if (!untackedEffect) {
-        const parentEffect = effectStack[effectStack.length - 1];
-        if (parentEffect) parentEffect.dependencies.add(cleanupfn);
-    }
+/**
+ * @param {Function} fn
+ * @returns {Function} cleanup function
+ */
+export function effect(fn) {
+    if (typeof fn !== "function") throw new TypeError("fn is not a function");
 
     const dependencies = new Set();
     let cleanup;
 
-    function cleanupfn() {
+    const cleanupfn = () => {
         if (typeof cleanup === "function") cleanup();
-        if (dependencies.size <= 0) return;
         for (let unsubscribe of dependencies) unsubscribe();
         dependencies.clear();
+    }
+
+    let untackedEffect = is_in_untrack_from_parent_effect_scope.pop();
+
+    if (!untackedEffect) {
+        const parentEffect = effectStack[effectStack.length - 1];
+        if (parentEffect) parentEffect.dependencies.add(cleanupfn);
+    } else {
+        untackedEffect.add(cleanupfn);
     }
 
     const wrappedEffect = () => {
         cleanupfn();
         effectStack.push(wrappedEffect);
         try {
-            cleanup = callbackfn();
+            cleanup = fn();
         } finally {
             effectStack.pop();
         }
@@ -210,20 +164,19 @@ let is_in_untrack_from_parent_effect_scope = [];
 /**
 * Effect that is detached from any parent effect.
 * It is used in `template-engine/handlerbar.js` for processing an item inside an array of an `{{#each}}` block
-* @template {any} T
-* @param {Function} callbackfn
-* @returns {[T, Function]}
+* @param {Function} fn
+* @returns {Function} cleanup
 */
-export function untrackedEffect(callbackfn) {
-    if (typeof callbackfn !== "function") throw new TypeError("callbackfn is not a function");
+export function untrackedEffect(fn) {
+    if (typeof fn !== "function") throw new TypeError("fn is not a function");
 
     is_in_untrack_from_parent_effect_scope.push(new Set());
 
-    const cleanup = callbackfn();
+    const cleanup = fn();
     const dependencies = is_in_untrack_from_parent_effect_scope.pop();
 
     return () => {
-        dependencies.forEach((dependency) => dependency());
+        for (let unsubscribe of dependencies) unsubscribe();
         dependencies.clear();
         cleanup();
     };

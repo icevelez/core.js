@@ -2,35 +2,6 @@ import { escapeTemplateLiteral, makeId } from "./helper-functions.js";
 import { contextWrapper, copyContext, mountWrapper, setNewContext } from "./internal.js";
 import { createSignal, effect, isSignal, untrackedEffect } from "./reactivity.js";
 
-/** @type {Set<Node>} */
-const scheduled_nodes = new Set();
-let is_DOM_schedule_running = false;
-
-function scheuleDOM(node) {
-    if (scheduled_nodes.has(node)) return;
-    scheduled_nodes.add(node);
-    if (is_DOM_schedule_running) return;
-    is_DOM_schedule_running = true;
-    queueMicrotask(() => {
-        for (const node of scheduled_nodes) {
-            if (node.__cacheText && node.__cacheText !== node.textContent) node.textContent = node.__cacheText;
-            if (node.__setAttr) {
-                const property = node.__setAttr[0], value = node.__setAttr[1];
-                node.__setAttr = null;
-                if (property === "value") {
-                    node.value = value;
-                } else if (value === "false" || !value) {
-                    node.removeAttribute(property);
-                } else {
-                    node.setAttribute(property, value === "true" ? "" : value);
-                }
-            }
-        }
-        scheduled_nodes.clear();
-        is_DOM_schedule_running = false;
-    })
-}
-
 const $ = Object.freeze({
     /** @type {DocumentFragment[]} */
     fragment_cache: [],
@@ -224,6 +195,35 @@ const $ = Object.freeze({
         return cleanup;
     }
 });
+
+/** @type {Set<Node>} */
+const scheduled_nodes = new Set();
+let is_DOM_schedule_running = false;
+
+function scheuleDOM(node) {
+    if (scheduled_nodes.has(node)) return;
+    scheduled_nodes.add(node);
+    if (is_DOM_schedule_running) return;
+    is_DOM_schedule_running = true;
+    queueMicrotask(() => {
+        for (const node of scheduled_nodes) {
+            if (node.__cacheText && node.__cacheText !== node.textContent) node.textContent = node.__cacheText;
+            if (node.__setAttr) {
+                const property = node.__setAttr[0], value = node.__setAttr[1];
+                node.__setAttr = null;
+                if (property === "value") {
+                    node.value = value;
+                } else if (value === "false" || !value) {
+                    node.removeAttribute(property);
+                } else {
+                    node.setAttribute(property, value === "true" ? "" : value);
+                }
+            }
+        }
+        scheduled_nodes.clear();
+        is_DOM_schedule_running = false;
+    })
+}
 
 /**
  * @param {WeakMap<Node, Set<Function>>} map
