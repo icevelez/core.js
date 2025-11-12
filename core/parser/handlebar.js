@@ -12,7 +12,7 @@ export function component(options, Ctx = class { }) {
         let match;
 
         while ((match = blockPattern.exec(source))) {
-            const [full, openName, openArgs, closeName] = match;
+            const [full, openName, , closeName] = match;
             if (openName) {
                 stack.push({ name: openName, start: match.index, end: null, outer: '', placeholder: '' });
             } else if (closeName) {
