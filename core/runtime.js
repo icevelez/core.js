@@ -18,7 +18,7 @@ const $ = Object.freeze({
     set_text: function (node, text) {
         if (node.__cacheText === text) return;
         node.__cacheText = text;
-        scheuleDOM(node);
+        scheuleDOMUpdate(node);
     },
     set_attr: function (node, value, property) {
         if (!node.__cacheAttr) node.__cacheAttr = {};
@@ -26,7 +26,7 @@ const $ = Object.freeze({
         node.__cacheAttr[property] = value;
         if (!node.__setAttr) node.__setAttr = [];
         node.__setAttr.push([property, value]);
-        scheuleDOM(node);
+        scheuleDOMUpdate(node);
     },
     effect: effect,
     delegate: function (event_name, node, func) {
@@ -129,7 +129,7 @@ const $ = Object.freeze({
                 const data = createSignal(ar), sub_ctx = { ...ctx };
 
                 if (sub_ctx_keys && sub_ctx_keys.length > 0) {
-                    for (const sub_ctx_key of sub_ctx_keys) sub_ctx[sub_ctx_key] = () => data()[sub_ctx_key];
+                    for (const sub_ctx_key of sub_ctx_keys) sub_ctx[sub_ctx_key] = data()[sub_ctx_key];
                 } else {
                     sub_ctx[sub_ctx_key] = data;
                 }
@@ -157,8 +157,7 @@ const $ = Object.freeze({
         let last_id = Math.random();
 
         return effect(() => {
-            const promise = promise_fn(...ctxValues);
-            const curr_id = Math.random();
+            const promise = promise_fn(...ctxValues), curr_id = Math.random();
             last_id = curr_id;
 
             if (!(promise instanceof Promise)) {
@@ -168,6 +167,7 @@ const $ = Object.freeze({
             }
 
             promise_cleanup_fn = pending_fn(fragment, ctx);
+            anchor.before(fragment);
 
             promise.then((value) => {
                 if (last_id !== curr_id || !then_fn) return;
@@ -202,7 +202,7 @@ const $ = Object.freeze({
 const scheduled_nodes = new Set();
 let is_DOM_schedule_running = false;
 
-function scheuleDOM(node) {
+function scheuleDOMUpdate(node) {
     if (scheduled_nodes.has(node)) return;
     scheduled_nodes.add(node);
     if (is_DOM_schedule_running) return;
@@ -379,17 +379,14 @@ export function compileTemplate(fragment) {
         if (!$.fn_cache.has(frag)) $.fn_cache.set(frag, {});
         const fnCache = $.fn_cache.get(frag);
 
-        // DATA SETUP
         const ctxKeys = Object.keys(ctx);
         const ctxValues = ctxKeys.map((k) => ctx[k]);
 
-        // CHILD SETUP
         const boundaryNodeStart = fragment.firstChild;
         const boundaryNodeEnd = fragment.lastChild;
 
         ${processes.children.map((child, i) => `${i === 0 ? '' : '\t\t'}const child${i} = fragment${resolveChildNode(child.splice(0, 1), child)};`).join("\n")}
-
-        ${(processes.text_funcs.length > 0 || processes.attr_funcs.length > 0) ? `// ONE-WAY DATA BINDING\n\t\tconst cleanup_effect = $.effect(() => {
+        ${(processes.text_funcs.length > 0 || processes.attr_funcs.length > 0) ? `\n// ONE-WAY DATA BINDING\n\t\tconst cleanup_effect = $.effect(() => {
             ${processes.text_funcs.map((func, i) => {
         ctxI++;
         return `${i === 0 ? '' : '\t\t\t'}$.set_text(child${func.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(func.expr)}\`, ctxKeys)))(...ctxValues));`
@@ -441,21 +438,17 @@ export function compileTemplate(fragment) {
         const comp${i}_dynamic_props = fnCache[${ctxI}] || (fnCache[${ctxI}] = comp${i}.dynamic_props.map((prop) => ({ key : prop.key, fn : $.eval(prop.expr, ctxKeys) })))
         const comp${i}_anchor = new Text("");
         child${block.child_index}.parentNode.replaceChild(comp${i}_anchor, child${block.child_index});
-
         const comp${i}_slot_fn = ${block.slot_id ? `$.block_cache.get("${block.slot_id}")` : 'undefined'};
-
         const comp${i}_cleanup = $.effect(() => {
             for (const dynamic_prop of comp${i}_dynamic_props) comp${i}.props[dynamic_prop.key] = dynamic_prop.fn(...ctxValues);
             return $.core_component(comp${i}_anchor, comp${i}_cache.${block.component_tag}, comp${i}.props, comp${i}_slot_fn ? (anchor) => comp${i}_slot_fn(anchor, ctx) : null);
         })
         cleanups.push(comp${i}_cleanup);`
     }).join("\n"))}
-
         ${processes.use_directives.length <= 0 ? '' : processes.use_directives.map((use_directive, i) => {
         return `const use_cleaup${i} = ctx.${use_directive.func_name}((fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(use_directive.expr)}\`, ctxKeys)))(...ctxValues));
         cleanups.push(use_cleaup${i});`;
     }).join("\n")}
-
         ${processes.slot_child_index > -1 ? `if (slot_fn) {
             const slot_anchor = new Text("");
             const fragment = document.createDocumentFragment();
