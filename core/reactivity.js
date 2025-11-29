@@ -29,7 +29,7 @@ export const isSignal = (input) => input && typeof input === "function" && input
  */
 export function createSignal(initial_value = undefined) {
     /** @type {T} */
-    let value = isObject(initial_value) ? createDeepProxy(initial_value) : initial_value;
+    let value = isObject(initial_value) ? wrap(initial_value) : initial_value;
     const subscribers = new Set();
     const read = () => {
         if (effectStack.length <= 0) return value;
@@ -49,7 +49,7 @@ export function createSignal(initial_value = undefined) {
 
         // Preserve subscriber map of this.#value by transferring it to new_value unproxy
         if (isObject(new_value) && !new_value[IS_PROXY]) {
-            const wrapped_new_value = createDeepProxy(new_value);
+            const wrapped_new_value = wrap(new_value);
             new_value = wrapped_new_value;
         }
 
@@ -162,8 +162,7 @@ export function effect(fn) {
 let is_in_untrack_from_parent_effect_scope = [];
 
 /**
-* Effect that is detached from any parent effect.
-* It is used in `template-engine/handlerbar.js` for processing an item inside an array of an `{{#each}}` block
+* Effect that is detached from any parent effect and only run once. Only use this in special cases.
 * @param {Function} fn
 * @returns {Function} cleanup
 */
@@ -198,7 +197,6 @@ function subscriberMap() {
                 keyMap = new Map();
                 map.set(target, keyMap);
             }
-
             return keyMap;
         },
         /**
@@ -213,7 +211,6 @@ function subscriberMap() {
                 set = new Set();
                 keyMap.set(key, set);
             }
-
             return set;
         },
         /**
@@ -243,7 +240,6 @@ const IS_PROXY = Symbol('is_deep_proxy');
 const UNWRAPPED_VALUE = Symbol('unwrapped_value');
 const SUBSCRIBERS = subscriberMap();
 const SETTERGETTERCONST = ["has", "set", "get"];
-
 const proxyCache = new WeakMap();
 
 /**
@@ -307,7 +303,7 @@ function wrap(obj) {
 
             if (isObject(new_value)) {
                 if (!new_value[IS_PROXY]) {
-                    new_value = createDeepProxy(new_value);
+                    new_value = wrap(new_value);
                 }
                 unwrapped_value = new_value[UNWRAPPED_VALUE];
             }
@@ -347,8 +343,4 @@ function wrap(obj) {
     proxyCache.set(obj, proxy);
 
     return proxy;
-}
-
-function createDeepProxy(target) {
-    return wrap(target);
 }
