@@ -147,9 +147,12 @@ const $ = Object.freeze({
         })
     },
     await: function (node, pending_fn, then_fn, then_key, catch_fn, catch_key, promise_fn, ctx, ctxValues) {
-        let promise_cleanup_fn, final_cleanup_fn;
+        let promise_cleanup_fn, final_cleanup_fn, promise_has_been_cleaned = false;
         const copiedContext = copyContext();
-        const cleanup_fn = () => promise_cleanup_fn && promise_cleanup_fn();
+        const cleanup_fn = () => {
+            promise_has_been_cleaned = true;
+            if (promise_cleanup_fn) promise_cleanup_fn();
+        }
 
         const fragment = document.createDocumentFragment(), anchor = new Text("");
         node.parentNode.replaceChild(anchor, node);
@@ -170,13 +173,13 @@ const $ = Object.freeze({
             anchor.before(fragment);
 
             promise.then((value) => {
-                if (last_id !== curr_id || !then_fn) return;
+                if (last_id !== curr_id || !then_fn || promise_has_been_cleaned) return;
                 const setPreviousContext = setNewContext(copiedContext);
                 final_cleanup_fn = then_fn(fragment, { ...ctx, [then_key]: value });
-                setPreviousContext()
+                setPreviousContext();
             }).catch((error) => {
                 console.trace(error);
-                if (last_id !== curr_id || !catch_fn) return;
+                if (last_id !== curr_id || !catch_fn || promise_has_been_cleaned) return;
                 const setPreviousContext = setNewContext(copiedContext);
                 final_cleanup_fn = catch_fn(fragment, { ...ctx, [catch_key]: error });
                 setPreviousContext();
