@@ -389,7 +389,7 @@ export function compileTemplate(fragment) {
         const boundaryNodeEnd = fragment.lastChild;
 
         ${processes.children.map((child, i) => `${i === 0 ? '' : '\t\t'}const child${i} = fragment${resolveChildNode(child.splice(0, 1), child)};`).join("\n")}
-        ${(processes.text_funcs.length > 0 || processes.attr_funcs.length > 0) ? `\n// ONE-WAY DATA BINDING\n\t\tconst cleanup_effect = $.effect(() => {
+        ${(processes.text_funcs.length > 0 || processes.attr_funcs.length > 0) ? `\n\t\tconst cleanup_effect = $.effect(() => {
             ${processes.text_funcs.map((func, i) => {
         ctxI++;
         return `${i === 0 ? '' : '\t\t\t'}$.set_text(child${func.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(func.expr)}\`, ctxKeys)))(...ctxValues));`
@@ -400,37 +400,30 @@ export function compileTemplate(fragment) {
         })` : ""}
 
         const cleanups = [];
-
-        ${processes.bindings.length <= 0 ? '' : ("\n\t\t// TWO-WAY DATA BINDING\n\t\t" + processes.bindings.map((bind, i) => {
+        ${processes.bindings.length <= 0 ? '' : ("\n\t\t" + processes.bindings.map((bind, i) => {
         return `${i === 0 ? '' : '\t\t\t'}child${bind.child_index}.__binding_key = $.make_id(6);\n\t\tconst bind${i}_cleanup = $.effect(() => child${bind.child_index}.${bind.property} = (fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval("window.__core__.is_signal(${bind.var}) ? ${bind.var}() : ${bind.var}", ctxKeys)))(...ctxValues));\n        cleanups.push(bind${i}_cleanup);\n        const bind${i}_delegate_cleanup = $.delegate("${bind.event_type}", child${bind.child_index}, fnCache[child${bind.child_index}.__binding_key] || (fnCache[child${bind.child_index}.__binding_key] = $.eval("(event) => window.__core__.is_signal(${bind.var}) ? ${bind.var}.set(event.target.${bind.property}) : (${bind.var} = event.target.${bind.property})", ctxKeys)(...ctxValues)))\n\t\tcleanups.push(() => { bind${i}_delegate_cleanup(); delete fnCache[child${bind.child_index}.__binding_key]; });`
     }).join("\n"))}
-
         ${processes.events.length <= 0 ? '' : "\n\t\t// EVENT DELEGATION\n        " + processes.events.map((event, i) => {
         ctxI++;
         return `${i === 0 ? '' : '\t\t'}const delegate${i}_cleanup = $.delegate("${event.event_type}", child${event.child_index}, (fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(event.expr)}\`, ctxKeys)))(...ctxValues));\n        cleanups.push(delegate${i}_cleanup);`
     }).join("\n")}
-
         ${processes.blocks.length <= 0 ? '' : ("\n\n" + processes.blocks.map((block, i) => {
         ctxI++;
         return block.type === "if" ? `${i === 0 ? '\t\t' : ''}const if${i} = $.block_cache.get("${block.id}")\n\t\tconst if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxI}] || (fnCache[${ctxI}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues);\n        cleanups.push(if${i}_cleanup);` :
             block.type === "each" ? `${i === 0 ? '\t\t' : ''}const each${i} = $.block_cache.get("${block.id}")\n\t\tconst each${i}_cleanup = $.each(child${block.child_index}, each${i}.fn, each${i}.else_fn, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(each${i}.expr, ctxKeys)), each${i}.key, each${i}.keys, each${i}.index_key, ctx, ctxValues);\n        cleanups.push(each${i}_cleanup);` :
                 block.type === "await" ? `${i === 0 ? '\t\t' : ''}const await${i} = $.block_cache.get("${block.id}")\n\t\tconst await${i}_cleanup = $.await(child${block.child_index}, await${i}.pending_fn, await${i}.then_fn, await${i}.then_key, await${i}.catch_fn, await${i}.catch_key, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(await${i}.expr, ctxKeys)), ctx, ctxValues);\n        cleanups.push(await${i}_cleanup);` : ""
     }).join("\n"))}
-
         ${processes.core_component_blocks.length <= 0 ? '' : ("\n" + processes.core_component_blocks.map((block, i) => {
         ctxI++;
         return `${i === 0 ? '\t\t' : ''}const cc${i} = $.block_cache.get("${block.props_id}");
         const cc${i}_dynamic_props = fnCache[${ctxI}] || (fnCache[${ctxI}] = cc${i}.dynamic_props.map((prop) => ({ key : prop.key, fn : $.eval(prop.expr, ctxKeys) })))
         const cc${i}_anchor = new Text("");
         child${block.child_index}.parentNode.replaceChild(cc${i}_anchor, child${block.child_index});
-
         const cc${i}_slot_fn = ${block.slot_id ? `$.block_cache.get("${block.slot_id}")` : 'undefined'};
-
         const cc${i}_cleanup = $.effect(() => {
             for (const dynamic_prop of cc${i}_dynamic_props) cc${i}.props[dynamic_prop.key] = dynamic_prop.fn(...ctxValues);
             return $.core_component(cc${i}_anchor, ctx.${block.component}, cc${i}.props, cc${i}_slot_fn ? (anchor) => cc${i}_slot_fn(anchor, ctx) : null);
         })
-
         cleanups.push(cc${i}_cleanup);`
     }).join("\n"))}
 
