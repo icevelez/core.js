@@ -214,13 +214,13 @@ function scheuleDOMUpdate(node) {
         for (const node of scheduled_nodes) {
             if (node.__cacheText && node.__cacheText !== node.textContent) node.textContent = node.__cacheText;
             if (node.__setAttr) {
-                for (const attr of node.__setAttr) {
-                    if (attr.property === "value") {
-                        node.value = attr.value;
-                    } else if (attr.value === "false" || !attr.value) {
-                        node.removeAttribute(attr.property);
+                for (const [property, value] of node.__setAttr) {
+                    if (property === "value") {
+                        node.value = value;
+                    } else if (value === "false" || !value) {
+                        node.removeAttribute(property);
                     } else {
-                        node.setAttribute(attr.property, attr.value === "true" ? "" : attr.value);
+                        node.setAttribute(property, value === "true" ? "" : value);
                     }
                 }
                 node.__setAttr.length = 0;
@@ -483,7 +483,7 @@ const RE = {
 export function processComponents(template, imported_component_id) {
     RE.component.lastIndex = 0;
     return template.replace(RE.component, (match, tag, attrStr, _, inner_content) => {
-        const props = {}, dynamic_props = [], props_id = `props-${makeId(8)}`;
+        const props = {}, dynamic_props = [], props_id = `props-${makeId(8)}`, slot_id = `slot-${makeId(8)}`;
 
         attrStr.replace(/([\w:@-]+)(?:\s*=\s*"([^"]*)")?/g, (_, key, value) => {
             if (value && value.startsWith('{{')) {
@@ -493,13 +493,7 @@ export function processComponents(template, imported_component_id) {
             }
         })
 
-        let slot_id;
-
-        if (inner_content) {
-            slot_id = `slot-${makeId(8)}`;
-            addBlockToCache(slot_id, compileTemplate(inner_content));
-        }
-
+        if (inner_content) addBlockToCache(slot_id, compileTemplate(inner_content));
         addBlockToCache(props_id, { props, dynamic_props });
 
         if (match.startsWith("<Core:slot")) return `<template data-block="core-slot"></template>`;
