@@ -1,31 +1,11 @@
-{{#if Router.match("/benchmark").is_match}}
-    {{#await import("/src/pages/Benchmark.js")}}
-        <h1>Loading Benchmark component</h1>
-    {{:then Benchmark}}
-        <Core:component default="Benchmark"/>
-    {{/await}}
-{{:else if Router.match("/playground").is_match}}
-    {{#await import("/src/pages/Playground.js")}}
-        <h1>Loading Playground component</h1>
-    {{:then Playground}}
-        <Core:component default="Playground"/>
-    {{/await}}
-{{:else}}
-    <h1>Hello {{ name() }}!</h1>
-    <div>
-        <label>Type new name</label>
-        <input type="text" bind:value="name" />
-    </div>
-    <p>Counter: {{ counter() }}</p>
-    <p>Double: {{ double() }}</p>
-    <p>Double is even: {{ double() % 2 === 0 }}</p>
-    <button onclick="{{ () => counter.set(counter()+1)}}">Click Me!</button>
-    <br><br>
-    <div>
-        <a href="#/benchmark">Go to benchmark page</a>
-        <a href="#/playground">Go to playground page</a>
-    </div>
-    <input value="{{ counter() }}">
-    <button onclick="{{() => isDisabled.set(!isDisabled()) }}">Click Me</button>
-    <button disabled="{{ isDisabled() }}">Am I disabled</button>
-{{/if}}
+<h1>Start Playground</h1>
+{{#await new Promise((resolve) => setTimeout(resolve, 1000))}}
+    <h1>Loading Playground component</h1>
+{{:then}}
+    {{#if false}}
+        <h1>This Playground</h1>
+    {{:else}}
+        <h1>No Playground</h1>
+    {{/if}}
+{{/await}}
+<h1>End Playground</h1>

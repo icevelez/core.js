@@ -28,11 +28,14 @@ export function component(options, Ctx = class { }) {
 
         let html = source;
         for (let i = 0; i < blocks.length; i++) {
-            const block = blocks[i];
-            const block_id = `${block.name}-${makeId(6)}`;
+            const block = blocks[i], block_id = `${block.name}-${makeId(6)}`;
+            for (let j = 0; j < i; j++) {
+                if (!block.outer.includes(blocks[j].outer)) continue;
+                block.outer = block.outer.replace(blocks[j].outer, blocks[j].placeholder);
+                block.end -= blocks[j].outer.length - blocks[j].placeholder.length; // modify block.end when replacing
+            }
             block.placeholder = `<template data-block="${block.name}" data-block-id="${block_id}"></template>`;
             html = html.slice(0, block.start) + block.placeholder + html.slice(block.end);
-            for (let j = 0; j < i; j++) block.outer = block.outer.replace(blocks[j].outer, blocks[j].placeholder);
             addBlockToCache(block_id, parse[block.name](block.outer));
         }
 
@@ -52,7 +55,7 @@ const RE = {
 
 const parse = {
     if: function (block) {
-        RE.if.lastIndex = 0;
+        RE.if.lastIndex = RE.else.lastIndex = 0;
         const match = RE.if.exec(block);
         if (!match) throw new Error("parsing error on \"if\" block");
 

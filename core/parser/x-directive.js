@@ -44,6 +44,7 @@ function addBlock(node, block_type, block) {
  * @param {Node} node
  */
 function collectBlocks(node) {
+    if (node.nodeType === Node.TEXT_NODE) return;
     const firstChild = node.firstChild;
     if (firstChild) collectBlocks(firstChild);
     const nextNode = node.nextSibling;
@@ -56,32 +57,36 @@ function collectBlocks(node) {
     if (nextNode) collectBlocks(nextNode);
 }
 
+function getNextSibling(node) {
+    return !node.nextSibling ? undefined : (node.nextSibling.nodeType === Node.TEXT_NODE) ? getNextSibling(node.nextSibling) : node.nextSibling;
+}
+
 /**
  * @param {Node} node
  * @param {string} directive
  * @param {any} block
  */
 function collectBlock(node, directive, block) {
-    const nextNode = node.nextSibling;
+    const nextNode = getNextSibling(node);
 
     if (directive === "x-if") {
         const expr = node.getAttribute("x-if") || "";
         const fragment = returnFragment(node);
+        collectBlocks(fragment.firstChild);
         const if_block = {
             fns: [compileTemplate(fragment)],
             exprs: [expr]
         };
 
-        collectBlocks(fragment.firstChild);
         addBlock(node, "if", if_block);
 
         if (!nextNode || nextNode.nodeType === Node.TEXT_NODE) return;
-        const directive = nextNode.getAttribute("x-else-if") || nextNode.getAttribute("x-else");
-        if (!directive) return;
-        collectBlock(nextNode, directive, if_block);
+        const has_directive = nextNode.getAttribute("x-else-if") ? "x-else-if" : nextNode.getAttribute("x-else") ? "x-else" : "";
+        if (!has_directive) return;
+        collectBlock(nextNode, has_directive, if_block);
         return;
-    } else if (directive === "x-elseif") {
-        const expr = node.getAttribute("x-elseif") || "";
+    } else if (directive === "x-else-if") {
+        const expr = node.getAttribute("x-else-if") || "";
         node.remove();
 
         const fragment = returnFragment(node);
@@ -90,10 +95,10 @@ function collectBlock(node, directive, block) {
         block.fns.push(compileTemplate(fragment))
         block.exprs.push(expr);
 
-        if (!nextNode || nextNode.nodeType === Node.TEXT_NODE) return;
-        const directive = nextNode.getAttribute("x-else-if") || nextNode.getAttribute("x-else");
-        if (!directive) return;
-        collectBlock(nextNode, directive, block);
+        if (!nextNode) return;
+        const has_directive = nextNode.getAttribute("x-else-if") ? "x-else-if" : nextNode.getAttribute("x-else") ? "x-else" : "";
+        if (!has_directive) return;
+        collectBlock(nextNode, has_directive, block);
         return;
     } else if (directive === "x-else") {
         node.remove();
@@ -121,7 +126,7 @@ function collectBlock(node, directive, block) {
 
         addBlock(node, "each", for_block);
 
-        if (!nextNode || nextNode.nodeType === Node.TEXT_NODE) return;
+        if (!nextNode) return;
         const has_empty = nextNode.hasAttribute("x-empty");
         if (!has_empty) return;
         const else_fragment = returnFragment(nextNode);
@@ -138,15 +143,18 @@ function collectBlock(node, directive, block) {
 
         const await_block = {
             expr: (node.getAttribute("x-await") || "").trim(),
-            pending_fn: fragment,
+            pending_fn: compileTemplate(fragment),
             then_fn: undefined,
             then_key: undefined,
             catch_fn: undefined,
             catch_key: undefined,
         }
 
-        if (!nextNode || nextNode.nodeType === Node.TEXT_NODE) return;
-        const nextNextNode = nextNode.nextSibling;
+        addBlock(node, "await", await_block);
+
+        if (!nextNode) return;
+        const nextNextNode = getNextSibling(nextNode);
+        console.log(nextNextNode);
         if (nextNode.hasAttribute("x-then")) {
             const then_fragment = returnFragment(nextNode);
             nextNode.remove();
@@ -155,7 +163,7 @@ function collectBlock(node, directive, block) {
             await_block.then_fn = compileTemplate(then_fragment);
         }
 
-        if (!nextNextNode || nextNextNode.nodeType === Node.TEXT_NODE) return;
+        if (!nextNextNode) return;
         if (nextNextNode.hasAttribute("x-catch")) {
             const catch_fragment = returnFragment(nextNode);
             nextNextNode.remove();
