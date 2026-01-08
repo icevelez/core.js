@@ -3,7 +3,7 @@ import { contextWrapper, copyContext, mountWrapper, setNewContext } from "./inte
 import { createSignal, effect, isSignal, untrackedEffect } from "./reactivity.js";
 
 const $ = Object.freeze({
-    version: "0.3.1",
+    version: "0.3.2",
     /** @type {DocumentFragment[]} */
     fragment_cache: [],
     /** @type {Map<string, ({ fns : Function[], exprs : string[] } | { fn : Function, expr : string } | { pending_fn : Function, then_fn?: Function, catch_fn?: Function, expr : string })[]>} */
@@ -14,7 +14,7 @@ const $ = Object.freeze({
     fn_cache: new WeakMap(),
     /** @type {Map<string, WeakMap<Node, Set<Function>>>} */
     delegated_events: new Map(),
-    eval: (expr, keys) => new Function(...keys, `return ${expr};`),
+    eval: (expr, keys) => new Function(...keys, `try { return ${expr}; } catch (error) { console.error(error); return; }`),
     set_text: function (node, text) {
         if (node.__cacheText === text) return;
         node.__cacheText = text;
@@ -67,7 +67,7 @@ const $ = Object.freeze({
         }
     },
     if: function (node, fns, condtion_fns, ctx, ctxValues) {
-        let prev_fn;
+        let prev_fn, unmount;
 
         const fragment = document.createDocumentFragment(), anchor = new Text("");
         node.parentNode.replaceChild(anchor, node);
@@ -83,11 +83,14 @@ const $ = Object.freeze({
 
             if (prev_fn === curr_fn) return;
             prev_fn = curr_fn;
+            if (unmount) unmount();
             if (!curr_fn) return;
 
-            const unmount = curr_fn(fragment, ctx);
-            anchor.before(fragment);
-            return unmount;
+            unmount = untrackedEffect(() => {
+                const cleanup = curr_fn(fragment, ctx);
+                anchor.before(fragment);
+                return cleanup;
+            })
         })
     },
     each: function (node, fn, else_fn, arr_fn, sub_ctx_key, sub_ctx_keys, index_key, ctx, ctxValues) {
@@ -99,7 +102,7 @@ const $ = Object.freeze({
         return effect(() => {
             const arr = arr_fn(...ctxValues);
 
-            if (arr.length <= 0) {
+            if (!arr || arr?.length <= 0) {
                 for (const block of blocks) block.cleanup();
                 blocks.length = 0;
 
@@ -147,10 +150,9 @@ const $ = Object.freeze({
         })
     },
     await: function (node, pending_fn, then_fn, then_key, catch_fn, catch_key, promise_fn, ctx, ctxValues) {
-        let promise_cleanup_fn, final_cleanup_fn, promise_has_been_cleaned = false;
+        let promise_cleanup_fn, final_cleanup_fn;
         const copiedContext = copyContext();
         const cleanup_fn = () => {
-            promise_has_been_cleaned = true;
             if (promise_cleanup_fn) promise_cleanup_fn();
         }
 
@@ -173,13 +175,13 @@ const $ = Object.freeze({
             anchor.before(fragment);
 
             promise.then((value) => {
-                if (last_id !== curr_id || !then_fn || promise_has_been_cleaned) return;
+                if (last_id !== curr_id || !then_fn) return;
                 const setPreviousContext = setNewContext(copiedContext);
                 final_cleanup_fn = then_fn(fragment, { ...ctx, [then_key]: value });
                 setPreviousContext();
             }).catch((error) => {
                 console.trace(error);
-                if (last_id !== curr_id || !catch_fn || promise_has_been_cleaned) return;
+                if (last_id !== curr_id || !catch_fn) return;
                 const setPreviousContext = setNewContext(copiedContext);
                 final_cleanup_fn = catch_fn(fragment, { ...ctx, [catch_key]: error });
                 setPreviousContext();
@@ -257,7 +259,7 @@ function processNode(node, node_index = [], processes = { children: [], events: 
     if (isText) {
         const expression = node.textContent;
         const parts = expression.split(/({{[^}]+}})/g);
-        const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
+        const has_handlebars = parts.length > 0;
         if (!has_handlebars) return processes;
 
         node.textContent = "";
@@ -442,8 +444,8 @@ export function compileTemplate(fragment) {
         cleanups.push(comp${i}_cleanup);`
     }).join("\n"))}
         ${processes.use_directives.length <= 0 ? '' : processes.use_directives.map((use_directive, i) => {
-        return `const use_cleaup${i} = ctx.${use_directive.func_name}((fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(use_directive.expr)}\`, ctxKeys)))(...ctxValues));
-        cleanups.push(use_cleaup${i});`;
+        return `const use_cleaup${i} = ctx.${use_directive.func_name}(child${use_directive.child_index}, (fnCache[${++ctxI}] || (fnCache[${ctxI}] = $.eval(\`${escapeTemplateLiteral(use_directive.expr)}\`, ctxKeys)))(...ctxValues));
+        if (typeof use_cleaup${i} === "function") cleanups.push(use_cleaup${i});`;
     }).join("\n")}
         ${processes.slot_child_index > -1 ? `if (slot_fn) {
             const slot_anchor = new Text("");

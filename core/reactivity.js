@@ -177,7 +177,7 @@ export function untrackedEffect(fn) {
     return () => {
         for (let unsubscribe of dependencies) unsubscribe();
         dependencies.clear();
-        cleanup();
+        if (cleanup) cleanup();
     };
 }
 
