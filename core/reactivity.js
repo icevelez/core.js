@@ -92,24 +92,29 @@ export function createDerived(callbackfn) {
 
 /**
  * @template {any} T
- * @param {() => Promise<T>} promise_callbackfn
+ * @param {() => (T | Promise<T>)} callbackfn
  */
-export function createAsyncDerived(promise_callbackfn) {
-    let last_promise_id;
+export function createAsyncDerived(callbackfn) {
+    let last_promise_id = 0;
     /** @type {T} */
     const value = undefined;
-    const signal = createSignal(value);
-    const read = () => signal();
+    const read = createSignal(value);
+    const error = createSignal(null);
+    const pending = createSignal(false);
+    read.error = () => error();
+    read.pending = () => pending();
     read.dispose = effect(() => {
-        const promise_id = Math.random();
-        last_promise_id = promise_id;
-        promise_callbackfn()
-            .then((value) => {
-                if (last_promise_id === promise_id) signal.set(value);
-            })
-            .catch((error) => {
-                if (last_promise_id === promise_id) signal.set(error);
-            })
+        const promise_id = ++last_promise_id;
+        const result = callbackfn();
+        if (!(result instanceof Promise)) return read.set(result);
+        pending.set(true);
+        result.then((value) => {
+            if (last_promise_id === promise_id) read.set(value)
+        }).catch((err) => {
+            if (last_promise_id === promise_id) error.set(err)
+        }).finally(() => {
+            if (last_promise_id === promise_id) pending.set(false);
+        })
     });
     return read;
 }
@@ -228,7 +233,7 @@ function subscriberMap() {
             for (const key in target) {
                 const child = target[key];
                 if (!isObject(child)) continue;
-                deepDelete(child, visited); // recurse on children
+                this.deepDelete(child, visited); // recurse on children
             }
 
             map.delete(target); // delete after children
