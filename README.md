@@ -4,7 +4,7 @@ A Framework built for the web
 
 ---
 
-Version: 0.3.0-dev
+Version: 0.3.2
 
 License: MIT
 
@@ -44,7 +44,7 @@ The reactivity system is my implementation of *Signals* based from my understand
 
 ```js
 import { load } from "../core/core.js";
-import { component } from "../core/handlebar.js";
+import { component } from "../core/parser/handlebar.js";
 
 export default component({
     template: await load("src/App.html"),
@@ -71,10 +71,9 @@ export default component({
 </html>
 ```
 ```js
-import { mount } from './core/core.js';
 import App from './src/App.js';
 
-mount(App, { target: document.getElementById('app') })
+App({ target: document.getElementById('app') })
 ```
 We are importing `App.js` from the `src` folder to render it to our target element which is `<div id="app">`
 
@@ -96,6 +95,53 @@ You can read the full documentation of how to use this framework by opening an `
 - Patrick - from the Svelte Discord group for helping me better understand fine-grain reactivity
 
 ---
+
+## Known Issue
+
+The `{{#each}}` renders an old state when a signal is set based off a reactive promise and that promise is also part of the template - This issue led to redesigning the `createAsyncDerived` function and added the `.pending()` `.error()` state to mitigate this issue by using an `{{#if}}` block instead 
+
+I tried to solve it but could not fully understand how it is happening
+
+```js
+class {
+    
+    reactive_promise = createDerived(() => new Promise());
+    
+    // prevent race condination values
+    get_latest_value_of_promise = createAsyncDerived(() => this.reactive_promise());
+    signal_arr = createSignal([]);
+    
+    constructor() {
+        effect(() => {
+            this.signal_arr.set(this.reactive_promise());
+        })
+    }
+}
+```
+
+```html
+{{#await get_latest_value_of_promise()}}
+    <h1>Loading</h1>
+{{:then}}
+    <ul>
+        {{#each signal_arr as item}}
+            <li>{{ item().name  }}</li>
+        {{/each}}
+    </ul>
+{{/await}}
+
+<!-- This also gets affected -->
+{{#each signal_arr as item}}
+    <li>{{ item().name  }}</li>
+{{/each}}
+```
+
+```html
+<!-- without the {{#await}} block the {{#each}} rendering works as expected -->
+{{#each signal_arr as item}}
+    <li>{{ item().name  }}</li>
+{{/each}}
+```
 
 ## Limitation
 

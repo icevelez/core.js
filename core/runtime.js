@@ -219,6 +219,9 @@ function scheuleDOMUpdate(node) {
                 for (const [property, value] of node.__setAttr) {
                     if (property === "value") {
                         node.value = value;
+                    } else if (property === "checked") {
+                        node.checked = value === "true";
+                        node.setAttribute(property, value === "true" ? "" : value);
                     } else if (value === "false" || !value) {
                         node.removeAttribute(property);
                     } else {
@@ -259,7 +262,7 @@ function processNode(node, node_index = [], processes = { children: [], events: 
     if (isText) {
         const expression = node.textContent;
         const parts = expression.split(/({{[^}]+}})/g);
-        const has_handlebars = parts.length > 0;
+        const has_handlebars = parts.map(p => p.startsWith("{{")).filter(p => p === true).length > 0;
         if (!has_handlebars) return processes;
 
         node.textContent = "";
@@ -411,9 +414,9 @@ export function compileTemplate(fragment) {
     }).join("\n")}
         ${processes.blocks.length <= 0 ? '' : ("\n\n" + processes.blocks.map((block, i) => {
         ctxI++;
-        return block.type === "if" ? `${i === 0 ? '\t\t' : ''}const if${i} = $.block_cache.get("${block.id}")\n\t\tconst if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxI}] || (fnCache[${ctxI}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues);\n        cleanups.push(if${i}_cleanup);` :
-            block.type === "each" ? `${i === 0 ? '\t\t' : ''}const each${i} = $.block_cache.get("${block.id}")\n\t\tconst each${i}_cleanup = $.each(child${block.child_index}, each${i}.fn, each${i}.else_fn, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(each${i}.expr, ctxKeys)), each${i}.key, each${i}.keys, each${i}.index_key, ctx, ctxValues);\n        cleanups.push(each${i}_cleanup);` :
-                block.type === "await" ? `${i === 0 ? '\t\t' : ''}const await${i} = $.block_cache.get("${block.id}")\n\t\tconst await${i}_cleanup = $.await(child${block.child_index}, await${i}.pending_fn, await${i}.then_fn, await${i}.then_key, await${i}.catch_fn, await${i}.catch_key, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(await${i}.expr, ctxKeys)), ctx, ctxValues);\n        cleanups.push(await${i}_cleanup);` : ""
+        return block.type === "if" ? `\t\tconst if${i} = $.block_cache.get("${block.id}")\n\t\tconst if${i}_cleanup = $.if(child${block.child_index}, if${i}.fns, fnCache[${ctxI}] || (fnCache[${ctxI}] = if${i}.exprs.map((expr) => $.eval(expr, ctxKeys))), ctx, ctxValues);\n        //cleanups.push(if${i}_cleanup);` :
+            block.type === "each" ? `\t\tconst each${i} = $.block_cache.get("${block.id}")\n\t\tconst each${i}_cleanup = $.each(child${block.child_index}, each${i}.fn, each${i}.else_fn, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(each${i}.expr, ctxKeys)), each${i}.key, each${i}.keys, each${i}.index_key, ctx, ctxValues);\n        cleanups.push(each${i}_cleanup);` :
+                block.type === "await" ? `\t\tconst await${i} = $.block_cache.get("${block.id}")\n\t\tconst await${i}_cleanup = $.await(child${block.child_index}, await${i}.pending_fn, await${i}.then_fn, await${i}.then_key, await${i}.catch_fn, await${i}.catch_key, fnCache[${ctxI}] || (fnCache[${ctxI}] = $.eval(await${i}.expr, ctxKeys)), ctx, ctxValues);\n        cleanups.push(await${i}_cleanup);` : ""
     }).join("\n"))}
         ${processes.core_component_blocks.length <= 0 ? '' : ("\n" + processes.core_component_blocks.map((block, i) => {
         ctxI++;
@@ -431,7 +434,7 @@ export function compileTemplate(fragment) {
 
         ${processes.component_blocks.length <= 0 ? '' : ("\n" + processes.component_blocks.map((block, i) => {
         ctxI++;
-        return `const comp${i} = $.block_cache.get("${block.props_id}");
+        return `\t\tconst comp${i} = $.block_cache.get("${block.props_id}");
         const comp${i}_cache = $.imported_components.get("${block.component_id}");
         const comp${i}_dynamic_props = fnCache[${ctxI}] || (fnCache[${ctxI}] = comp${i}.dynamic_props.map((prop) => ({ key : prop.key, fn : $.eval(prop.expr, ctxKeys) })))
         const comp${i}_anchor = new Text("");
